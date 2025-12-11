@@ -235,19 +235,58 @@ type gen1ShellyResponse struct {
 	Discoverable bool   `json:"discoverable"`
 }
 
+// ProbeProgress represents the progress of a probe operation.
+type ProbeProgress struct {
+	Device  *DiscoveredDevice // Device found (nil if not found)
+	Error   error             // Error if probe failed
+	Address string            // IP address being probed
+	Total   int               // Total number of addresses to probe
+	Done    int               // Number of addresses probed so far
+	Found   bool              // Whether a device was found at this address
+}
+
+// ProbeProgressCallback is called for each address probed.
+// Return false to cancel the probe operation.
+type ProbeProgressCallback func(progress ProbeProgress) bool
+
 // ProbeAddresses probes a range of addresses to find Shelly devices.
 //
 // This is useful for finding devices on a network when mDNS/CoIoT
 // discovery is not available or not working.
 func ProbeAddresses(ctx context.Context, addresses []string) []DiscoveredDevice {
+	return ProbeAddressesWithProgress(ctx, addresses, nil)
+}
+
+// ProbeAddressesWithProgress probes addresses with progress reporting.
+//
+// The callback is called for each address after probing, with information
+// about whether a device was found. Return false from the callback to
+// cancel the operation.
+func ProbeAddressesWithProgress(
+	ctx context.Context,
+	addresses []string,
+	callback ProbeProgressCallback,
+) []DiscoveredDevice {
 	var devices []DiscoveredDevice
 	var mu sync.Mutex
 	var wg sync.WaitGroup
+	var done int
+	var canceled bool
+
+	total := len(addresses)
 
 	// Limit concurrent probes
 	sem := make(chan struct{}, 20)
 
 	for _, addr := range addresses {
+		// Check if canceled
+		mu.Lock()
+		if canceled {
+			mu.Unlock()
+			break
+		}
+		mu.Unlock()
+
 		wg.Add(1)
 		go func(address string) {
 			defer wg.Done()
@@ -255,29 +294,58 @@ func ProbeAddresses(ctx context.Context, addresses []string) []DiscoveredDevice 
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			info, err := IdentifyWithTimeout(ctx, address, 2*time.Second)
-			if err != nil {
+			// Check context cancellation
+			if ctx.Err() != nil {
 				return
 			}
 
-			device := DiscoveredDevice{
-				ID:           info.ID,
-				Name:         info.Name,
-				Model:        info.Model,
-				Generation:   info.Generation,
-				Address:      parseIP(address),
-				Port:         80,
-				MACAddress:   info.MACAddress,
-				Firmware:     info.Firmware,
-				AuthRequired: info.AuthRequired,
-				Protocol:     ProtocolManual,
-				LastSeen:     time.Now(),
-				Raw:          info.Raw,
+			info, err := IdentifyWithTimeout(ctx, address, 2*time.Second)
+
+			var device *DiscoveredDevice
+			if err == nil {
+				d := DiscoveredDevice{
+					ID:           info.ID,
+					Name:         info.Name,
+					Model:        info.Model,
+					Generation:   info.Generation,
+					Address:      parseIP(address),
+					Port:         80,
+					MACAddress:   info.MACAddress,
+					Firmware:     info.Firmware,
+					AuthRequired: info.AuthRequired,
+					Protocol:     ProtocolManual,
+					LastSeen:     time.Now(),
+					Raw:          info.Raw,
+				}
+				device = &d
+
+				mu.Lock()
+				devices = append(devices, d)
+				mu.Unlock()
 			}
 
-			mu.Lock()
-			devices = append(devices, device)
-			mu.Unlock()
+			// Report progress
+			if callback != nil {
+				mu.Lock()
+				done++
+				currentDone := done
+				mu.Unlock()
+
+				progress := ProbeProgress{
+					Address: address,
+					Total:   total,
+					Done:    currentDone,
+					Found:   device != nil,
+					Device:  device,
+					Error:   err,
+				}
+
+				if !callback(progress) {
+					mu.Lock()
+					canceled = true
+					mu.Unlock()
+				}
+			}
 		}(addr)
 	}
 
