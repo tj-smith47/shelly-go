@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+permissions:
+  contents: write
+  pull-requests: read
+  checks: write
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.5"
+          cache: true
+
+      - name: Build
+        run: go build -v ./...
+
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/master'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.5"
+          cache: true
+
+      - name: Run integration tests
+        run: go test -v -tags=integration ./...
+        continue-on-error: true # Integration tests may fail without real devices
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.5"
+          cache: true
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.7.1
+          args: --timeout=5m
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.5"
+
+      - name: Run Gosec Security Scanner
+        uses: securego/gosec@master
+        with:
+          args: "-no-fail -fmt sarif -out results.sarif ./..."
+
+      - name: Upload SARIF file
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+
+  test:
+    name: Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        go-version: ["1.25.5"]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Verify dependencies
+        run: go mod verify
+
+      - name: Run tests
+        run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+        env:
+          SHELLY_CI: "1" # Skip hardware-dependent tests in CI
+
+      - name: Update coverage badge
+        if: github.ref == 'refs/heads/master'
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+          if (( $(echo "$COVERAGE >= 90" | bc -l) )); then COLOR="brightgreen"
+          elif (( $(echo "$COVERAGE >= 80" | bc -l) )); then COLOR="green"
+          elif (( $(echo "$COVERAGE >= 70" | bc -l) )); then COLOR="yellowgreen"
+          elif (( $(echo "$COVERAGE >= 60" | bc -l) )); then COLOR="yellow"
+          else COLOR="red"; fi
+          BADGE="{\"schemaVersion\":1,\"label\":\"coverage\",\"message\":\"${COVERAGE}%\",\"color\":\"${COLOR}\"}"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git checkout --orphan badges-temp
+          git rm -rf . > /dev/null 2>&1 || true
+          echo "$BADGE" > coverage.json
+          git add coverage.json
+          git commit -m "Update coverage to ${COVERAGE}%"
+          git push origin badges-temp:badges --force

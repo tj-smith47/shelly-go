@@ -1,0 +1,132 @@
+version: "2"
+run:
+  modules-download-mode: readonly
+  tests: true
+output:
+  formats:
+    text:
+      path: stdout
+      print-linter-name: true
+      print-issued-lines: true
+linters:
+  default: none
+  enable:
+    - bodyclose
+    - cyclop
+    - dupl
+    - errcheck
+    - funlen
+    - gochecknoinits
+    - goconst
+    - gocritic
+    - gocyclo
+    - godox
+    - goprintffuncname
+    - gosec
+    - govet
+    - ineffassign
+    - lll
+    - misspell
+    - nakedret
+    - nestif
+    - prealloc
+    - revive
+    - staticcheck
+    - unconvert
+    - unparam
+    - unused
+    - whitespace
+  settings:
+    cyclop:
+      max-complexity: 15
+    dupl:
+      threshold: 100
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+    funlen:
+      lines: 100
+      statements: 50
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+    gocritic:
+      disabled-checks:
+        - whyNoLint
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - opinionated
+        - performance
+        - style
+    gocyclo:
+      min-complexity: 15
+    godox:
+      keywords:
+        - FIXME
+        - BUG
+    govet:
+      enable-all: true
+    lll:
+      line-length: 120
+      tab-width: 4
+    misspell:
+      locale: US
+    nestif:
+      min-complexity: 4
+    revive:
+      rules:
+        - name: exported
+          arguments:
+            - checkPrivateReceivers
+            - sayRepetitiveInsteadOfStutters
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - cyclop
+          - dupl
+          - funlen
+          - gocyclo
+          - errcheck
+          - govet
+          - goconst
+          - gocritic
+          - nestif
+          - lll
+        path: _test\.go
+      - linters:
+          - forbidigo
+        path: cmd/
+      - linters:
+          - cyclop
+        path: (.+)_test\.go
+      - linters:
+          - funlen
+        path: profiles/
+    paths:
+      - third_party$
+      - builtin$
+      - examples/
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/tj-smith47/shelly-go
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples/

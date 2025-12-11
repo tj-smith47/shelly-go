@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj
+
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+    - go mod verify
+
+builds:
+  - skip: true  # This is a library, not a CLI tool
+
+changelog:
+  use: github-native
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+      - Merge pull request
+      - Merge branch
+
+release:
+  github:
+    owner: tj-smith47
+    name: shelly-go
+  draft: false
+  prerelease: auto
+  name_template: "{{.Tag}}"
+  header: |
+    ## shelly-go {{.Tag}}
+
+    A comprehensive Go library for Shelly smart home devices.
+
+    ### Installation
+
+    ```bash
+    go get github.com/tj-smith47/shelly-go@{{.Tag}}
+    ```
+  footer: |
+
+    **Full Changelog**: https://github.com/tj-smith47/shelly-go/compare/{{.PreviousTag}}...{{.Tag}}
+
+    See [CHANGELOG.md](https://github.com/tj-smith47/shelly-go/blob/master/CHANGELOG.md) for detailed release notes.
+
+announce:
+  skip: true

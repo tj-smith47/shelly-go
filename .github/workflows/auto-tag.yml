@@ -1,0 +1,28 @@
+name: AutoTag
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  auto-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Bump version and push tag
+        uses: anothrNick/github-tag-action@1.71.0
+        env:
+          DEFAULT_BUMP: patch
+          GITHUB_TOKEN: ${{ github.token }}
+          INITIAL_VERSION: 0.1.0
+          RELEASE_BRANCHES: master
+          TAG_CONTEXT: branch
+          WITH_V: true
