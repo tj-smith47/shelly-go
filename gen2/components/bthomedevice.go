@@ -8,6 +8,8 @@ import (
 	"github.com/tj-smith47/shelly-go/types"
 )
 
+const componentTypeBTHomeDevice = "bthomedevice"
+
 // BTHomeDevice represents a Shelly Gen2+ BTHomeDevice component.
 //
 // The BTHomeDevice component represents an individual physical Bluetooth device
@@ -215,12 +217,12 @@ func (d *BTHomeDevice) GetKnownObjects(ctx context.Context) (*BTHomeDeviceKnownO
 
 // Type returns the component type identifier.
 func (d *BTHomeDevice) Type() string {
-	return "bthomedevice"
+	return componentTypeBTHomeDevice
 }
 
 // Key returns the component key for aggregated status/config responses.
 func (d *BTHomeDevice) Key() string {
-	return "bthomedevice"
+	return componentTypeBTHomeDevice
 }
 
 // Ensure BTHomeDevice implements a minimal component-like interface for documentation purposes.

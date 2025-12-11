@@ -8,6 +8,8 @@ import (
 	"github.com/tj-smith47/shelly-go/types"
 )
 
+const componentTypeBLE = "ble"
+
 // BLE represents a Shelly Gen2+ Bluetooth Low Energy component.
 //
 // BLE provides Bluetooth functionality for Shelly devices including:
@@ -176,12 +178,12 @@ func (b *BLE) GetStatus(ctx context.Context) (*BLEStatus, error) {
 
 // Type returns the component type identifier.
 func (b *BLE) Type() string {
-	return "ble"
+	return componentTypeBLE
 }
 
 // Key returns the component key for aggregated status/config responses.
 func (b *BLE) Key() string {
-	return "ble"
+	return componentTypeBLE
 }
 
 // Ensure BLE implements a minimal component-like interface for documentation purposes.

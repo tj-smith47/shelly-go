@@ -8,6 +8,8 @@ import (
 	"github.com/tj-smith47/shelly-go/types"
 )
 
+const componentTypeBTHome = "bthome"
+
 // BTHome represents a Shelly Gen2+ BTHome management component.
 //
 // The BTHome component provides management for Bluetooth devices that emit data
@@ -329,12 +331,12 @@ func (b *BTHome) GetObjectInfos(ctx context.Context, objIDs []int, offset *int) 
 
 // Type returns the component type identifier.
 func (b *BTHome) Type() string {
-	return "bthome"
+	return componentTypeBTHome
 }
 
 // Key returns the component key for aggregated status/config responses.
 func (b *BTHome) Key() string {
-	return "bthome"
+	return componentTypeBTHome
 }
 
 // Ensure BTHome implements a minimal component-like interface for documentation purposes.
