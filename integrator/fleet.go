@@ -249,9 +249,9 @@ func (fm *FleetManager) SendCommand(ctx context.Context, deviceID, action string
 
 // SendRelayCommand sends a relay on/off command to a device.
 func (fm *FleetManager) SendRelayCommand(ctx context.Context, deviceID string, channel int, on bool) error {
-	turn := "off"
+	turn := turnOff
 	if on {
-		turn = "on"
+		turn = turnOn
 	}
 	return fm.SendCommand(ctx, deviceID, "relay", map[string]any{
 		"id":   channel,

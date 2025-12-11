@@ -9,6 +9,11 @@ import (
 	"github.com/tj-smith47/shelly-go/types"
 )
 
+const (
+	stateConnected    = "connected"
+	stateDisconnected = "disconnected"
+)
+
 // Analytics provides usage analytics and metrics for the integrator.
 type Analytics struct {
 	apiUsage          *APIUsageTracker
@@ -396,7 +401,7 @@ func (t *ConnectionMetricsTracker) RecordConnection(host string) {
 
 	now := time.Now()
 	stats.TotalConnections++
-	stats.CurrentState = "connected"
+	stats.CurrentState = stateConnected
 	stats.ConnectedAt = &now
 }
 
@@ -413,7 +418,7 @@ func (t *ConnectionMetricsTracker) RecordDisconnection(host string) {
 	}
 
 	stats.TotalDisconnections++
-	stats.CurrentState = "disconnected"
+	stats.CurrentState = stateDisconnected
 
 	// Calculate connection duration
 	if stats.ConnectedAt != nil {
@@ -707,7 +712,7 @@ func (a *Analytics) GetSummary() *AnalyticsSummary {
 	// Connection Metrics
 	connectedHosts := 0
 	for _, s := range a.connectionMetrics.GetAllHostStats() {
-		if s.CurrentState == "connected" {
+		if s.CurrentState == stateConnected {
 			connectedHosts++
 		}
 	}

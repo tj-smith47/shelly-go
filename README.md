@@ -329,13 +329,13 @@ Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for gu
 - [x] Firmware update management
 - [x] Batch operations and device groups
 - [x] Scene management
+- [x] Matter protocol support (RPC control of Matter-enabled Shelly devices)
+- [x] Zigbee support (RPC control of Zigbee-enabled Gen4 devices)
+- [x] Z-Wave support (Wave device profiles; IP-enabled Wave devices use Gen2 RPC)
+- [x] LoRa add-on support (full RPC implementation)
+- [x] Integrator API (B2B fleet management, analytics, provisioning)
 - [ ] BLE discovery (interface defined, requires platform-specific implementation)
 - [ ] BLE provisioning (interface defined, requires platform-specific implementation)
-- [ ] Matter protocol support
-- [ ] Zigbee support (via hubs)
-- [ ] Z-Wave support (Wave devices)
-- [ ] LoRa add-on support
-- [ ] Integrator API (B2B)
 
 ## Known Limitations
 
