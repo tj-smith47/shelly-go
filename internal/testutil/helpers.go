@@ -3,7 +3,7 @@ package testutil
 import (
 	"embed"
 	"encoding/json"
-	"path/filepath"
+	"path"
 	"reflect"
 	"testing"
 )
@@ -13,8 +13,10 @@ var fixturesFS embed.FS
 
 // LoadFixture loads a JSON fixture file from the fixtures directory.
 // Returns the raw JSON bytes.
+// Note: We use path.Join (not filepath.Join) because embed.FS always
+// uses forward slashes, regardless of the host operating system.
 func LoadFixture(name string) ([]byte, error) {
-	return fixturesFS.ReadFile(filepath.Join("fixtures", name))
+	return fixturesFS.ReadFile(path.Join("fixtures", name))
 }
 
 // MustLoadFixture loads a fixture and panics on error.

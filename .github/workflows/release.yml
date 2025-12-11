@@ -38,7 +38,7 @@ jobs:
         shell: bash {0}
         id: release
         env:
-          WAS_PR: ${{ steps.pr.outputs.pr_title != '' }}
+          # WAS_PR: ${{ steps.pr.outputs.pr_title != '' }}
           SKIP_RELEASE: ${{ !contains(steps.pr.outputs.pr_title, 'skip-release') && !contains(steps.pr.outputs.pr_title, 'skip release') }}
         run: |
           should_run=true
