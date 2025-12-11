@@ -17,7 +17,7 @@
 //
 // Options:
 //
-//	-network string   Network CIDR to scan (default "10.23.46.0/23")
+//	-network string   Network CIDR to scan (default "192.168.1.0/24")
 //	-timeout duration Timeout per device (default 2s)
 //	-json             Output as JSON
 //	-mdns             Use mDNS discovery (default true, Gen2+)
@@ -105,7 +105,7 @@ type DiscoveredDevice struct {
 }
 
 func main() {
-	network := flag.String("network", "10.23.46.0/23", "Network CIDR to scan")
+	network := flag.String("network", "192.168.1.0/24", "Network CIDR to scan")
 	timeout := flag.Duration("timeout", 2*time.Second, "Timeout per device")
 	jsonOutput := flag.Bool("json", false, "Output as JSON")
 	useMDNS := flag.Bool("mdns", true, "Use mDNS discovery (Gen2+)")
