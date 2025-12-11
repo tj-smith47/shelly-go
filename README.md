@@ -1,8 +1,8 @@
 # shelly-go
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/tj-smith47/shelly-go.svg)](https://pkg.go.dev/github.com/tj-smith47/shelly-go)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/tj-smith47/shelly-go/badges/coverage.json)](https://github.com/tj-smith47/shelly-go/actions)
 [![Go Report Card](https://goreportcard.com/badge/github.com/tj-smith47/shelly-go)](https://goreportcard.com/report/github.com/tj-smith47/shelly-go)
-[![codecov](https://codecov.io/gh/tj-smith47/shelly-go/branch/main/graph/badge.svg)](https://codecov.io/gh/tj-smith47/shelly-go)
 [![CI](https://github.com/tj-smith47/shelly-go/workflows/CI/badge.svg)](https://github.com/tj-smith47/shelly-go/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -322,14 +322,36 @@ Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for gu
 - [x] Gen1 support (HTTP, CoIoT)
 - [x] Gen2/Gen3/Gen4 support (RPC)
 - [x] Cloud API integration
-- [x] Device discovery (mDNS, BLE, CoIoT)
+- [x] Device discovery (mDNS, CoIoT, WiFi AP)
 - [x] Event system
-- [x] Comprehensive testing (≥90% coverage)
+- [x] WiFi provisioning (platform-specific: Linux/macOS/Windows)
+- [x] Backup/restore functionality
+- [x] Firmware update management
+- [x] Batch operations and device groups
+- [x] Scene management
+- [ ] BLE discovery (interface defined, requires platform-specific implementation)
+- [ ] BLE provisioning (interface defined, requires platform-specific implementation)
 - [ ] Matter protocol support
 - [ ] Zigbee support (via hubs)
 - [ ] Z-Wave support (Wave devices)
 - [ ] LoRa add-on support
 - [ ] Integrator API (B2B)
+
+## Known Limitations
+
+### Bluetooth (BLE)
+
+The BLE discovery and provisioning interfaces are defined (`BLEScanner`, `BLEConnector`, `BLETransmitter`) but **require platform-specific implementations** to function. The library includes a TinyGo-based implementation stub, but actual BLE functionality requires:
+
+- A platform-specific BLE library (e.g., TinyGo bluetooth, or native bindings)
+- Hardware with Bluetooth capability
+- Appropriate OS permissions
+
+WiFi provisioning is fully implemented with platform-specific code for Linux (nmcli/wpa_cli), macOS (networksetup), and Windows (netsh). BLE follows the same interface pattern but implementations are not included.
+
+### Integration Tests
+
+Integration tests exist but require real Shelly devices at specific IP addresses. They are skipped in CI environments (`SHELLY_CI=1`).
 
 ## License
 

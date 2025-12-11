@@ -8,6 +8,8 @@ import (
 	"github.com/tj-smith47/shelly-go/types"
 )
 
+const componentTypeCloud = "cloud"
+
 // Cloud represents a Shelly Gen2+ Cloud component.
 //
 // Cloud manages the device's connection to the Shelly Cloud service,
@@ -143,12 +145,12 @@ func (c *Cloud) GetStatus(ctx context.Context) (*CloudStatus, error) {
 
 // Type returns the component type identifier.
 func (c *Cloud) Type() string {
-	return "cloud"
+	return componentTypeCloud
 }
 
 // Key returns the component key for aggregated status/config responses.
 func (c *Cloud) Key() string {
-	return "cloud"
+	return componentTypeCloud
 }
 
 // Ensure Cloud implements a minimal component-like interface for documentation purposes.

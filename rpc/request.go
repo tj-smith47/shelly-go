@@ -6,6 +6,9 @@ import (
 	"sync/atomic"
 )
 
+// JSONRPCVersion is the JSON-RPC protocol version used by Shelly devices.
+const JSONRPCVersion = "2.0"
+
 // Request represents a JSON-RPC 2.0 request.
 //
 // See: https://www.jsonrpc.org/specification#request_object
@@ -51,7 +54,7 @@ func (rb *RequestBuilder) Build(method string, params any) (*Request, error) {
 // This is useful for batch requests or when you need to control the ID.
 func (rb *RequestBuilder) BuildWithID(id any, method string, params any) (*Request, error) {
 	req := &Request{
-		JSONRPC: "2.0",
+		JSONRPC: JSONRPCVersion,
 		ID:      id,
 		Method:  method,
 	}
@@ -72,7 +75,7 @@ func (rb *RequestBuilder) BuildWithID(id any, method string, params any) (*Reque
 // Notifications do not expect a response from the server.
 func (rb *RequestBuilder) BuildNotification(method string, params any) (*Request, error) {
 	req := &Request{
-		JSONRPC: "2.0",
+		JSONRPC: JSONRPCVersion,
 		Method:  method,
 	}
 
@@ -150,7 +153,7 @@ func (r *Request) UnmarshalJSON(data []byte) error {
 	}
 
 	// Validate required fields
-	if r.JSONRPC != "2.0" {
+	if r.JSONRPC != JSONRPCVersion {
 		return fmt.Errorf("invalid jsonrpc version: %s", r.JSONRPC)
 	}
 	if r.Method == "" {

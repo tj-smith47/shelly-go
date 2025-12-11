@@ -8,6 +8,8 @@ import (
 	"github.com/tj-smith47/shelly-go/types"
 )
 
+const componentTypeBTHomeSensor = "bthomesensor"
+
 // BTHomeSensor represents a Shelly Gen2+ BTHomeSensor component.
 //
 // The BTHomeSensor component represents a single sensor/object from a BTHomeDevice.
@@ -170,12 +172,12 @@ func (s *BTHomeSensor) GetStatus(ctx context.Context) (*BTHomeSensorStatus, erro
 
 // Type returns the component type identifier.
 func (s *BTHomeSensor) Type() string {
-	return "bthomesensor"
+	return componentTypeBTHomeSensor
 }
 
 // Key returns the component key for aggregated status/config responses.
 func (s *BTHomeSensor) Key() string {
-	return "bthomesensor"
+	return componentTypeBTHomeSensor
 }
 
 // Ensure BTHomeSensor implements a minimal component-like interface for documentation purposes.

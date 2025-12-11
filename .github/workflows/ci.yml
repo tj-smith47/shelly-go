@@ -10,6 +10,7 @@ permissions:
   contents: write
   pull-requests: read
   checks: write
+  security-events: write
 
 jobs:
   build:
@@ -110,13 +111,20 @@ jobs:
       - name: Verify dependencies
         run: go mod verify
 
-      - name: Run tests
+      - name: Run tests (Unix)
+        if: matrix.os != 'windows-latest'
         run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
         env:
-          SHELLY_CI: "1" # Skip hardware-dependent tests in CI
+          SHELLY_CI: "1"
+
+      - name: Run tests (Windows)
+        if: matrix.os == 'windows-latest'
+        run: go test -v -race -covermode=atomic ./...
+        env:
+          SHELLY_CI: "1"
 
       - name: Update coverage badge
-        if: github.ref == 'refs/heads/master'
+        if: github.ref == 'refs/heads/master' && matrix.os == 'ubuntu-latest'
         run: |
           COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
           if (( $(echo "$COVERAGE >= 90" | bc -l) )); then COLOR="brightgreen"

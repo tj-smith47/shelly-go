@@ -10,6 +10,11 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+const (
+	turnOn  = "on"
+	turnOff = "off"
+)
+
 // WSConnector interface for WebSocket connections (allows mocking).
 type WSConnector interface {
 	WriteMessage(messageType int, data []byte) error
@@ -222,9 +227,9 @@ func (c *Connection) SendCommand(ctx context.Context, deviceID, action string, p
 
 // SendRelayCommand sends a relay on/off command.
 func (c *Connection) SendRelayCommand(ctx context.Context, deviceID string, channel int, on bool) error {
-	turn := "off"
+	turn := turnOff
 	if on {
-		turn = "on"
+		turn = turnOn
 	}
 	return c.SendCommand(ctx, deviceID, "relay", map[string]any{
 		"id":   channel,
@@ -251,9 +256,9 @@ func (c *Connection) SendRollerPosition(ctx context.Context, deviceID string, ch
 
 // SendLightCommand sends a light on/off command.
 func (c *Connection) SendLightCommand(ctx context.Context, deviceID string, channel int, on bool) error {
-	turn := "off"
+	turn := turnOff
 	if on {
-		turn = "on"
+		turn = turnOn
 	}
 	return c.SendCommand(ctx, deviceID, "light", map[string]any{
 		"id":   channel,

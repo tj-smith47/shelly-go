@@ -53,7 +53,7 @@ func (r *Response) UnmarshalJSON(data []byte) error {
 
 	// Shelly devices may omit the jsonrpc field, so we only validate
 	// if it's present and non-empty
-	if r.JSONRPC != "" && r.JSONRPC != "2.0" {
+	if r.JSONRPC != "" && r.JSONRPC != JSONRPCVersion {
 		return fmt.Errorf("invalid jsonrpc version: %s", r.JSONRPC)
 	}
 
@@ -278,7 +278,7 @@ func (n *Notification) UnmarshalJSON(data []byte) error {
 
 	// Shelly devices may omit the jsonrpc field, so we only validate
 	// if it's present and non-empty
-	if n.JSONRPC != "" && n.JSONRPC != "2.0" {
+	if n.JSONRPC != "" && n.JSONRPC != JSONRPCVersion {
 		return fmt.Errorf("invalid jsonrpc version: %s", n.JSONRPC)
 	}
 	if n.Method == "" {
