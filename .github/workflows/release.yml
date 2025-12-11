@@ -34,9 +34,20 @@ jobs:
         uses: 8BitJonny/gh-get-current-pr@3.0.0
         id: pr
 
+      - name: Check Run Conditions
+        shell: bash {0}
+        id: release
+        env:
+          WAS_PR: ${{ steps.pr.outputs.pr_title != '' }}
+          SKIP_RELEASE: ${{ !contains(steps.pr.outputs.pr_title, 'skip-release') && !contains(steps.pr.outputs.pr_title, 'skip release') }}
+        run: |
+          should_run=true
+          [[ ${SKIP_RELEASE} == 'true' || ${WAS_PR} == 'false' ]] && should_run=false
+          echo "should_run=${should_run}" >>$GITHUB_OUTPUT
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
-        if: ${{ !contains(steps.pr.outputs.pr_title, 'skip-release') && !contains(steps.pr.outputs.pr_title, 'skip release') }}
+        if: ${{ steps.release.outputs.should_run == 'true' }}
         with:
           distribution: goreleaser
           version: latest

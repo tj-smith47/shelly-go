@@ -676,16 +676,9 @@ func (c *tinyGoBLEConnector) Connect(ctx context.Context, address string) error 
 		return &BLEError{Message: "already connected to a device"}
 	}
 
-	// Parse the address
-	mac, err := bluetooth.ParseMAC(address)
-	if err != nil {
-		return &BLEError{Message: "invalid BLE address", Err: err}
-	}
-
-	// Create address with MAC
-	addr := bluetooth.Address{
-		MACAddress: bluetooth.MACAddress{MAC: mac},
-	}
+	// Create address using platform-agnostic Set method
+	var addr bluetooth.Address
+	addr.Set(address)
 
 	// Create connection parameters
 	params := bluetooth.ConnectionParams{}
