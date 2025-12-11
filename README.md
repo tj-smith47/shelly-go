@@ -322,9 +322,11 @@ Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for gu
 - [x] Gen1 support (HTTP, CoIoT)
 - [x] Gen2/Gen3/Gen4 support (RPC)
 - [x] Cloud API integration
-- [x] Device discovery (mDNS, CoIoT, WiFi AP)
+- [x] Device discovery (mDNS, CoIoT, WiFi AP, BLE)
 - [x] Event system
 - [x] WiFi provisioning (platform-specific: Linux/macOS/Windows)
+- [x] BLE discovery (TinyGo implementation for Linux/macOS; see `examples/discovery/ble`)
+- [x] BLE provisioning (TinyGo implementation for Linux/macOS; see `examples/provisioning/ble`)
 - [x] Backup/restore functionality
 - [x] Firmware update management
 - [x] Batch operations and device groups
@@ -334,20 +336,29 @@ Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for gu
 - [x] Z-Wave support (Wave device profiles; IP-enabled Wave devices use Gen2 RPC)
 - [x] LoRa add-on support (full RPC implementation)
 - [x] Integrator API (B2B fleet management, analytics, provisioning)
-- [ ] BLE discovery (interface defined, requires platform-specific implementation)
-- [ ] BLE provisioning (interface defined, requires platform-specific implementation)
 
 ## Known Limitations
 
 ### Bluetooth (BLE)
 
-The BLE discovery and provisioning interfaces are defined (`BLEScanner`, `BLEConnector`, `BLETransmitter`) but **require platform-specific implementations** to function. The library includes a TinyGo-based implementation stub, but actual BLE functionality requires:
+BLE discovery and provisioning are fully implemented using the TinyGo bluetooth library:
 
-- A platform-specific BLE library (e.g., TinyGo bluetooth, or native bindings)
-- Hardware with Bluetooth capability
-- Appropriate OS permissions
+- **Linux**: Works with BlueZ (requires `bluez` package)
+- **macOS**: Works with CoreBluetooth
+- **Windows**: Not supported (returns `ErrBLETransmitterNotSupported`)
 
-WiFi provisioning is fully implemented with platform-specific code for Linux (nmcli/wpa_cli), macOS (networksetup), and Windows (netsh). BLE follows the same interface pattern but implementations are not included.
+**Requirements:**
+- Bluetooth adapter must be available and enabled
+- Appropriate OS permissions (may need root/sudo on Linux)
+- No other application should be blocking the bluetooth adapter
+
+**Features:**
+- Discover Shelly devices in BLE provisioning mode (Gen2+)
+- Parse BTHome sensor data from Shelly BLU devices (buttons, sensors, etc.)
+- Connect to devices and send RPC commands over BLE GATT
+- Provision WiFi credentials to unprovisioned devices
+
+See the examples at `examples/discovery/ble` and `examples/provisioning/ble`.
 
 ### Integration Tests
 

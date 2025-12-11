@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -293,6 +294,10 @@ func TestMDNSDiscoverer_ExtractIP_ShortData(t *testing.T) {
 }
 
 func TestMDNSDiscoverer_StartStopDiscovery(t *testing.T) {
+	if os.Getenv("SHELLY_CI") == "1" {
+		t.Skip("skipping in CI - requires multicast networking")
+	}
+
 	d := NewMDNSDiscoverer()
 
 	// Start discovery
@@ -337,6 +342,10 @@ func TestMDNSDiscoverer_StartStopDiscovery(t *testing.T) {
 }
 
 func TestMDNSDiscoverer_Stop(t *testing.T) {
+	if os.Getenv("SHELLY_CI") == "1" {
+		t.Skip("skipping in CI - requires multicast networking")
+	}
+
 	d := NewMDNSDiscoverer()
 
 	_, err := d.StartDiscovery()
@@ -355,6 +364,10 @@ func TestMDNSDiscoverer_Stop(t *testing.T) {
 }
 
 func TestMDNSDiscoverer_DiscoverWithContext_Timeout(t *testing.T) {
+	if os.Getenv("SHELLY_CI") == "1" {
+		t.Skip("skipping in CI - requires multicast networking")
+	}
+
 	d := NewMDNSDiscoverer()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -373,6 +386,10 @@ func TestMDNSDiscoverer_DiscoverWithContext_Timeout(t *testing.T) {
 }
 
 func TestMDNSDiscoverer_Discover_Timeout(t *testing.T) {
+	if os.Getenv("SHELLY_CI") == "1" {
+		t.Skip("skipping in CI - requires multicast networking")
+	}
+
 	d := NewMDNSDiscoverer()
 
 	// Very short timeout
