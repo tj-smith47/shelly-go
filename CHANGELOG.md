@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2025-12-13
+
+### Added
+- **EMData component** for 3-phase historical energy data retrieval
+  - Compatible with Shelly Pro 3EM and Pro EM-50 devices
+  - `GetStatus()` - Retrieve data collection status and available records
+  - `GetRecords()` - List available time intervals containing stored data
+  - `GetData()` - Retrieve historical measurements for specified timestamp range
+  - `DeleteAllData()` - Clear all stored historical data
+  - `GetDataCSVURL()` - Generate HTTP URL for CSV data export
+  - Stores up to 60 days of 1-minute interval measurements in non-volatile memory
+  - Per-phase measurements: voltage, current, active/apparent power, power factor, frequency
+  - Total measurements: current, power, neutral current, energy counters
+- **EM1Data component** for single-phase historical energy data retrieval
+  - Compatible with Shelly Pro EM and Pro EM-50 devices
+  - `GetConfig()` / `SetConfig()` - Configure data collection settings (period, retention)
+  - `GetStatus()` - Retrieve data collection status and available records
+  - `GetRecords()` - List available time intervals containing stored data
+  - `GetData()` - Retrieve historical measurements for specified timestamp range
+  - `DeleteAllData()` - Clear all stored historical data
+  - `GetDataCSVURL()` - Generate HTTP URL for CSV data export
+  - Configurable collection interval (data_period) and retention period (data_storage_days)
+  - Single-phase measurements: voltage, current, active/apparent power, power factor, frequency, energy counters
+- **Example**: `examples/energy/historical_data.go`
+  - Demonstrates historical energy data retrieval and analysis
+  - Energy consumption calculation from power measurements
+  - Peak power detection and timestamp tracking
+  - Cost estimation based on consumption
+  - CSV export URL generation
+  - Supports both 3-phase (Pro 3EM) and single-phase (Pro EM) devices
+
+### Tests
+- Comprehensive test coverage (≥90%) for EMData and EM1Data components
+- Table-driven tests for all methods (GetStatus, GetRecords, GetData, DeleteAllData, GetDataCSVURL)
+- Error handling validation (network errors, invalid JSON, RPC failures)
+- Parameter validation tests (timestamp ranges, optional parameters)
+- CSV URL generation tests with various parameter combinations
+
+### Fixed
+- Added componentTypeNames entries for "emdata" and "em1data" to ensure proper RPC method name capitalization
+
 ## [0.1.0] - 2025-12-11
 
 Initial public release of shelly-go, a comprehensive Go library for Shelly smart home devices.
@@ -97,4 +138,5 @@ Initial public release of shelly-go, a comprehensive Go library for Shelly smart
 - Automated testing and linting
 - Module documentation at pkg.go.dev
 
+[0.1.5]: https://github.com/tj-smith47/shelly-go/releases/tag/v0.1.5
 [0.1.0]: https://github.com/tj-smith47/shelly-go/releases/tag/v0.1.0

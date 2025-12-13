@@ -278,6 +278,7 @@ See the [examples/](examples/) directory for complete, runnable examples:
 - **Discovery** - mDNS, BLE, and CoIoT discovery
 - **Cloud API** - Authentication and remote control
 - **Real-Time Events** - WebSocket event handling
+- **Energy Monitoring** - Historical energy data retrieval and analysis
 - **Batch Operations** - Controlling multiple devices
 - **Scenes** - Creating and managing scenes
 - **Provisioning** - WiFi and BLE device setup

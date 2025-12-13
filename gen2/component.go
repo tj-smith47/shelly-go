@@ -195,6 +195,8 @@ func (c *BaseComponent) call(ctx context.Context, method string, params, result 
 var componentTypeNames = map[string]string{
 	"em":           "EM",
 	"em1":          "EM1",
+	"emdata":       "EMData",
+	"em1data":      "EM1Data",
 	"pm":           "PM",
 	"pm1":          "PM1",
 	"kvs":          "KVS",
