@@ -6,6 +6,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/tj-smith47/shelly-go/transport"
 )
@@ -706,5 +707,111 @@ func TestClient_CallResult_EmptyResult(t *testing.T) {
 	err := client.CallResult(context.Background(), "Test", nil, &result)
 	if err != nil {
 		t.Errorf("CallResult() with null result error = %v", err)
+	}
+}
+
+func TestNewHTTPClient(t *testing.T) {
+	// Test basic creation - this won't actually connect, just verify creation
+	client, err := NewHTTPClient("192.168.1.100")
+	if err != nil {
+		t.Fatalf("NewHTTPClient() error = %v", err)
+	}
+
+	if client == nil {
+		t.Fatal("NewHTTPClient() returned nil")
+	}
+
+	if client.transport == nil {
+		t.Error("client transport should be initialized")
+	}
+
+	if client.builder == nil {
+		t.Error("client builder should be initialized")
+	}
+
+	if client.router == nil {
+		t.Error("client router should be initialized")
+	}
+}
+
+func TestNewHTTPClient_WithOptions(t *testing.T) {
+	client, err := NewHTTPClient("192.168.1.100",
+		WithTimeout(30*time.Second),
+		WithBasicAuth("admin", "password"),
+	)
+	if err != nil {
+		t.Fatalf("NewHTTPClient() error = %v", err)
+	}
+
+	if client == nil {
+		t.Fatal("NewHTTPClient() returned nil")
+	}
+
+	// Verify the client was created (we can't easily verify options were applied
+	// since they're internal to the transport, but we can verify it doesn't error)
+	if client.transport == nil {
+		t.Error("client transport should be initialized")
+	}
+}
+
+func TestNewHTTPClient_WithURLScheme(t *testing.T) {
+	// Test with explicit http scheme
+	client, err := NewHTTPClient("http://192.168.1.100")
+	if err != nil {
+		t.Fatalf("NewHTTPClient() error = %v", err)
+	}
+
+	if client == nil {
+		t.Fatal("NewHTTPClient() returned nil")
+	}
+
+	// Test with explicit https scheme
+	clientHTTPS, err := NewHTTPClient("https://192.168.1.100")
+	if err != nil {
+		t.Fatalf("NewHTTPClient(https) error = %v", err)
+	}
+
+	if clientHTTPS == nil {
+		t.Fatal("NewHTTPClient(https) returned nil")
+	}
+}
+
+func TestWithTimeout(t *testing.T) {
+	opt := WithTimeout(30 * time.Second)
+	options := defaultClientOptions()
+	opt(options)
+
+	if options.timeout != 30*time.Second {
+		t.Errorf("timeout = %v, want 30s", options.timeout)
+	}
+}
+
+func TestWithBasicAuth(t *testing.T) {
+	opt := WithBasicAuth("admin", "secret")
+	options := defaultClientOptions()
+	opt(options)
+
+	if options.username != "admin" {
+		t.Errorf("username = %v, want admin", options.username)
+	}
+
+	if options.password != "secret" {
+		t.Errorf("password = %v, want secret", options.password)
+	}
+}
+
+func TestDefaultClientOptions(t *testing.T) {
+	options := defaultClientOptions()
+
+	if options.timeout != 10*time.Second {
+		t.Errorf("default timeout = %v, want 10s", options.timeout)
+	}
+
+	if options.username != "" {
+		t.Error("default username should be empty")
+	}
+
+	if options.password != "" {
+		t.Error("default password should be empty")
 	}
 }

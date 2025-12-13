@@ -27,8 +27,8 @@ func main() {
 
 	ctx := context.Background()
 
-	// Connect to device
-	client, err := rpc.NewHTTPClient(*addr, nil)
+	// Connect to device using the convenience constructor
+	client, err := rpc.NewHTTPClient(*addr)
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)
 	}

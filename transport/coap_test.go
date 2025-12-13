@@ -134,3 +134,39 @@ func TestCoAP_ClosedCall(t *testing.T) {
 		t.Error("Call() on closed CoAP error = nil, want error")
 	}
 }
+
+func TestCoAP_Address(t *testing.T) {
+	coap := NewCoAP("192.168.1.100")
+	if got := coap.Address(); got != "192.168.1.100" {
+		t.Errorf("Address() = %v, want %v", got, "192.168.1.100")
+	}
+}
+
+func TestCoAP_IsMulticast(t *testing.T) {
+	// Non-multicast CoAP
+	coap := NewCoAP("192.168.1.100")
+	if coap.IsMulticast() {
+		t.Error("IsMulticast() = true for unicast, want false")
+	}
+
+	// Multicast CoAP
+	coap = NewCoAP("224.0.1.187", WithCoAPMulticast())
+	if !coap.IsMulticast() {
+		t.Error("IsMulticast() = false for multicast, want true")
+	}
+}
+
+func TestCoAP_IsConnected(t *testing.T) {
+	coap := NewCoAP("192.168.1.100")
+
+	// Initially not connected (no conn set)
+	if coap.IsConnected() {
+		t.Error("IsConnected() = true initially, want false")
+	}
+
+	// After closing - still not connected
+	coap.Close()
+	if coap.IsConnected() {
+		t.Error("IsConnected() = true after close, want false")
+	}
+}

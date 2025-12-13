@@ -4,9 +4,67 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/tj-smith47/shelly-go/transport"
 )
+
+// ClientOption is a functional option for configuring the RPC client.
+type ClientOption func(*clientOptions)
+
+type clientOptions struct {
+	username string
+	password string
+	timeout  time.Duration
+}
+
+func defaultClientOptions() *clientOptions {
+	return &clientOptions{
+		timeout: 10 * time.Second,
+	}
+}
+
+// WithTimeout sets the request timeout for the HTTP client.
+func WithTimeout(timeout time.Duration) ClientOption {
+	return func(o *clientOptions) {
+		o.timeout = timeout
+	}
+}
+
+// WithBasicAuth sets basic authentication credentials.
+func WithBasicAuth(username, password string) ClientOption {
+	return func(o *clientOptions) {
+		o.username = username
+		o.password = password
+	}
+}
+
+// NewHTTPClient creates a new RPC client with an HTTP transport.
+//
+// This is a convenience constructor that combines transport.NewHTTP and NewClient.
+// For more advanced transport configuration, use transport.NewHTTP directly.
+//
+// Example:
+//
+//	client, err := rpc.NewHTTPClient("192.168.1.100",
+//	    rpc.WithTimeout(30*time.Second),
+//	    rpc.WithBasicAuth("admin", "password"))
+func NewHTTPClient(addr string, opts ...ClientOption) (*Client, error) {
+	options := defaultClientOptions()
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	// Build transport options
+	var transportOpts []transport.Option
+	transportOpts = append(transportOpts, transport.WithTimeout(options.timeout))
+	if options.username != "" {
+		transportOpts = append(transportOpts, transport.WithAuth(options.username, options.password))
+	}
+
+	httpTransport := transport.NewHTTP(addr, transportOpts...)
+	return NewClient(httpTransport), nil
+}
 
 // Client is a JSON-RPC 2.0 client that wraps a transport.
 //

@@ -673,3 +673,233 @@ func TestCreateTestContext(t *testing.T) {
 		t.Error("CreateTestContext() returned nil")
 	}
 }
+
+func TestMockTransport_OnPathMatch(t *testing.T) {
+	mt := NewMockTransport()
+	defer mt.ClearMatchers()
+
+	mt.OnPathMatch(func(path string) bool {
+		return path == "/rpc/Switch.GetStatus"
+	}, func(params any) (json.RawMessage, error) {
+		return json.RawMessage(`{"output":true}`), nil
+	})
+
+	ctx := context.Background()
+	resp, err := mt.Call(ctx, "/rpc/Switch.GetStatus", nil)
+	if err != nil {
+		t.Errorf("Call() error = %v", err)
+	}
+	if string(resp) != `{"output":true}` {
+		t.Errorf("Call() response = %v, want %v", string(resp), `{"output":true}`)
+	}
+
+	// Non-matching path should error
+	_, err = mt.Call(ctx, "/rpc/Other.Method", nil)
+	if err == nil {
+		t.Error("Call() for non-matching path should error")
+	}
+}
+
+func TestMockTransport_OnPathContains(t *testing.T) {
+	mt := NewMockTransport()
+	defer mt.ClearMatchers()
+
+	mt.OnPathContains("Switch", map[string]bool{"output": true}, nil)
+
+	ctx := context.Background()
+	resp, err := mt.Call(ctx, "/rpc/Switch.GetStatus", nil)
+	if err != nil {
+		t.Errorf("Call() error = %v", err)
+	}
+	if string(resp) != `{"output":true}` {
+		t.Errorf("Call() response = %v", string(resp))
+	}
+
+	// Also matches other Switch methods
+	_, err = mt.Call(ctx, "Switch.Set", nil)
+	if err != nil {
+		t.Errorf("Call() error = %v", err)
+	}
+}
+
+func TestMockTransport_OnPathContains_Error(t *testing.T) {
+	mt := NewMockTransport()
+	defer mt.ClearMatchers()
+
+	expectedErr := errors.New("test error")
+	mt.OnPathContains("Test", nil, expectedErr)
+
+	ctx := context.Background()
+	_, err := mt.Call(ctx, "Test.Method", nil)
+	if err == nil {
+		t.Error("Call() should return error")
+	}
+}
+
+func TestMockTransport_OnPathPrefix(t *testing.T) {
+	mt := NewMockTransport()
+	defer mt.ClearMatchers()
+
+	mt.OnPathPrefix("/rpc/", map[string]string{"status": "ok"}, nil)
+
+	ctx := context.Background()
+	resp, err := mt.Call(ctx, "/rpc/Any.Method", nil)
+	if err != nil {
+		t.Errorf("Call() error = %v", err)
+	}
+	if string(resp) != `{"status":"ok"}` {
+		t.Errorf("Call() response = %v", string(resp))
+	}
+
+	// Non-prefixed path should error
+	_, err = mt.Call(ctx, "Other.Method", nil)
+	if err == nil {
+		t.Error("Call() for non-prefixed path should error")
+	}
+}
+
+func TestMockTransport_ClearMatchers(t *testing.T) {
+	mt := NewMockTransport()
+	mt.OnPathContains("Test", nil, nil)
+
+	mt.ClearMatchers()
+
+	ctx := context.Background()
+	_, err := mt.Call(ctx, "Test.Method", nil)
+	if err == nil {
+		t.Error("Call() after ClearMatchers() should error")
+	}
+}
+
+func TestMakeResponseHandler(t *testing.T) {
+	tests := []struct {
+		name     string
+		response any
+		err      error
+		wantErr  bool
+		wantResp string
+	}{
+		{
+			name:    "with error",
+			err:     errors.New("test error"),
+			wantErr: true,
+		},
+		{
+			name:     "with nil response",
+			response: nil,
+			wantResp: `{}`,
+		},
+		{
+			name:     "with json.RawMessage",
+			response: json.RawMessage(`{"raw":"message"}`),
+			wantResp: `{"raw":"message"}`,
+		},
+		{
+			name:     "with string",
+			response: `{"string":"value"}`,
+			wantResp: `{"string":"value"}`,
+		},
+		{
+			name:     "with struct",
+			response: struct{ Name string }{Name: "test"},
+			wantResp: `{"Name":"test"}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := makeResponseHandler(tt.response, tt.err)
+			resp, err := handler(nil)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Error("handler error = nil, want error")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("handler error = %v", err)
+			}
+			if string(resp) != tt.wantResp {
+				t.Errorf("handler response = %v, want %v", string(resp), tt.wantResp)
+			}
+		})
+	}
+}
+
+func TestContains(t *testing.T) {
+	tests := []struct {
+		s      string
+		substr string
+		want   bool
+	}{
+		{"hello world", "world", true},
+		{"hello world", "hello", true},
+		{"hello world", "lo wo", true},
+		{"hello", "hello", true},
+		{"hello", "", true},
+		{"hello", "x", false},
+		{"hello", "hello world", false},
+		{"", "a", false},
+		{"", "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.s+"_"+tt.substr, func(t *testing.T) {
+			got := contains(tt.s, tt.substr)
+			if got != tt.want {
+				t.Errorf("contains(%q, %q) = %v, want %v", tt.s, tt.substr, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHasPrefix(t *testing.T) {
+	tests := []struct {
+		s      string
+		prefix string
+		want   bool
+	}{
+		{"hello world", "hello", true},
+		{"hello", "hello", true},
+		{"hello", "", true},
+		{"hello", "hi", false},
+		{"hello", "hello world", false},
+		{"", "", true},
+		{"", "a", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.s+"_"+tt.prefix, func(t *testing.T) {
+			got := hasPrefix(tt.s, tt.prefix)
+			if got != tt.want {
+				t.Errorf("hasPrefix(%q, %q) = %v, want %v", tt.s, tt.prefix, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFindSubstr(t *testing.T) {
+	tests := []struct {
+		s      string
+		substr string
+		want   int
+	}{
+		{"hello world", "world", 6},
+		{"hello world", "hello", 0},
+		{"hello world", "o", 4},
+		{"hello", "x", -1},
+		{"hello", "hello", 0},
+		{"", "a", -1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.s+"_"+tt.substr, func(t *testing.T) {
+			got := findSubstr(tt.s, tt.substr)
+			if got != tt.want {
+				t.Errorf("findSubstr(%q, %q) = %v, want %v", tt.s, tt.substr, got, tt.want)
+			}
+		})
+	}
+}
