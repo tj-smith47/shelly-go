@@ -117,7 +117,7 @@ jobs:
           # Run all tests (including examples for build verification)
           go test -v -race -covermode=atomic ./...
           # Generate coverage only from library packages (exclude examples/tools which are main packages)
-          ./scripts/coverage.sh
+          bash scripts/coverage.sh
         env:
           SHELLY_CI: "1"
 
