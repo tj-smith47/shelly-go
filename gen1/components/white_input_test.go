@@ -875,3 +875,31 @@ func TestInputSetButtonReverseError(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+// TestWhiteGetStatusInvalidJSON tests White.GetStatus with invalid JSON response.
+func TestWhiteGetStatusInvalidJSON(t *testing.T) {
+	mt := newMockTransport()
+	mt.responses["/white/0"] = json.RawMessage(`{invalid`)
+
+	white := NewWhite(mt, 0)
+	ctx := context.Background()
+
+	_, err := white.GetStatus(ctx)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+// TestWhiteGetConfigInvalidJSON tests White.GetConfig with invalid JSON response.
+func TestWhiteGetConfigInvalidJSON(t *testing.T) {
+	mt := newMockTransport()
+	mt.responses["/settings/white/0"] = json.RawMessage(`{invalid`)
+
+	white := NewWhite(mt, 0)
+	ctx := context.Background()
+
+	_, err := white.GetConfig(ctx)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}

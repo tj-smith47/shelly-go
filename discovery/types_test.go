@@ -384,3 +384,97 @@ func TestScanner_DeduplicateDevices_MultipleUniqueDevices(t *testing.T) {
 		t.Errorf("deduplicateDevices() returned %d devices, want 3", len(result))
 	}
 }
+
+func TestScannerWithBLE(t *testing.T) {
+	// Test with nil scanner - should not enable BLE
+	s := NewScanner(WithBLE(nil))
+	if s.enableBLE {
+		t.Error("BLE should be disabled when scanner is nil")
+	}
+	if s.ble != nil {
+		t.Error("ble discoverer should be nil when scanner is nil")
+	}
+}
+
+func TestScannerWithWiFi(t *testing.T) {
+	// Test with nil scanner - should not enable WiFi
+	s := NewScanner(WithWiFi(nil))
+	if s.enableWiFi {
+		t.Error("WiFi should be disabled when scanner is nil")
+	}
+	if s.wifi != nil {
+		t.Error("wifi discoverer should be nil when scanner is nil")
+	}
+}
+
+func TestScanner_Scan_WithWiFiEnabled(t *testing.T) {
+	mock := &mockWiFiScanner{
+		networks: []WiFiNetwork{
+			{SSID: "shellyplus1pm-AABBCC", Signal: -50},
+		},
+	}
+
+	s := NewScanner(
+		WithMDNS(false),
+		WithCoIoT(false),
+		WithWiFi(mock),
+	)
+
+	devices, err := s.Scan(100 * time.Millisecond)
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+
+	if devices == nil {
+		t.Error("should return slice, not nil")
+	}
+}
+
+func TestScanner_Stop_WithWiFi(t *testing.T) {
+	wifiMock := &mockWiFiScanner{}
+
+	s := NewScanner(
+		WithWiFi(wifiMock),
+	)
+
+	err := s.Stop()
+	if err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+}
+
+func TestDiscoveredDevice_URLWithPort(t *testing.T) {
+	d := DiscoveredDevice{
+		Address: net.ParseIP("192.168.1.100"),
+		Port:    8080,
+	}
+
+	url := d.URL()
+	if url != "http://192.168.1.100:8080" {
+		t.Errorf("URL() = %v, want http://192.168.1.100:8080", url)
+	}
+}
+
+func TestItoa_LargeNumbers(t *testing.T) {
+	tests := []struct {
+		input int
+		want  string
+	}{
+		{input: 65535, want: "65535"},
+		{input: 100000, want: "100000"},
+		{input: -999, want: "-999"},
+	}
+
+	for _, tt := range tests {
+		got := itoa(tt.input)
+		if got != tt.want {
+			t.Errorf("itoa(%d) = %v, want %v", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestProtocolWiFiAP(t *testing.T) {
+	if ProtocolWiFiAP != "wifi_ap" {
+		t.Errorf("ProtocolWiFiAP = %v, want 'wifi_ap'", ProtocolWiFiAP)
+	}
+}

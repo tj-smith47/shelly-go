@@ -536,6 +536,32 @@ func TestNotification_GetParams(t *testing.T) {
 	}
 }
 
+func TestNotification_GetParams_EmptyParams(t *testing.T) {
+	notif := &Notification{
+		JSONRPC: "2.0",
+		Method:  "NotifyStatus",
+		Params:  nil,
+	}
+
+	var params map[string]any
+	if err := notif.GetParams(&params); err != nil {
+		t.Errorf("GetParams() with empty params should return nil, got error: %v", err)
+	}
+}
+
+func TestNotification_GetParams_InvalidJSON(t *testing.T) {
+	notif := &Notification{
+		JSONRPC: "2.0",
+		Method:  "NotifyStatus",
+		Params:  json.RawMessage(`{invalid json}`),
+	}
+
+	var params map[string]any
+	if err := notif.GetParams(&params); err == nil {
+		t.Error("GetParams() with invalid JSON should return error")
+	}
+}
+
 func TestNotification_String(t *testing.T) {
 	notif := &Notification{
 		JSONRPC: "2.0",
@@ -714,5 +740,78 @@ func TestNewBatchResponse(t *testing.T) {
 
 	if len(batch.Responses) != len(responses) {
 		t.Errorf("Response count = %v, want %v", len(batch.Responses), len(responses))
+	}
+}
+
+func TestToFloat64(t *testing.T) {
+	tests := []struct {
+		name  string
+		input any
+		want  *float64
+	}{
+		{"float64", float64(42.5), ptr(42.5)},
+		{"float32", float32(42.5), ptr(42.5)},
+		{"int", int(42), ptr(42.0)},
+		{"int8", int8(42), ptr(42.0)},
+		{"int16", int16(42), ptr(42.0)},
+		{"int32", int32(42), ptr(42.0)},
+		{"int64", int64(42), ptr(42.0)},
+		{"uint", uint(42), ptr(42.0)},
+		{"uint8", uint8(42), ptr(42.0)},
+		{"uint16", uint16(42), ptr(42.0)},
+		{"uint32", uint32(42), ptr(42.0)},
+		{"uint64", uint64(42), ptr(42.0)},
+		{"string", "not a number", nil},
+		{"nil", nil, nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := toFloat64(tt.input)
+			if tt.want == nil {
+				if got != nil {
+					t.Errorf("toFloat64() = %v, want nil", *got)
+				}
+			} else {
+				if got == nil {
+					t.Errorf("toFloat64() = nil, want %v", *tt.want)
+				} else if *got != *tt.want {
+					t.Errorf("toFloat64() = %v, want %v", *got, *tt.want)
+				}
+			}
+		})
+	}
+}
+
+func ptr(f float64) *float64 {
+	return &f
+}
+
+func TestIdsEqual(t *testing.T) {
+	tests := []struct {
+		name string
+		a    any
+		b    any
+		want bool
+	}{
+		{"same int", 42, 42, true},
+		{"same float64", 42.0, 42.0, true},
+		{"int vs float64", 42, 42.0, true},
+		{"different int", 42, 43, false},
+		{"same string", "abc", "abc", true},
+		{"different string", "abc", "def", false},
+		{"string vs int", "42", 42, false},
+		{"nil vs nil", nil, nil, true},
+		{"int8 vs int64", int8(42), int64(42), true},
+		{"uint vs int", uint(42), int(42), true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := idsEqual(tt.a, tt.b)
+			if got != tt.want {
+				t.Errorf("idsEqual(%v, %v) = %v, want %v", tt.a, tt.b, got, tt.want)
+			}
+		})
 	}
 }

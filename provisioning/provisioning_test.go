@@ -1931,3 +1931,496 @@ func TestProfileRegistry_Concurrency(t *testing.T) {
 		t.Errorf("Count() = %d, want 10", r.Count())
 	}
 }
+
+// Test applyProvisioningConfig failure paths
+
+func TestProvisioner_Provision_APError(t *testing.T) {
+	transport := &mockTransport{
+		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+			switch method {
+			case "Shelly.GetDeviceInfo":
+				return jsonrpcResponse(`{"id":"shellyplus1-123456"}`)
+			case "WiFi.SetConfig":
+				// Check if this is AP config or WiFi config based on params
+				paramsBytes, _ := json.Marshal(params)
+				if len(paramsBytes) > 50 { // AP config has more data
+					return nil, errTest
+				}
+				return jsonrpcResponse(`{"restart_required":false}`)
+			default:
+				return jsonrpcResponse(`null`)
+			}
+		},
+	}
+
+	client := rpc.NewClient(transport)
+	prov := New(client)
+
+	enable := true
+	config := &DeviceConfig{
+		AP: &APConfig{Enable: &enable, SSID: "TestAP", Password: "TestPass123"},
+	}
+
+	result, err := prov.Provision(context.Background(), config, &ProvisionOptions{WaitForConnection: false})
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+	if result.Success {
+		t.Error("Provision() Success = true, want false")
+	}
+}
+
+func TestProvisioner_Provision_DeviceNameError(t *testing.T) {
+	transport := &mockTransport{
+		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+			switch method {
+			case "Shelly.GetDeviceInfo":
+				return jsonrpcResponse(`{"id":"shellyplus1-123456"}`)
+			case "Sys.SetConfig":
+				return nil, errTest
+			default:
+				return jsonrpcResponse(`null`)
+			}
+		},
+	}
+
+	client := rpc.NewClient(transport)
+	prov := New(client)
+
+	config := &DeviceConfig{
+		DeviceName: "Test Device",
+	}
+
+	result, err := prov.Provision(context.Background(), config, &ProvisionOptions{WaitForConnection: false})
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+	if result.Success {
+		t.Error("Provision() Success = true, want false")
+	}
+}
+
+func TestProvisioner_Provision_TimezoneError(t *testing.T) {
+	sysCallCount := 0
+	transport := &mockTransport{
+		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+			switch method {
+			case "Shelly.GetDeviceInfo":
+				return jsonrpcResponse(`{"id":"shellyplus1-123456"}`)
+			case "Sys.SetConfig":
+				sysCallCount++
+				if sysCallCount == 2 { // Timezone is second Sys.SetConfig call
+					return nil, errTest
+				}
+				return jsonrpcResponse(`{"restart_required":false}`)
+			default:
+				return jsonrpcResponse(`null`)
+			}
+		},
+	}
+
+	client := rpc.NewClient(transport)
+	prov := New(client)
+
+	config := &DeviceConfig{
+		DeviceName: "Test",
+		Timezone:   "America/New_York",
+	}
+
+	result, err := prov.Provision(context.Background(), config, &ProvisionOptions{WaitForConnection: false})
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+	if result.Success {
+		t.Error("Provision() Success = true, want false")
+	}
+}
+
+func TestProvisioner_Provision_LocationError(t *testing.T) {
+	sysCallCount := 0
+	transport := &mockTransport{
+		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+			switch method {
+			case "Shelly.GetDeviceInfo":
+				return jsonrpcResponse(`{"id":"shellyplus1-123456"}`)
+			case "Sys.SetConfig":
+				sysCallCount++
+				if sysCallCount == 3 { // Location is third Sys.SetConfig call
+					return nil, errTest
+				}
+				return jsonrpcResponse(`{"restart_required":false}`)
+			default:
+				return jsonrpcResponse(`null`)
+			}
+		},
+	}
+
+	client := rpc.NewClient(transport)
+	prov := New(client)
+
+	config := &DeviceConfig{
+		DeviceName: "Test",
+		Timezone:   "UTC",
+		Location:   &Location{Lat: 40.0, Lon: -74.0},
+	}
+
+	result, err := prov.Provision(context.Background(), config, &ProvisionOptions{WaitForConnection: false})
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+	if result.Success {
+		t.Error("Provision() Success = true, want false")
+	}
+}
+
+func TestProvisioner_Provision_CloudError(t *testing.T) {
+	transport := &mockTransport{
+		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+			switch method {
+			case "Shelly.GetDeviceInfo":
+				return jsonrpcResponse(`{"id":"shellyplus1-123456"}`)
+			case "Cloud.SetConfig":
+				return nil, errTest
+			default:
+				return jsonrpcResponse(`null`)
+			}
+		},
+	}
+
+	client := rpc.NewClient(transport)
+	prov := New(client)
+
+	enable := true
+	config := &DeviceConfig{
+		Cloud: &CloudConfig{Enable: &enable},
+	}
+
+	result, err := prov.Provision(context.Background(), config, &ProvisionOptions{WaitForConnection: false})
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+	if result.Success {
+		t.Error("Provision() Success = true, want false")
+	}
+}
+
+func TestProvisioner_Provision_AuthError(t *testing.T) {
+	transport := &mockTransport{
+		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+			switch method {
+			case "Shelly.GetDeviceInfo":
+				return jsonrpcResponse(`{"id":"shellyplus1-123456"}`)
+			case "Shelly.SetAuth":
+				return nil, errTest
+			default:
+				return jsonrpcResponse(`null`)
+			}
+		},
+	}
+
+	client := rpc.NewClient(transport)
+	prov := New(client)
+
+	enable := true
+	config := &DeviceConfig{
+		Auth: &AuthConfig{Enable: &enable, User: "admin", Password: "secret"},
+	}
+
+	result, err := prov.Provision(context.Background(), config, &ProvisionOptions{WaitForConnection: false})
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+	if result.Success {
+		t.Error("Provision() Success = true, want false")
+	}
+}
+
+// Test applyPostProvisioningOptions paths
+
+func TestProvisioner_Provision_DisableAPError(t *testing.T) {
+	wifiCallCount := 0
+	transport := &mockTransport{
+		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+			switch method {
+			case "Shelly.GetDeviceInfo":
+				return jsonrpcResponse(`{"id":"shellyplus1-123456"}`)
+			case "WiFi.SetConfig":
+				wifiCallCount++
+				if wifiCallCount == 2 { // Second call is DisableAP
+					return nil, errTest
+				}
+				return jsonrpcResponse(`{"restart_required":false}`)
+			case "WiFi.GetStatus":
+				return jsonrpcResponse(`{"sta_ip":"192.168.1.100"}`)
+			default:
+				return jsonrpcResponse(`null`)
+			}
+		},
+	}
+
+	client := rpc.NewClient(transport)
+	prov := New(client)
+
+	config := &DeviceConfig{
+		WiFi: &WiFiConfig{SSID: "Test"},
+	}
+
+	opts := &ProvisionOptions{
+		WaitForConnection: true,
+		ConnectionTimeout: 1,
+		DisableAP:         true,
+	}
+
+	result, err := prov.Provision(context.Background(), config, opts)
+	// Post-provisioning errors are stored in result.Error but don't return error
+	if err != nil {
+		t.Errorf("Provision() error = %v, should be nil", err)
+	}
+	if result.Error == nil {
+		t.Error("result.Error should contain AP disable error")
+	}
+}
+
+func TestProvisioner_Provision_DisableBLEError(t *testing.T) {
+	transport := &mockTransport{
+		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+			switch method {
+			case "Shelly.GetDeviceInfo":
+				return jsonrpcResponse(`{"id":"shellyplus1-123456"}`)
+			case "WiFi.SetConfig":
+				return jsonrpcResponse(`{"restart_required":false}`)
+			case "WiFi.GetStatus":
+				return jsonrpcResponse(`{"sta_ip":"192.168.1.100"}`)
+			case "BLE.SetConfig":
+				return nil, errTest
+			default:
+				return jsonrpcResponse(`null`)
+			}
+		},
+	}
+
+	client := rpc.NewClient(transport)
+	prov := New(client)
+
+	config := &DeviceConfig{
+		WiFi: &WiFiConfig{SSID: "Test"},
+	}
+
+	opts := &ProvisionOptions{
+		WaitForConnection: true,
+		ConnectionTimeout: 1,
+		DisableBLE:        true,
+	}
+
+	result, err := prov.Provision(context.Background(), config, opts)
+	// Post-provisioning errors are stored in result.Error but don't return error
+	if err != nil {
+		t.Errorf("Provision() error = %v, should be nil", err)
+	}
+	if result.Error == nil {
+		t.Error("result.Error should contain BLE disable error")
+	}
+}
+
+func TestProvisioner_Provision_WaitForConnectionError(t *testing.T) {
+	transport := &mockTransport{
+		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+			switch method {
+			case "Shelly.GetDeviceInfo":
+				return jsonrpcResponse(`{"id":"shellyplus1-123456"}`)
+			case "WiFi.SetConfig":
+				return jsonrpcResponse(`{"restart_required":false}`)
+			case "WiFi.GetStatus":
+				return jsonrpcResponse(`{"sta_ip":""}`) // Never connects
+			default:
+				return jsonrpcResponse(`null`)
+			}
+		},
+	}
+
+	client := rpc.NewClient(transport)
+	prov := New(client)
+
+	config := &DeviceConfig{
+		WiFi: &WiFiConfig{SSID: "Test"},
+	}
+
+	opts := &ProvisionOptions{
+		WaitForConnection: true,
+		ConnectionTimeout: 1, // Very short timeout
+	}
+
+	result, err := prov.Provision(context.Background(), config, opts)
+	// Post-provisioning errors are stored in result.Error
+	if err != nil {
+		t.Errorf("Provision() error = %v, should be nil", err)
+	}
+	if result.Error == nil {
+		t.Error("result.Error should contain connection timeout error")
+	}
+}
+
+// Test BLE provisioner with mock transmitter
+
+func TestBLEProvisioner_ProvisionViaBLE_WithTransmitter(t *testing.T) {
+	b := NewBLEProvisioner()
+	mock := newMockBLETransmitter()
+	mock.SetNotifications([]byte(`{"id":1,"result":{}}`), []byte(`{"id":2,"result":{}}`))
+	b.Transmitter = mock
+
+	b.AddDiscoveredDevice(&BLEDevice{
+		Name:     "ShellyPlus1-123456",
+		Address:  "AA:BB:CC:DD:EE:FF",
+		IsShelly: true,
+	})
+
+	config := &BLEProvisionConfig{
+		WiFi: &WiFiConfig{
+			SSID:     "TestNetwork",
+			Password: "TestPassword",
+		},
+		DeviceName: "Kitchen Light",
+	}
+
+	result, err := b.ProvisionViaBLE(context.Background(), "AA:BB:CC:DD:EE:FF", config)
+	if err != nil {
+		t.Errorf("ProvisionViaBLE() error = %v", err)
+		return
+	}
+
+	if !result.Success {
+		t.Error("ProvisionViaBLE() Success = false, want true")
+	}
+
+	if !mock.disconnectCalled {
+		t.Error("Transmitter should be disconnected after provisioning")
+	}
+	if len(mock.writtenData) != 2 { // WiFi and DeviceName
+		t.Errorf("len(writtenData) = %d, want 2", len(mock.writtenData))
+	}
+}
+
+func TestBLEProvisioner_ProvisionViaBLE_ConnectError(t *testing.T) {
+	b := NewBLEProvisioner()
+	mock := newMockBLETransmitter()
+	mock.connectErr = errTest
+	b.Transmitter = mock
+
+	b.AddDiscoveredDevice(&BLEDevice{
+		Name:     "ShellyPlus1-123456",
+		Address:  "AA:BB:CC:DD:EE:FF",
+		IsShelly: true,
+	})
+
+	config := &BLEProvisionConfig{
+		WiFi: &WiFiConfig{SSID: "Test"},
+	}
+
+	result, err := b.ProvisionViaBLE(context.Background(), "AA:BB:CC:DD:EE:FF", config)
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+	if !errors.Is(err, ErrBLEConnectionFailed) {
+		t.Errorf("error = %v, want ErrBLEConnectionFailed", err)
+	}
+	if result.Success {
+		t.Error("Success = true, want false")
+	}
+}
+
+func TestBLEProvisioner_ProvisionViaBLE_WriteError(t *testing.T) {
+	b := NewBLEProvisioner()
+	mock := newMockBLETransmitter()
+	mock.writeErr = errTest
+	b.Transmitter = mock
+
+	b.AddDiscoveredDevice(&BLEDevice{
+		Name:     "ShellyPlus1-123456",
+		Address:  "AA:BB:CC:DD:EE:FF",
+		IsShelly: true,
+	})
+
+	config := &BLEProvisionConfig{
+		WiFi: &WiFiConfig{SSID: "Test"},
+	}
+
+	result, err := b.ProvisionViaBLE(context.Background(), "AA:BB:CC:DD:EE:FF", config)
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+	if !errors.Is(err, ErrBLEWriteFailed) {
+		t.Errorf("error = %v, want ErrBLEWriteFailed", err)
+	}
+	if result.Success {
+		t.Error("Success = true, want false")
+	}
+}
+
+func TestBLEProvisioner_ProvisionViaBLE_ReadError(t *testing.T) {
+	b := NewBLEProvisioner()
+	// Read errors are non-fatal, should still succeed
+	mock := newMockBLETransmitter()
+	mock.readErr = errTest
+	b.Transmitter = mock
+
+	b.AddDiscoveredDevice(&BLEDevice{
+		Name:     "ShellyPlus1-123456",
+		Address:  "AA:BB:CC:DD:EE:FF",
+		IsShelly: true,
+	})
+
+	config := &BLEProvisionConfig{
+		WiFi: &WiFiConfig{SSID: "Test"},
+	}
+
+	result, err := b.ProvisionViaBLE(context.Background(), "AA:BB:CC:DD:EE:FF", config)
+	if err != nil {
+		t.Errorf("ProvisionViaBLE() error = %v, want nil (read errors are non-fatal)", err)
+	}
+	if !result.Success {
+		t.Error("Success = false, want true (read errors are non-fatal)")
+	}
+}
+
+func TestBLEProvisioner_BuildProvisionCommands_Empty(t *testing.T) {
+	b := NewBLEProvisioner()
+
+	// Empty config should produce no commands
+	config := &BLEProvisionConfig{}
+	commands := b.buildProvisionCommands(config)
+
+	if len(commands) != 0 {
+		t.Errorf("len(commands) = %d, want 0", len(commands))
+	}
+}
+
+func TestBLEProvisioner_BuildProvisionCommands_WiFiNoPassword(t *testing.T) {
+	b := NewBLEProvisioner()
+
+	// WiFi with no password (open network)
+	config := &BLEProvisionConfig{
+		WiFi: &WiFiConfig{SSID: "OpenNetwork"},
+	}
+	commands := b.buildProvisionCommands(config)
+
+	if len(commands) != 1 {
+		t.Errorf("len(commands) = %d, want 1", len(commands))
+	}
+}
+
+func TestBLEProvisioner_BuildProvisionCommands_CloudDisabled(t *testing.T) {
+	b := NewBLEProvisioner()
+
+	disableCloud := false
+	config := &BLEProvisionConfig{
+		EnableCloud: &disableCloud,
+	}
+	commands := b.buildProvisionCommands(config)
+
+	if len(commands) != 1 {
+		t.Errorf("len(commands) = %d, want 1", len(commands))
+	}
+	if commands[0].Method != "Cloud.SetConfig" {
+		t.Errorf("Method = %s, want Cloud.SetConfig", commands[0].Method)
+	}
+}

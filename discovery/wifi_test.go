@@ -526,3 +526,149 @@ func TestWiFiDiscoverer_Stop(t *testing.T) {
 		t.Fatalf("Stop failed: %v", err)
 	}
 }
+
+func TestWiFiDiscoverer_ApplyGen2Info(t *testing.T) {
+	d := NewWiFiDiscoverer()
+
+	device := &WiFiDiscoveredDevice{}
+
+	info := map[string]any{
+		"name":    "My Shelly Plus",
+		"model":   "SNSW-001P16EU",
+		"mac":     "AA:BB:CC:DD:EE:FF",
+		"fw_id":   "20231107-164738/1.0.8-g8c1bb50",
+		"gen":     float64(2),
+		"auth_en": true,
+		"id":      "shellyplus1pm-aabbcc",
+	}
+
+	d.applyGen2Info(device, info)
+
+	if device.Name != "My Shelly Plus" {
+		t.Errorf("Name = %q, want %q", device.Name, "My Shelly Plus")
+	}
+	if device.Model != "SNSW-001P16EU" {
+		t.Errorf("Model = %q, want %q", device.Model, "SNSW-001P16EU")
+	}
+	if device.MACAddress != "AA:BB:CC:DD:EE:FF" {
+		t.Errorf("MACAddress = %q, want %q", device.MACAddress, "AA:BB:CC:DD:EE:FF")
+	}
+	if device.Firmware != "20231107-164738/1.0.8-g8c1bb50" {
+		t.Errorf("Firmware = %q, want %q", device.Firmware, "20231107-164738/1.0.8-g8c1bb50")
+	}
+	if device.Generation != types.Gen2 {
+		t.Errorf("Generation = %v, want Gen2", device.Generation)
+	}
+	if !device.AuthRequired {
+		t.Error("AuthRequired should be true")
+	}
+	if device.ID != "shellyplus1pm-aabbcc" {
+		t.Errorf("ID = %q, want %q", device.ID, "shellyplus1pm-aabbcc")
+	}
+}
+
+func TestWiFiDiscoverer_ApplyGen2Info_Partial(t *testing.T) {
+	d := NewWiFiDiscoverer()
+	device := &WiFiDiscoveredDevice{}
+
+	// Only some fields present
+	info := map[string]any{
+		"model": "SNSW-001P16EU",
+		"gen":   float64(3),
+	}
+
+	d.applyGen2Info(device, info)
+
+	if device.Model != "SNSW-001P16EU" {
+		t.Errorf("Model = %q, want %q", device.Model, "SNSW-001P16EU")
+	}
+	if device.Generation != types.Gen3 {
+		t.Errorf("Generation = %v, want Gen3", device.Generation)
+	}
+	if device.Name != "" {
+		t.Errorf("Name should be empty, got %q", device.Name)
+	}
+}
+
+func TestWiFiDiscoverer_ApplyGen1Info(t *testing.T) {
+	d := NewWiFiDiscoverer()
+
+	device := &WiFiDiscoveredDevice{}
+
+	info := map[string]any{
+		"type": "SHSW-1",
+		"mac":  "AA:BB:CC:DD:EE:FF",
+		"fw":   "20231107-164738",
+		"auth": true,
+	}
+
+	d.applyGen1Info(device, info)
+
+	if device.Model != "SHSW-1" {
+		t.Errorf("Model = %q, want %q", device.Model, "SHSW-1")
+	}
+	if device.MACAddress != "AA:BB:CC:DD:EE:FF" {
+		t.Errorf("MACAddress = %q, want %q", device.MACAddress, "AA:BB:CC:DD:EE:FF")
+	}
+	if device.ID != "AABBCCDDEEFF" {
+		t.Errorf("ID = %q, want %q", device.ID, "AABBCCDDEEFF")
+	}
+	if device.Firmware != "20231107-164738" {
+		t.Errorf("Firmware = %q, want %q", device.Firmware, "20231107-164738")
+	}
+	if device.Generation != types.Gen1 {
+		t.Errorf("Generation = %v, want Gen1", device.Generation)
+	}
+	if !device.AuthRequired {
+		t.Error("AuthRequired should be true")
+	}
+}
+
+func TestWiFiDiscoverer_ApplyGen1Info_WithExistingID(t *testing.T) {
+	d := NewWiFiDiscoverer()
+
+	device := &WiFiDiscoveredDevice{
+		DiscoveredDevice: DiscoveredDevice{
+			ID: "existing-id",
+		},
+	}
+
+	info := map[string]any{
+		"mac": "AA:BB:CC:DD:EE:FF",
+	}
+
+	d.applyGen1Info(device, info)
+
+	// ID should not be overwritten if already set
+	if device.ID != "existing-id" {
+		t.Errorf("ID = %q, should keep existing-id", device.ID)
+	}
+}
+
+func TestParseShellySSID_EdgeCases(t *testing.T) {
+	tests := []struct {
+		ssid     string
+		wantType string
+		wantID   string
+	}{
+		{"shelly", "", ""},                         // No hyphen
+		{"shelly-", "", ""},                        // Empty after hyphen
+		{"SHELLYPLUS1PM-ABC123", "plus1pm", "ABC123"}, // Case insensitive
+		{"ShellyPro4PM-DEADBEEF", "pro4pm", "DEADBEEF"},
+		{"shellyaabbcc", "", "AABBCC"},             // All hex suffix
+		{"shellyABCDEF", "", "ABCDEF"},             // All hex digits
+		{"shelly1pmAABBCC", "1pm", "aabbcc"},       // Model with hex suffix, no separator (early return doesn't uppercase)
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.ssid, func(t *testing.T) {
+			gotType, gotID := ParseShellySSID(tt.ssid)
+			if gotType != tt.wantType {
+				t.Errorf("ParseShellySSID(%q) type = %q, want %q", tt.ssid, gotType, tt.wantType)
+			}
+			if gotID != tt.wantID {
+				t.Errorf("ParseShellySSID(%q) id = %q, want %q", tt.ssid, gotID, tt.wantID)
+			}
+		})
+	}
+}

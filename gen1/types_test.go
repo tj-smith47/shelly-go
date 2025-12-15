@@ -696,3 +696,24 @@ func TestLightSettings(t *testing.T) {
 		t.Errorf("expected auto off 1800, got %f", settings.AutoOff)
 	}
 }
+
+// TestRelaySettings_IsBtnReverse tests RelaySettings.IsBtnReverse method.
+func TestRelaySettings_IsBtnReverse(t *testing.T) {
+	// BtnReverse is 0 - not reversed
+	settings := RelaySettings{BtnReverse: 0}
+	if settings.IsBtnReverse() {
+		t.Error("IsBtnReverse() = true, want false when BtnReverse is 0")
+	}
+
+	// BtnReverse is 1 - reversed
+	settings.BtnReverse = 1
+	if !settings.IsBtnReverse() {
+		t.Error("IsBtnReverse() = false, want true when BtnReverse is 1")
+	}
+
+	// BtnReverse is non-zero value
+	settings.BtnReverse = 2
+	if !settings.IsBtnReverse() {
+		t.Error("IsBtnReverse() = false, want true when BtnReverse is non-zero")
+	}
+}

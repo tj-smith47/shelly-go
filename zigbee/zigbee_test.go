@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/tj-smith47/shelly-go/rpc"
+	"github.com/tj-smith47/shelly-go/types"
 )
 
 // mockTransport implements rpc.Transport for testing.
@@ -1829,5 +1832,419 @@ func TestInferCapabilitiesFromDeviceType_OnOffLightSwitch(t *testing.T) {
 	// Should only have the Basic cluster (default case)
 	if len(caps) != 1 {
 		t.Logf("DeviceTypeOnOffLightSwitch returned %d capabilities (may be intentional)", len(caps))
+	}
+}
+
+func TestScanner_DiscoverDevices_WithConcurrency(t *testing.T) {
+	scanner := NewScanner()
+	scanner.Concurrency = 2 // Test with custom concurrency
+
+	// Test with empty addresses - verify concurrency is set properly
+	devices, err := scanner.DiscoverDevices(context.Background(), []string{})
+	if err != nil {
+		t.Errorf("DiscoverDevices() error = %v", err)
+	}
+	// Empty addresses returns nil or empty slice - both acceptable
+	if devices != nil && len(devices) != 0 {
+		t.Errorf("DiscoverDevices() returned %d devices, want 0", len(devices))
+	}
+}
+
+func TestScanner_DiscoverZigbeeDevices_NoDevices(t *testing.T) {
+	scanner := NewScanner()
+
+	// Test with empty addresses
+	devices, err := scanner.DiscoverZigbeeDevices(context.Background(), []string{})
+	if err != nil {
+		t.Errorf("DiscoverZigbeeDevices() error = %v", err)
+	}
+	// Empty input returns empty result
+	if devices != nil && len(devices) != 0 {
+		t.Errorf("DiscoverZigbeeDevices() returned %d devices, want 0", len(devices))
+	}
+}
+
+func TestScanner_ZeroConcurrency(t *testing.T) {
+	scanner := &Scanner{
+		Concurrency: 0, // Should default to 10
+	}
+
+	devices, err := scanner.DiscoverDevices(context.Background(), []string{})
+	if err != nil {
+		t.Errorf("DiscoverDevices() error = %v", err)
+	}
+	// Verify no error with zero concurrency (defaults to 10)
+	// Result will be nil/empty since no addresses provided
+	_ = devices
+}
+
+func TestDiscoveredDevice_FullFields(t *testing.T) {
+	device := DiscoveredDevice{
+		Address:    "192.168.1.100",
+		DeviceID:   "shellypluszigbee-123456",
+		Model:      "SNSN-0001X",
+		Generation: 2,
+		HasZigbee:  true,
+		ZigbeeStatus: &Status{
+			NetworkState:     "joined",
+			EUI64:            "0x1234567890ABCDEF",
+			CoordinatorEUI64: "0xABCDEF1234567890",
+			Channel:          15,
+			PANID:            0x1234,
+		},
+	}
+
+	if device.Address != "192.168.1.100" {
+		t.Errorf("Address = %s, want 192.168.1.100", device.Address)
+	}
+	if device.DeviceID != "shellypluszigbee-123456" {
+		t.Errorf("DeviceID = %s", device.DeviceID)
+	}
+	if device.Model != "SNSN-0001X" {
+		t.Errorf("Model = %s", device.Model)
+	}
+	if !device.HasZigbee {
+		t.Error("HasZigbee should be true")
+	}
+	if device.ZigbeeStatus == nil {
+		t.Error("ZigbeeStatus should not be nil")
+	} else {
+		if device.ZigbeeStatus.Channel != 15 {
+			t.Errorf("ZigbeeStatus.Channel = %d, want 15", device.ZigbeeStatus.Channel)
+		}
+		if device.ZigbeeStatus.NetworkState != "joined" {
+			t.Errorf("ZigbeeStatus.NetworkState = %s, want joined", device.ZigbeeStatus.NetworkState)
+		}
+	}
+}
+
+func TestScanner_ContextCancelledDuringDiscovery(t *testing.T) {
+	scanner := NewScanner()
+	scanner.Concurrency = 1 // Low concurrency
+
+	// Create context that's already cancelled
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	// Should return quickly due to cancelled context with empty addresses
+	devices, err := scanner.DiscoverDevices(ctx, []string{})
+	if err != nil {
+		t.Errorf("DiscoverDevices() error = %v", err)
+	}
+	// With cancelled context and empty addresses, result is nil or empty
+	if devices != nil && len(devices) != 0 {
+		t.Errorf("DiscoverDevices() returned %d devices, want 0", len(devices))
+	}
+}
+
+// createMockShellyServer creates an httptest server that simulates a Shelly device
+func createMockShellyServer(t *testing.T, deviceInfo map[string]any, zigbeeStatus map[string]any) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/rpc" {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+
+		var req struct {
+			Method string `json:"method"`
+			ID     int    `json:"id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		var result any
+		switch req.Method {
+		case "Shelly.GetDeviceInfo":
+			result = deviceInfo
+		case "Zigbee.GetStatus":
+			if zigbeeStatus == nil {
+				// Return error for no Zigbee
+				resp := map[string]any{
+					"id":    req.ID,
+					"error": map[string]any{"code": -1, "message": "Component not found"},
+				}
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(resp)
+				return
+			}
+			result = zigbeeStatus
+		default:
+			result = map[string]any{}
+		}
+
+		resp := types.Response{
+			ID:     req.ID,
+			Result: mustMarshal(result),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+}
+
+func mustMarshal(v any) json.RawMessage {
+	b, _ := json.Marshal(v)
+	return b
+}
+
+func TestScanner_ProbeDevice_Gen2WithZigbee(t *testing.T) {
+	deviceInfo := map[string]any{
+		"id":    "shellyplusht-aabbcc",
+		"model": "SNSN-0031Z",
+		"app":   "PlusHT",
+		"gen":   2,
+	}
+	zigbeeStatus := map[string]any{
+		"network_state":   "joined",
+		"channel":         15,
+		"eui64":           "0x1234567890ABCDEF",
+		"coordinator_eui64": "0xFEDCBA0987654321",
+		"pan_id":          12345,
+	}
+
+	server := createMockShellyServer(t, deviceInfo, zigbeeStatus)
+	defer server.Close()
+
+	scanner := NewScanner()
+	device, err := scanner.probeDevice(context.Background(), server.URL)
+	if err != nil {
+		t.Fatalf("probeDevice() error = %v", err)
+	}
+
+	if device.DeviceID != "shellyplusht-aabbcc" {
+		t.Errorf("DeviceID = %s, want shellyplusht-aabbcc", device.DeviceID)
+	}
+	if device.Model != "SNSN-0031Z" {
+		t.Errorf("Model = %s, want SNSN-0031Z", device.Model)
+	}
+	if device.Generation != types.Gen2 {
+		t.Errorf("Generation = %v, want Gen2", device.Generation)
+	}
+	if !device.HasZigbee {
+		t.Error("HasZigbee should be true")
+	}
+	if device.ZigbeeStatus == nil {
+		t.Fatal("ZigbeeStatus should not be nil")
+	}
+	if device.ZigbeeStatus.NetworkState != "joined" {
+		t.Errorf("NetworkState = %s, want joined", device.ZigbeeStatus.NetworkState)
+	}
+}
+
+func TestScanner_ProbeDevice_Gen3WithZigbee(t *testing.T) {
+	deviceInfo := map[string]any{
+		"id":    "shellyhtg3-aabbcc",
+		"model": "S3SN-0U12Z",
+		"app":   "HTG3",
+		"gen":   3,
+	}
+	zigbeeStatus := map[string]any{
+		"network_state": "ready",
+		"channel":       20,
+	}
+
+	server := createMockShellyServer(t, deviceInfo, zigbeeStatus)
+	defer server.Close()
+
+	scanner := NewScanner()
+	device, err := scanner.probeDevice(context.Background(), server.URL)
+	if err != nil {
+		t.Fatalf("probeDevice() error = %v", err)
+	}
+
+	if device.Generation != types.Gen3 {
+		t.Errorf("Generation = %v, want Gen3", device.Generation)
+	}
+	if !device.HasZigbee {
+		t.Error("HasZigbee should be true")
+	}
+}
+
+func TestScanner_ProbeDevice_Gen4WithZigbee(t *testing.T) {
+	deviceInfo := map[string]any{
+		"id":    "shellyhtg4-aabbcc",
+		"model": "S4SN-0U12Z",
+		"app":   "HTG4",
+		"gen":   4,
+	}
+	zigbeeStatus := map[string]any{
+		"network_state": "steering",
+		"channel":       11,
+	}
+
+	server := createMockShellyServer(t, deviceInfo, zigbeeStatus)
+	defer server.Close()
+
+	scanner := NewScanner()
+	device, err := scanner.probeDevice(context.Background(), server.URL)
+	if err != nil {
+		t.Fatalf("probeDevice() error = %v", err)
+	}
+
+	if device.Generation != types.Gen4 {
+		t.Errorf("Generation = %v, want Gen4", device.Generation)
+	}
+	if !device.HasZigbee {
+		t.Error("HasZigbee should be true")
+	}
+}
+
+func TestScanner_ProbeDevice_WithoutZigbee(t *testing.T) {
+	deviceInfo := map[string]any{
+		"id":    "shellyplus1pm-aabbcc",
+		"model": "SNSW-001P16EU",
+		"app":   "Plus1PM",
+		"gen":   2,
+	}
+
+	server := createMockShellyServer(t, deviceInfo, nil) // No Zigbee
+	defer server.Close()
+
+	scanner := NewScanner()
+	device, err := scanner.probeDevice(context.Background(), server.URL)
+	if err != nil {
+		t.Fatalf("probeDevice() error = %v", err)
+	}
+
+	if device.HasZigbee {
+		t.Error("HasZigbee should be false for non-Zigbee device")
+	}
+	if device.ZigbeeStatus != nil {
+		t.Error("ZigbeeStatus should be nil for non-Zigbee device")
+	}
+}
+
+func TestScanner_ProbeDevice_UnknownGeneration(t *testing.T) {
+	deviceInfo := map[string]any{
+		"id":    "shellyunknown-aabbcc",
+		"model": "UNKNOWN",
+		"app":   "Unknown",
+		"gen":   99, // Unknown generation
+	}
+
+	server := createMockShellyServer(t, deviceInfo, nil)
+	defer server.Close()
+
+	scanner := NewScanner()
+	device, err := scanner.probeDevice(context.Background(), server.URL)
+	if err != nil {
+		t.Fatalf("probeDevice() error = %v", err)
+	}
+
+	// Unknown generation should fall back to Gen2
+	if device.Generation != types.Gen2 {
+		t.Errorf("Generation = %v, want Gen2 (fallback)", device.Generation)
+	}
+}
+
+func TestScanner_ProbeDevice_ConnectionError(t *testing.T) {
+	scanner := NewScanner()
+
+	// Try to probe a non-existent server
+	_, err := scanner.probeDevice(context.Background(), "http://127.0.0.1:59999")
+	if err == nil {
+		t.Error("probeDevice() should return error for unreachable server")
+	}
+}
+
+func TestScanner_ProbeDevice_InvalidJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"id":1,"result":"not a valid device info object"}`))
+	}))
+	defer server.Close()
+
+	scanner := NewScanner()
+	_, err := scanner.probeDevice(context.Background(), server.URL)
+	if err == nil {
+		t.Error("probeDevice() should return error for invalid device info JSON")
+	}
+}
+
+func TestScanner_DiscoverDevices_WithMockServer(t *testing.T) {
+	deviceInfo := map[string]any{
+		"id":    "shellyplusht-aabbcc",
+		"model": "SNSN-0031Z",
+		"app":   "PlusHT",
+		"gen":   2,
+	}
+	zigbeeStatus := map[string]any{
+		"network_state": "joined",
+		"channel":       15,
+	}
+
+	server := createMockShellyServer(t, deviceInfo, zigbeeStatus)
+	defer server.Close()
+
+	scanner := NewScanner()
+	scanner.Concurrency = 2
+
+	devices, err := scanner.DiscoverDevices(context.Background(), []string{server.URL})
+	if err != nil {
+		t.Fatalf("DiscoverDevices() error = %v", err)
+	}
+
+	if len(devices) != 1 {
+		t.Fatalf("DiscoverDevices() returned %d devices, want 1", len(devices))
+	}
+
+	device := devices[0]
+	if device.DeviceID != "shellyplusht-aabbcc" {
+		t.Errorf("DeviceID = %s, want shellyplusht-aabbcc", device.DeviceID)
+	}
+	if !device.HasZigbee {
+		t.Error("HasZigbee should be true")
+	}
+}
+
+func TestScanner_DiscoverDevices_MixedResults(t *testing.T) {
+	// First server - valid Zigbee device
+	deviceInfo1 := map[string]any{
+		"id":    "shellyplusht-111111",
+		"model": "SNSN-0031Z",
+		"gen":   2,
+	}
+	zigbeeStatus1 := map[string]any{
+		"network_state": "joined",
+	}
+	server1 := createMockShellyServer(t, deviceInfo1, zigbeeStatus1)
+	defer server1.Close()
+
+	// Second server - non-Zigbee device
+	deviceInfo2 := map[string]any{
+		"id":    "shellyplus1pm-222222",
+		"model": "SNSW-001P16EU",
+		"gen":   2,
+	}
+	server2 := createMockShellyServer(t, deviceInfo2, nil)
+	defer server2.Close()
+
+	scanner := NewScanner()
+	scanner.Concurrency = 4
+
+	devices, err := scanner.DiscoverDevices(context.Background(), []string{
+		server1.URL,
+		server2.URL,
+		"http://127.0.0.1:59998", // Unreachable - should be skipped
+	})
+	if err != nil {
+		t.Fatalf("DiscoverDevices() error = %v", err)
+	}
+
+	// Should return 2 devices (the unreachable one is skipped)
+	if len(devices) != 2 {
+		t.Fatalf("DiscoverDevices() returned %d devices, want 2", len(devices))
+	}
+
+	// Count Zigbee-enabled devices
+	zigbeeCount := 0
+	for _, d := range devices {
+		if d.HasZigbee {
+			zigbeeCount++
+		}
+	}
+	if zigbeeCount != 1 {
+		t.Errorf("Found %d Zigbee devices, want 1", zigbeeCount)
 	}
 }

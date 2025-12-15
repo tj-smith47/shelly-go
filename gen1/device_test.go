@@ -758,3 +758,45 @@ func TestGetConfigError(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+// TestGetFullStatusInvalidJSON tests GetFullStatus with invalid JSON response.
+func TestGetFullStatusInvalidJSON(t *testing.T) {
+	mt := newMockTransport()
+	mt.responses["/status"] = json.RawMessage(`{invalid`)
+
+	device := NewDevice(mt)
+	ctx := context.Background()
+
+	_, err := device.GetFullStatus(ctx)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+// TestGetSettingsInvalidJSON tests GetSettings with invalid JSON response.
+func TestGetSettingsInvalidJSON(t *testing.T) {
+	mt := newMockTransport()
+	mt.responses["/settings"] = json.RawMessage(`{invalid`)
+
+	device := NewDevice(mt)
+	ctx := context.Background()
+
+	_, err := device.GetSettings(ctx)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+// TestCheckForUpdateInvalidJSON tests CheckForUpdate with invalid JSON response.
+func TestCheckForUpdateInvalidJSON(t *testing.T) {
+	mt := newMockTransport()
+	mt.responses["/ota/check"] = json.RawMessage(`{invalid`)
+
+	device := NewDevice(mt)
+	ctx := context.Background()
+
+	_, err := device.CheckForUpdate(ctx)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}

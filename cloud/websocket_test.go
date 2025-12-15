@@ -810,3 +810,178 @@ func TestWebSocketListenStopChannel(t *testing.T) {
 		t.Error("Listen() did not return in time")
 	}
 }
+
+func TestWebSocketAttemptConnectSuccess(t *testing.T) {
+	mockConn := newMockWebSocketConn()
+	mockDialer := &mockWebSocketDialer{conn: mockConn}
+
+	client := NewClient(
+		WithAccessToken("test-token"),
+		WithBaseURL("https://shelly-49-eu.shelly.cloud"),
+	)
+
+	ws := NewWebSocket(client,
+		WithDialer(mockDialer),
+		WithReconnectInterval(100*time.Millisecond),
+	)
+
+	ctx := context.Background()
+	newInterval, shouldContinue, err := ws.attemptConnect(ctx, 500*time.Millisecond)
+
+	if err != nil {
+		t.Errorf("attemptConnect() error = %v, want nil", err)
+	}
+	if shouldContinue {
+		t.Error("attemptConnect() shouldContinue = true, want false on success")
+	}
+	// On success, interval should be reset to initial
+	if newInterval != 100*time.Millisecond {
+		t.Errorf("attemptConnect() newInterval = %v, want 100ms", newInterval)
+	}
+}
+
+func TestWebSocketAttemptConnectFailWithBackoff(t *testing.T) {
+	dialErr := errors.New("connection refused")
+	mockDialer := &mockWebSocketDialer{dialErr: dialErr}
+
+	client := NewClient(
+		WithAccessToken("test-token"),
+		WithBaseURL("https://shelly-49-eu.shelly.cloud"),
+	)
+
+	ws := NewWebSocket(client,
+		WithDialer(mockDialer),
+		WithReconnectInterval(50*time.Millisecond),
+		WithMaxReconnectInterval(200*time.Millisecond),
+	)
+
+	ctx := context.Background()
+	startTime := time.Now()
+	newInterval, shouldContinue, err := ws.attemptConnect(ctx, 50*time.Millisecond)
+	elapsed := time.Since(startTime)
+
+	if err != nil {
+		t.Errorf("attemptConnect() error = %v, want nil", err)
+	}
+	if !shouldContinue {
+		t.Error("attemptConnect() shouldContinue = false, want true on failure")
+	}
+	// Interval should double
+	if newInterval != 100*time.Millisecond {
+		t.Errorf("attemptConnect() newInterval = %v, want 100ms", newInterval)
+	}
+	// Should have waited for the backoff period
+	if elapsed < 40*time.Millisecond {
+		t.Errorf("attemptConnect() elapsed = %v, want >= 40ms", elapsed)
+	}
+}
+
+func TestWebSocketAttemptConnectFailWithMaxBackoff(t *testing.T) {
+	dialErr := errors.New("connection refused")
+	mockDialer := &mockWebSocketDialer{dialErr: dialErr}
+
+	client := NewClient(
+		WithAccessToken("test-token"),
+		WithBaseURL("https://shelly-49-eu.shelly.cloud"),
+	)
+
+	ws := NewWebSocket(client,
+		WithDialer(mockDialer),
+		WithMaxReconnectInterval(100*time.Millisecond),
+	)
+
+	ctx := context.Background()
+	// Start with interval already at max
+	newInterval, shouldContinue, err := ws.attemptConnect(ctx, 100*time.Millisecond)
+
+	if err != nil {
+		t.Errorf("attemptConnect() error = %v, want nil", err)
+	}
+	if !shouldContinue {
+		t.Error("attemptConnect() shouldContinue = false, want true on failure")
+	}
+	// Interval should be capped at max (200ms doubled would be 200ms, but max is 100ms)
+	if newInterval != 100*time.Millisecond {
+		t.Errorf("attemptConnect() newInterval = %v, want 100ms (max)", newInterval)
+	}
+}
+
+func TestWebSocketAttemptConnectFailWithContextCancel(t *testing.T) {
+	dialErr := errors.New("connection refused")
+	mockDialer := &mockWebSocketDialer{dialErr: dialErr}
+
+	client := NewClient(
+		WithAccessToken("test-token"),
+		WithBaseURL("https://shelly-49-eu.shelly.cloud"),
+	)
+
+	ws := NewWebSocket(client, WithDialer(mockDialer))
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Cancel context immediately before wait
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		cancel()
+	}()
+
+	_, shouldContinue, err := ws.attemptConnect(ctx, 10*time.Second)
+
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("attemptConnect() error = %v, want context.Canceled", err)
+	}
+	if shouldContinue {
+		t.Error("attemptConnect() shouldContinue = true, want false on context cancel")
+	}
+}
+
+func TestWebSocketAttemptConnectFailWithStopChannel(t *testing.T) {
+	// First connect succeeds (to set ws.connected = true so Close() works)
+	mockConn := newMockWebSocketConn()
+	callCount := 0
+	mockDialer := &mockWebSocketDialer{}
+
+	client := NewClient(
+		WithAccessToken("test-token"),
+		WithBaseURL("https://shelly-49-eu.shelly.cloud"),
+	)
+
+	ws := NewWebSocket(client, WithDialer(mockDialer))
+
+	// Connect first so stopCh is valid
+	mockDialer.conn = mockConn
+	ctx := context.Background()
+	if err := ws.Connect(ctx); err != nil {
+		t.Fatalf("Initial Connect failed: %v", err)
+	}
+
+	// Now set dialer to fail for subsequent connect attempts
+	mockDialer.dialErr = errors.New("connection refused")
+	mockDialer.conn = nil
+
+	// Manually mark as disconnected so attemptConnect will try to connect
+	ws.mu.Lock()
+	ws.connected = false
+	// Create new stopCh since the old one might be closed
+	ws.stopCh = make(chan struct{})
+	ws.mu.Unlock()
+
+	// Close stop channel during wait
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		// Directly close stopCh since Close() won't work now that connected=false
+		ws.mu.Lock()
+		close(ws.stopCh)
+		ws.mu.Unlock()
+	}()
+
+	_, shouldContinue, err := ws.attemptConnect(ctx, 10*time.Second)
+	_ = callCount // suppress unused warning
+
+	if err != nil {
+		t.Errorf("attemptConnect() error = %v, want nil", err)
+	}
+	if shouldContinue {
+		t.Error("attemptConnect() shouldContinue = true, want false on stop channel")
+	}
+}

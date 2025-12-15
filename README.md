@@ -16,7 +16,7 @@ A comprehensive, production-ready Go library for controlling Shelly smart home d
 - **🔍 Auto-Discovery** - mDNS, BLE, and CoIoT device discovery
 - **📊 Real-Time Events** - WebSocket and notification support for live device updates
 - **🎨 Extensible Architecture** - Easy to add new devices and components
-- **🧪 Thoroughly Tested** - ≥90% test coverage (non-hw) with comprehensive unit and integration tests
+- **🧪 Thoroughly Tested** - 90% test coverage with comprehensive unit and integration tests
 - **📚 Well Documented** - Complete godoc documentation with runnable examples
 - **⚡ Modern Go** - Built for Go 1.25.5+ with latest features
 

@@ -2,6 +2,7 @@ package components
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 )
@@ -580,5 +581,33 @@ func TestColorTurnOnForDurationError(t *testing.T) {
 	err := color.TurnOnForDuration(ctx, 60)
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+// TestColorGetStatusInvalidJSON tests GetStatus with invalid JSON response.
+func TestColorGetStatusInvalidJSON(t *testing.T) {
+	mt := newMockTransport()
+	mt.responses["/color/0"] = json.RawMessage(`{invalid`)
+
+	color := NewColor(mt, 0)
+	ctx := context.Background()
+
+	_, err := color.GetStatus(ctx)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+// TestColorGetConfigInvalidJSON tests GetConfig with invalid JSON response.
+func TestColorGetConfigInvalidJSON(t *testing.T) {
+	mt := newMockTransport()
+	mt.responses["/settings/color/0"] = json.RawMessage(`{invalid`)
+
+	color := NewColor(mt, 0)
+	ctx := context.Background()
+
+	_, err := color.GetConfig(ctx)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
 	}
 }

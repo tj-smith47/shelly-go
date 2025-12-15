@@ -583,3 +583,75 @@ func TestGen1StatusJSONFields(t *testing.T) {
 		t.Errorf("NumMeters = %v, want 1", status.NumMeters)
 	}
 }
+
+func TestMatchCapabilities_EachFieldMismatch(t *testing.T) {
+	Clear()
+	defer Clear()
+
+	// Register a profile with NO capabilities
+	Register(&Profile{
+		Model:        "MINIMAL",
+		Capabilities: Capabilities{}, // All false
+	})
+
+	// Each of these should result in 0 matches because the profile has none
+	tests := []struct {
+		name string
+		cap  Capabilities
+	}{
+		{"PowerMetering", Capabilities{PowerMetering: true}},
+		{"EnergyMetering", Capabilities{EnergyMetering: true}},
+		{"CoverSupport", Capabilities{CoverSupport: true}},
+		{"DimmingSupport", Capabilities{DimmingSupport: true}},
+		{"ColorSupport", Capabilities{ColorSupport: true}},
+		{"ColorTemperature", Capabilities{ColorTemperature: true}},
+		{"Scripting", Capabilities{Scripting: true}},
+		{"Schedules", Capabilities{Schedules: true}},
+		{"Webhooks", Capabilities{Webhooks: true}},
+		{"ThreePhase", Capabilities{ThreePhase: true}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			results := MatchCapabilities(tt.cap)
+			if len(results) != 0 {
+				t.Errorf("MatchCapabilities(%s) = %d matches, want 0", tt.name, len(results))
+			}
+		})
+	}
+}
+
+func TestMatchComponents_EachFieldMismatch(t *testing.T) {
+	Clear()
+	defer Clear()
+
+	// Register a profile with 0 of everything
+	Register(&Profile{
+		Model:      "MINIMAL",
+		Components: Components{}, // All 0
+	})
+
+	// Each of these should result in 0 matches
+	tests := []struct {
+		name string
+		comp *Components
+	}{
+		{"Switches", &Components{Switches: 1}},
+		{"Covers", &Components{Covers: 1}},
+		{"Lights", &Components{Lights: 1}},
+		{"Inputs", &Components{Inputs: 1}},
+		{"PowerMeters", &Components{PowerMeters: 1}},
+		{"EnergyMeters", &Components{EnergyMeters: 1}},
+		{"TemperatureSensors", &Components{TemperatureSensors: 1}},
+		{"HumiditySensors", &Components{HumiditySensors: 1}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			results := MatchComponents(tt.comp)
+			if len(results) != 0 {
+				t.Errorf("MatchComponents(%s) = %d matches, want 0", tt.name, len(results))
+			}
+		})
+	}
+}

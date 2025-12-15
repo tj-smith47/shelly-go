@@ -545,3 +545,77 @@ func TestAccount_Serialization(t *testing.T) {
 		t.Errorf("Email = %v, want %v", decoded.Email, account.Email)
 	}
 }
+
+func TestAccountManager_AddAccount_UpdateWithRemovedDevices(t *testing.T) {
+	am := NewAccountManager()
+
+	// Add initial account with 3 devices
+	am.AddAccount(&Account{
+		UserID: "user1",
+		Devices: []AccountDevice{
+			{DeviceID: "dev1"},
+			{DeviceID: "dev2"},
+			{DeviceID: "dev3"},
+		},
+	})
+
+	// Verify all devices are indexed
+	_, _, ok1 := am.GetDevice("dev1")
+	_, _, ok2 := am.GetDevice("dev2")
+	_, _, ok3 := am.GetDevice("dev3")
+	if !ok1 || !ok2 || !ok3 {
+		t.Fatal("Initial devices not indexed")
+	}
+
+	// Update account with only 1 device (removing dev2 and dev3)
+	am.AddAccount(&Account{
+		UserID: "user1",
+		Email:  "updated@example.com",
+		Devices: []AccountDevice{
+			{DeviceID: "dev1"},
+		},
+	})
+
+	// Verify dev1 still indexed
+	_, _, ok1 = am.GetDevice("dev1")
+	if !ok1 {
+		t.Error("dev1 should still be indexed after update")
+	}
+
+	// Verify dev2 and dev3 removed from index
+	_, _, ok2 = am.GetDevice("dev2")
+	_, _, ok3 = am.GetDevice("dev3")
+	if ok2 {
+		t.Error("dev2 should be removed from index after update")
+	}
+	if ok3 {
+		t.Error("dev3 should be removed from index after update")
+	}
+
+	// Verify email was updated
+	account, _ := am.GetAccount("user1")
+	if account.Email != "updated@example.com" {
+		t.Errorf("Email = %v, want updated@example.com", account.Email)
+	}
+}
+
+func TestAccountManager_AddAccount_UpdateNoCallback(t *testing.T) {
+	am := NewAccountManager()
+
+	callCount := 0
+	am.OnAccountAdded(func(a *Account) {
+		callCount++
+	})
+
+	// First add triggers callback
+	am.AddAccount(&Account{UserID: "user1"})
+	if callCount != 1 {
+		t.Errorf("Callback called %d times, want 1", callCount)
+	}
+
+	// Update should NOT trigger callback
+	am.AddAccount(&Account{UserID: "user1", Email: "updated"})
+	if callCount != 1 {
+		t.Errorf("Callback called %d times after update, want 1", callCount)
+	}
+}

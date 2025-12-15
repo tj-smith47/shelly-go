@@ -2,6 +2,7 @@ package components
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 )
@@ -769,5 +770,61 @@ func TestEMeterGetDataError(t *testing.T) {
 	_, err := emeter.GetData(ctx)
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+// TestMeterGetStatusInvalidJSON tests Meter.GetStatus with invalid JSON response.
+func TestMeterGetStatusInvalidJSON(t *testing.T) {
+	mt := newMockTransport()
+	mt.responses["/meter/0"] = json.RawMessage(`{invalid`)
+
+	meter := NewMeter(mt, 0)
+	ctx := context.Background()
+
+	_, err := meter.GetStatus(ctx)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+// TestEMeterGetStatusInvalidJSON tests EMeter.GetStatus with invalid JSON response.
+func TestEMeterGetStatusInvalidJSON(t *testing.T) {
+	mt := newMockTransport()
+	mt.responses["/emeter/0"] = json.RawMessage(`{invalid`)
+
+	emeter := NewEMeter(mt, 0)
+	ctx := context.Background()
+
+	_, err := emeter.GetStatus(ctx)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+// TestEMeterGetConfigInvalidJSON tests EMeter.GetConfig with invalid JSON response.
+func TestEMeterGetConfigInvalidJSON(t *testing.T) {
+	mt := newMockTransport()
+	mt.responses["/settings/emeter/0"] = json.RawMessage(`{invalid`)
+
+	emeter := NewEMeter(mt, 0)
+	ctx := context.Background()
+
+	_, err := emeter.GetConfig(ctx)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+// TestEMeterGetDataInvalidJSON tests EMeter.GetData with invalid JSON response.
+func TestEMeterGetDataInvalidJSON(t *testing.T) {
+	mt := newMockTransport()
+	mt.responses["/emeter/0/em_data"] = json.RawMessage(`{invalid`)
+
+	emeter := NewEMeter(mt, 0)
+	ctx := context.Background()
+
+	_, err := emeter.GetData(ctx)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
 	}
 }

@@ -584,3 +584,65 @@ func TestCapitalizedType_BTHomeSensor(t *testing.T) {
 		t.Errorf("capitalizedType() = %v, want BTHomeSensor", got)
 	}
 }
+
+// Test struct for EnsureID tests
+type testIDParams struct {
+	ID   int `json:"id"`
+	Name string
+}
+
+func TestEnsureID_NilParams(t *testing.T) {
+	comp := &BaseComponent{id: 5}
+
+	result := EnsureID[testIDParams](comp, nil)
+
+	if result == nil {
+		t.Fatal("EnsureID() returned nil")
+	}
+	if result.ID != 5 {
+		t.Errorf("EnsureID() ID = %d, want 5", result.ID)
+	}
+}
+
+func TestEnsureID_ZeroID(t *testing.T) {
+	comp := &BaseComponent{id: 3}
+	params := &testIDParams{ID: 0, Name: "test"}
+
+	result := EnsureID(comp, params)
+
+	if result.ID != 3 {
+		t.Errorf("EnsureID() ID = %d, want 3", result.ID)
+	}
+	if result.Name != "test" {
+		t.Errorf("EnsureID() Name = %s, want test", result.Name)
+	}
+}
+
+func TestEnsureID_ExistingID(t *testing.T) {
+	comp := &BaseComponent{id: 3}
+	params := &testIDParams{ID: 7, Name: "test"}
+
+	result := EnsureID(comp, params)
+
+	// Should not override existing non-zero ID
+	if result.ID != 7 {
+		t.Errorf("EnsureID() ID = %d, want 7 (should not override)", result.ID)
+	}
+}
+
+// Test struct without ID field
+type testNoIDParams struct {
+	Name string
+}
+
+func TestEnsureID_NoIDField(t *testing.T) {
+	comp := &BaseComponent{id: 5}
+	params := &testNoIDParams{Name: "test"}
+
+	// Should not panic and should return the same params
+	result := EnsureID(comp, params)
+
+	if result.Name != "test" {
+		t.Errorf("EnsureID() Name = %s, want test", result.Name)
+	}
+}

@@ -409,6 +409,66 @@ func TestParseJWTClaims_InvalidFormat(t *testing.T) {
 	}
 }
 
+func TestParseJWTClaims_InvalidBase64(t *testing.T) {
+	// Invalid base64 in payload part
+	_, err := ParseJWTClaims("eyJhbGciOiJIUzI1NiJ9.!!!invalid-base64!!!.signature")
+	if err == nil {
+		t.Error("ParseJWTClaims() should error for invalid base64")
+	}
+}
+
+func TestParseJWTClaims_InvalidJSON(t *testing.T) {
+	// Valid base64 but invalid JSON
+	invalidJSON := base64.URLEncoding.EncodeToString([]byte("{not valid json"))
+	_, err := ParseJWTClaims("eyJhbGciOiJIUzI1NiJ9." + invalidJSON + ".signature")
+	if err == nil {
+		t.Error("ParseJWTClaims() should error for invalid JSON")
+	}
+}
+
+func TestParseJWTClaims_PaddingVariations(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload map[string]any
+	}{
+		{
+			name: "needs 2 padding chars",
+			payload: map[string]any{
+				"user_id": "a",
+			},
+		},
+		{
+			name: "needs 1 padding char",
+			payload: map[string]any{
+				"user_id": "ab",
+			},
+		},
+		{
+			name: "needs 0 padding chars",
+			payload: map[string]any{
+				"user_id": "abcd",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payloadJSON, _ := json.Marshal(tt.payload)
+			// Use RawURLEncoding (no padding) to test padding logic
+			payloadB64 := base64.RawURLEncoding.EncodeToString(payloadJSON)
+			fakeJWT := "eyJhbGciOiJIUzI1NiJ9." + payloadB64 + ".signature"
+
+			claims, err := ParseJWTClaims(fakeJWT)
+			if err != nil {
+				t.Fatalf("ParseJWTClaims() error = %v", err)
+			}
+			if claims.UserID != tt.payload["user_id"] {
+				t.Errorf("UserID = %v, want %v", claims.UserID, tt.payload["user_id"])
+			}
+		})
+	}
+}
+
 func TestJWTClaims_IsExpired(t *testing.T) {
 	claims := &JWTClaims{
 		ExpiresAt: time.Now().Add(-1 * time.Hour).Unix(),

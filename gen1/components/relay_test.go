@@ -605,3 +605,17 @@ func TestRelayClearScheduleRulesError(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+// TestRelayGetConfigInvalidJSON tests GetConfig with invalid JSON response.
+func TestRelayGetConfigInvalidJSON(t *testing.T) {
+	mt := newMockTransport()
+	mt.responses["/settings/relay/0"] = json.RawMessage(`{invalid`)
+
+	relay := NewRelay(mt, 0)
+	ctx := context.Background()
+
+	_, err := relay.GetConfig(ctx)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}

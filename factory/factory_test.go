@@ -517,3 +517,4 @@ func TestGen2Device_Methods(t *testing.T) {
 		t.Errorf("Generation() = %v, want Gen3", device.Generation())
 	}
 }
+

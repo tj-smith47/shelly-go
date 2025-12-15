@@ -2,6 +2,7 @@ package components
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 )
@@ -534,5 +535,33 @@ func TestRollerCalibrateError(t *testing.T) {
 	err := roller.Calibrate(ctx)
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+// TestRollerGetStatusInvalidJSON tests GetStatus with invalid JSON response.
+func TestRollerGetStatusInvalidJSON(t *testing.T) {
+	mt := newMockTransport()
+	mt.responses["/roller/0"] = json.RawMessage(`{invalid`)
+
+	roller := NewRoller(mt, 0)
+	ctx := context.Background()
+
+	_, err := roller.GetStatus(ctx)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+// TestRollerGetConfigInvalidJSON tests GetConfig with invalid JSON response.
+func TestRollerGetConfigInvalidJSON(t *testing.T) {
+	mt := newMockTransport()
+	mt.responses["/settings/roller/0"] = json.RawMessage(`{invalid`)
+
+	roller := NewRoller(mt, 0)
+	ctx := context.Background()
+
+	_, err := roller.GetConfig(ctx)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
 	}
 }

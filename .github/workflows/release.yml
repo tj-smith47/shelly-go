@@ -38,11 +38,16 @@ jobs:
         shell: bash {0}
         id: release
         env:
-          # WAS_PR: ${{ steps.pr.outputs.pr_title != '' }}
           SKIP_RELEASE: ${{ contains(steps.pr.outputs.pr_title, 'skip-release') || contains(steps.pr.outputs.pr_title, 'skip release') }}
         run: |
           should_run=true
-          [[ ${SKIP_RELEASE} == 'true' || ${WAS_PR} == 'false' ]] && should_run=false
+          # Skip if PR title contains skip-release
+          [[ ${SKIP_RELEASE} == 'true' ]] && should_run=false
+          # Skip if no tag points to HEAD (AutoTag skipped due to #none in commit)
+          if ! git tag --points-at HEAD | grep -q .; then
+            echo "No tag at HEAD - AutoTag likely skipped (commit has #none)"
+            should_run=false
+          fi
           echo "should_run=${should_run}" >>$GITHUB_OUTPUT
 
       - name: Run GoReleaser

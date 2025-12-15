@@ -554,3 +554,195 @@ func TestGetGen1Name_MissingDeviceField(t *testing.T) {
 		t.Errorf("Name = %v, want ''", info.Name)
 	}
 }
+
+func TestGetGen1Name_RootLevelName(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/settings" {
+			// Root-level name field takes priority over device.hostname
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"name": "User Configured Name",
+				"device": map[string]any{
+					"hostname": "auto-generated-name",
+				},
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(gen1ShellyResponse{Type: "SHSW-1", MAC: "AABB"})
+	}))
+	defer server.Close()
+
+	info, err := identifyGen1(context.Background(), http.DefaultClient, server.URL)
+	if err != nil {
+		t.Fatalf("identifyGen1() error = %v", err)
+	}
+
+	if info.Name != "User Configured Name" {
+		t.Errorf("Name = %v, want 'User Configured Name'", info.Name)
+	}
+}
+
+func TestProbeAddressesWithProgress(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := gen2ShellyResponse{
+			ID:    "test-device",
+			Gen:   2,
+			Model: "SNSW-001P16EU",
+		}
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	addresses := []string{server.URL}
+
+	var progressCalls int
+	var lastProgress ProbeProgress
+
+	callback := func(progress ProbeProgress) bool {
+		progressCalls++
+		lastProgress = progress
+		return true // Continue
+	}
+
+	devices := ProbeAddressesWithProgress(context.Background(), addresses, callback)
+
+	if progressCalls != 1 {
+		t.Errorf("progressCalls = %d, want 1", progressCalls)
+	}
+
+	if !lastProgress.Found {
+		t.Error("lastProgress.Found = false, want true")
+	}
+
+	if lastProgress.Device == nil {
+		t.Error("lastProgress.Device should not be nil")
+	}
+
+	if lastProgress.Total != 1 {
+		t.Errorf("lastProgress.Total = %d, want 1", lastProgress.Total)
+	}
+
+	if lastProgress.Done != 1 {
+		t.Errorf("lastProgress.Done = %d, want 1", lastProgress.Done)
+	}
+
+	if len(devices) != 1 {
+		t.Errorf("len(devices) = %d, want 1", len(devices))
+	}
+}
+
+func TestProbeAddressesWithProgress_Cancel(t *testing.T) {
+	server1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(gen2ShellyResponse{ID: "d1", Gen: 2})
+	}))
+	defer server1.Close()
+
+	server2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(gen2ShellyResponse{ID: "d2", Gen: 2})
+	}))
+	defer server2.Close()
+
+	addresses := []string{server1.URL, server2.URL}
+
+	var progressCalls int
+	callback := func(progress ProbeProgress) bool {
+		progressCalls++
+		return false // Cancel after first callback
+	}
+
+	_ = ProbeAddressesWithProgress(context.Background(), addresses, callback)
+
+	// May have multiple calls due to concurrency, but should stop eventually
+	// The key is that it doesn't hang
+}
+
+func TestProbeAddressesWithProgress_WithError(t *testing.T) {
+	// Server that fails
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	addresses := []string{server.URL}
+
+	var lastProgress ProbeProgress
+	callback := func(progress ProbeProgress) bool {
+		lastProgress = progress
+		return true
+	}
+
+	devices := ProbeAddressesWithProgress(context.Background(), addresses, callback)
+
+	if len(devices) != 0 {
+		t.Errorf("len(devices) = %d, want 0", len(devices))
+	}
+
+	if lastProgress.Found {
+		t.Error("lastProgress.Found should be false")
+	}
+
+	if lastProgress.Error == nil {
+		t.Error("lastProgress.Error should not be nil")
+	}
+}
+
+func TestIdentifyWithTimeout(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := gen2ShellyResponse{
+			ID:  "timeout-test",
+			Gen: 2,
+		}
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	info, err := IdentifyWithTimeout(context.Background(), server.URL, 10*time.Second)
+	if err != nil {
+		t.Fatalf("IdentifyWithTimeout() error = %v", err)
+	}
+
+	if info.ID != "timeout-test" {
+		t.Errorf("ID = %v, want 'timeout-test'", info.ID)
+	}
+}
+
+func TestIdentify_ProfileField(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := gen2ShellyResponse{
+			ID:      "profile-test",
+			Gen:     2,
+			Profile: "cover",
+		}
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	info, err := Identify(context.Background(), server.URL)
+	if err != nil {
+		t.Fatalf("Identify() error = %v", err)
+	}
+
+	if info.Profile != "cover" {
+		t.Errorf("Profile = %v, want 'cover'", info.Profile)
+	}
+}
+
+func TestIdentify_AddressWithTrailingSlash(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := gen2ShellyResponse{
+			ID:  "slash-test",
+			Gen: 2,
+		}
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	// Add trailing slash
+	info, err := Identify(context.Background(), server.URL+"/")
+	if err != nil {
+		t.Fatalf("Identify() error = %v", err)
+	}
+
+	if info.ID != "slash-test" {
+		t.Errorf("ID = %v, want 'slash-test'", info.ID)
+	}
+}

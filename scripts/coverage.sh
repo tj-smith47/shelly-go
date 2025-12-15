@@ -18,8 +18,11 @@ for arg in "$@"; do
     esac
 done
 
-# Get list of library packages (excluding examples and tools)
-PACKAGES=$(go list ./... | grep -v '/examples/' | grep -v '/tools/')
+# Get list of library packages (excluding examples, tools, and integration tests)
+# - /examples/: Example code, not library functionality
+# - /tools/: CLI tools, not library functionality
+# - /internal/testutil/integration/: Integration tests requiring real hardware/cloud credentials
+PACKAGES=$(go list ./... | grep -v '/examples/' | grep -v '/tools/' | grep -v '/internal/testutil/integration')
 
 if [ "$VERBOSE" = true ]; then
     echo "Testing packages:"

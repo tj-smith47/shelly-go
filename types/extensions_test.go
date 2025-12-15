@@ -239,6 +239,12 @@ func TestRawFields_Set(t *testing.T) {
 			key:   "struct",
 			value: struct{ Value string }{Value: "test"},
 		},
+		{
+			name:    "set unmarshallable value",
+			key:     "channel",
+			value:   make(chan int), // Channels cannot be marshaled to JSON
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {

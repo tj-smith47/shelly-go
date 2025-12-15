@@ -3,8 +3,10 @@ package cloud
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -182,6 +184,89 @@ func TestGetDeviceStatusOffline(t *testing.T) {
 	}
 }
 
+func TestGetAllDevicesInvalidJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{invalid json`))
+	}))
+	defer server.Close()
+
+	client := NewClient(
+		WithAccessToken("test-token"),
+		WithBaseURL(server.URL),
+	)
+	client.httpClient = server.Client()
+
+	ctx := context.Background()
+	_, err := client.GetAllDevices(ctx)
+	if err == nil {
+		t.Error("Expected error for invalid JSON, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to parse") {
+		t.Errorf("Expected 'failed to parse' in error, got: %v", err)
+	}
+}
+
+func TestGetAllDevicesUnknownError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := AllDevicesResponse{
+			IsOK:   false,
+			Errors: []string{}, // Empty errors array
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Fatalf("encode failed: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(
+		WithAccessToken("test-token"),
+		WithBaseURL(server.URL),
+	)
+	client.httpClient = server.Client()
+
+	ctx := context.Background()
+	_, err := client.GetAllDevices(ctx)
+	if err == nil {
+		t.Error("Expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "unknown error") {
+		t.Errorf("Expected 'unknown error' in error, got: %v", err)
+	}
+}
+
+func TestGetAllDevicesNilData(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := AllDevicesResponse{
+			IsOK: true,
+			Data: nil, // nil data
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Fatalf("encode failed: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(
+		WithAccessToken("test-token"),
+		WithBaseURL(server.URL),
+	)
+	client.httpClient = server.Client()
+
+	ctx := context.Background()
+	devices, err := client.GetAllDevices(ctx)
+	if err != nil {
+		t.Fatalf("GetAllDevices failed: %v", err)
+	}
+	if devices != nil {
+		t.Errorf("Expected nil devices, got %v", devices)
+	}
+}
+
 func TestGetDevicesV2(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v2/devices/api/get" {
@@ -225,6 +310,108 @@ func TestGetDevicesV2(t *testing.T) {
 
 	if len(resp.Devices) != 2 {
 		t.Errorf("Devices count = %v, want 2", len(resp.Devices))
+	}
+}
+
+func TestGetDevicesV2InvalidJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{invalid json`))
+	}))
+	defer server.Close()
+
+	client := NewClient(
+		WithAccessToken("test-token"),
+		WithBaseURL(server.URL),
+	)
+	client.httpClient = server.Client()
+
+	ctx := context.Background()
+	_, err := client.GetDevicesV2(ctx, []string{"device1"}, true, true)
+	if err == nil {
+		t.Error("Expected error for invalid JSON, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to parse") {
+		t.Errorf("Expected 'failed to parse' in error, got: %v", err)
+	}
+}
+
+func TestGetDevicesV2APIError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := V2DevicesResponse{
+			Error: "Invalid device IDs",
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Fatalf("encode failed: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(
+		WithAccessToken("test-token"),
+		WithBaseURL(server.URL),
+	)
+	client.httpClient = server.Client()
+
+	ctx := context.Background()
+	_, err := client.GetDevicesV2(ctx, []string{"device1"}, true, false)
+	if err == nil {
+		t.Error("Expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "API error") {
+		t.Errorf("Expected 'API error' in error, got: %v", err)
+	}
+}
+
+func TestGetDeviceStatusInvalidJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{invalid json`))
+	}))
+	defer server.Close()
+
+	client := NewClient(
+		WithAccessToken("test-token"),
+		WithBaseURL(server.URL),
+	)
+	client.httpClient = server.Client()
+
+	ctx := context.Background()
+	_, err := client.GetDeviceStatus(ctx, "device123")
+	if err == nil {
+		t.Error("Expected error for invalid JSON, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to parse") {
+		t.Errorf("Expected 'failed to parse' in error, got: %v", err)
+	}
+}
+
+func TestGetDeviceStatusNilData(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := DeviceStatusResponse{
+			IsOK: true,
+			Data: nil, // nil data
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Fatalf("encode failed: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(
+		WithAccessToken("test-token"),
+		WithBaseURL(server.URL),
+	)
+	client.httpClient = server.Client()
+
+	ctx := context.Background()
+	_, err := client.GetDeviceStatus(ctx, "device123")
+	if err != ErrDeviceNotFound {
+		t.Errorf("Expected ErrDeviceNotFound, got %v", err)
 	}
 }
 
@@ -761,5 +948,114 @@ func TestLightGroupOperations(t *testing.T) {
 				t.Fatalf("%v failed: %v", tt.name, err)
 			}
 		})
+	}
+}
+
+func TestParseDeviceError(t *testing.T) {
+	client := NewClient()
+
+	tests := []struct {
+		name    string
+		errors  []string
+		want    error
+	}{
+		{
+			name:   "empty errors",
+			errors: []string{},
+			want:   nil, // Will check for "unknown error" message
+		},
+		{
+			name:   "device not found",
+			errors: []string{"device not found"},
+			want:   ErrDeviceNotFound,
+		},
+		{
+			name:   "device offline",
+			errors: []string{"device is offline"},
+			want:   ErrDeviceOffline,
+		},
+		{
+			name:   "generic error",
+			errors: []string{"some other error"},
+			want:   nil, // Will check for "API error" message
+		},
+		{
+			name:   "multiple errors with not found",
+			errors: []string{"error1", "not found"},
+			want:   ErrDeviceNotFound,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := client.parseDeviceError(tt.errors)
+			if err == nil {
+				t.Fatal("parseDeviceError() should always return an error")
+			}
+
+			if tt.want != nil {
+				if !errors.Is(err, tt.want) {
+					t.Errorf("parseDeviceError() = %v, want %v", err, tt.want)
+				}
+			} else if tt.name == "empty errors" {
+				if !strings.Contains(err.Error(), "unknown error") {
+					t.Errorf("parseDeviceError() = %v, want to contain 'unknown error'", err)
+				}
+			} else {
+				if !strings.Contains(err.Error(), "API error") {
+					t.Errorf("parseDeviceError() = %v, want to contain 'API error'", err)
+				}
+			}
+		})
+	}
+}
+
+func TestGroupControlInvalidJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{invalid json`))
+	}))
+	defer server.Close()
+
+	client := NewClient(WithAccessToken("test-token"), WithBaseURL(server.URL))
+	client.httpClient = server.Client()
+
+	err := client.GroupControl(context.Background(), &GroupControlRequest{})
+	if err == nil {
+		t.Error("Expected error for invalid JSON")
+	}
+}
+
+func TestGroupControlUnknownError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := ControlResponse{IsOK: false, Errors: []string{}}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	client := NewClient(WithAccessToken("test-token"), WithBaseURL(server.URL))
+	client.httpClient = server.Client()
+
+	err := client.GroupControl(context.Background(), &GroupControlRequest{})
+	if err == nil || !strings.Contains(err.Error(), "unknown error") {
+		t.Errorf("Expected 'unknown error', got %v", err)
+	}
+}
+
+func TestGroupControlAPIError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := ControlResponse{IsOK: false, Errors: []string{"device offline"}}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	client := NewClient(WithAccessToken("test-token"), WithBaseURL(server.URL))
+	client.httpClient = server.Client()
+
+	err := client.GroupControl(context.Background(), &GroupControlRequest{})
+	if err == nil || !strings.Contains(err.Error(), "device offline") {
+		t.Errorf("Expected error containing 'device offline', got %v", err)
 	}
 }

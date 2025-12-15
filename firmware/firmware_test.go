@@ -1442,3 +1442,95 @@ func TestStagedRollout_GetStatus(t *testing.T) {
 		t.Errorf("Percentage = %d, want 50", status.Percentage)
 	}
 }
+
+func TestManager_GetRollbackStatus_Error(t *testing.T) {
+	t.Run("call error", func(t *testing.T) {
+		mt := &mockTransport{
+			callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				return nil, errors.New("connection failed")
+			},
+		}
+		client := rpc.NewClient(mt)
+		mgr := New(client)
+
+		_, err := mgr.GetRollbackStatus(context.Background())
+		if err == nil {
+			t.Error("GetRollbackStatus() expected error")
+		}
+	})
+
+	t.Run("invalid JSON", func(t *testing.T) {
+		mt := &mockTransport{
+			callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				return json.RawMessage(`{invalid json`), nil
+			},
+		}
+		client := rpc.NewClient(mt)
+		mgr := New(client)
+
+		_, err := mgr.GetRollbackStatus(context.Background())
+		if err == nil {
+			t.Error("GetRollbackStatus() expected error for invalid JSON")
+		}
+	})
+}
+
+func TestManager_IsUpdateAvailable_Error(t *testing.T) {
+	mt := &mockTransport{
+		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+			return nil, errors.New("connection failed")
+		},
+	}
+	client := rpc.NewClient(mt)
+	mgr := New(client)
+
+	_, err := mgr.IsUpdateAvailable(context.Background())
+	if err == nil {
+		t.Error("IsUpdateAvailable() expected error")
+	}
+}
+
+func TestManager_IsBetaAvailable_Error(t *testing.T) {
+	mt := &mockTransport{
+		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+			return nil, errors.New("connection failed")
+		},
+	}
+	client := rpc.NewClient(mt)
+	mgr := New(client)
+
+	_, err := mgr.IsBetaAvailable(context.Background())
+	if err == nil {
+		t.Error("IsBetaAvailable() expected error")
+	}
+}
+
+func TestManager_GetVersion_InvalidJSON(t *testing.T) {
+	mt := &mockTransport{
+		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+			return json.RawMessage(`{invalid`), nil
+		},
+	}
+	client := rpc.NewClient(mt)
+	mgr := New(client)
+
+	_, err := mgr.GetVersion(context.Background())
+	if err == nil {
+		t.Error("GetVersion() expected error for invalid JSON")
+	}
+}
+
+func TestManager_GetStatus_InvalidJSON(t *testing.T) {
+	mt := &mockTransport{
+		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+			return json.RawMessage(`{invalid`), nil
+		},
+	}
+	client := rpc.NewClient(mt)
+	mgr := New(client)
+
+	_, err := mgr.GetStatus(context.Background())
+	if err == nil {
+		t.Error("GetStatus() expected error for invalid JSON")
+	}
+}

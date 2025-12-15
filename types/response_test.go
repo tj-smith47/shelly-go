@@ -79,6 +79,15 @@ func TestError_ToStandardError(t *testing.T) {
 			}
 		})
 	}
+
+	// Test default case - unknown error code returns the error itself
+	t.Run("unknown error code", func(t *testing.T) {
+		unknownErr := &Error{Code: -999, Message: "unknown error"}
+		got := unknownErr.ToStandardError()
+		if got != unknownErr {
+			t.Errorf("Error.ToStandardError() for unknown code = %v, want original error", got)
+		}
+	})
 }
 
 func TestResponse_IsError(t *testing.T) {

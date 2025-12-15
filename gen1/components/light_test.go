@@ -2,6 +2,7 @@ package components
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 )
@@ -476,5 +477,33 @@ func TestLightSetColorTempError(t *testing.T) {
 	err := light.SetColorTemp(ctx, 4000)
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+// TestLightGetStatusInvalidJSON tests GetStatus with invalid JSON response.
+func TestLightGetStatusInvalidJSON(t *testing.T) {
+	mt := newMockTransport()
+	mt.responses["/light/0"] = json.RawMessage(`{invalid`)
+
+	light := NewLight(mt, 0)
+	ctx := context.Background()
+
+	_, err := light.GetStatus(ctx)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+// TestLightGetConfigInvalidJSON tests GetConfig with invalid JSON response.
+func TestLightGetConfigInvalidJSON(t *testing.T) {
+	mt := newMockTransport()
+	mt.responses["/settings/light/0"] = json.RawMessage(`{invalid`)
+
+	light := NewLight(mt, 0)
+	ctx := context.Background()
+
+	_, err := light.GetConfig(ctx)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
 	}
 }

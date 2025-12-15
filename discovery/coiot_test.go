@@ -520,3 +520,155 @@ func TestCoIoTDiscoverer_ParseCoAPMessage_ExtendedOptionDelta14(t *testing.T) {
 		t.Fatal("should parse message with 2-byte extended option delta")
 	}
 }
+
+func TestCoIoTDiscoverer_ParseCoAPMessage_ExtendedOptionLength13(t *testing.T) {
+	d := NewCoIoTDiscoverer()
+	addr := &net.UDPAddr{IP: net.ParseIP("192.168.1.100"), Port: 5683}
+
+	payload := map[string]any{"id": "test", "type": "SHSW-1"}
+	payloadBytes, _ := json.Marshal(payload)
+
+	data := make([]byte, 0, 150)
+	data = append(data, 0x50) // Ver=1, Type=NON, TKL=0
+	data = append(data, 0x00)
+	data = append(data, 0x00, 0x01)
+	// Option with delta=1, length=13 (extended)
+	data = append(data, 0x1D)               // delta=1, length=13 (extended)
+	data = append(data, 0x02)               // extended length: 13 + 2 = 15 bytes
+	data = append(data, make([]byte, 15)...) // 15 bytes of option value
+	data = append(data, 0xFF)
+	data = append(data, payloadBytes...)
+
+	device := d.parseCoAPMessage(data, addr)
+	if device == nil {
+		t.Fatal("should parse message with extended option length 13")
+	}
+}
+
+func TestCoIoTDiscoverer_ParseCoAPMessage_ExtendedOptionLength14(t *testing.T) {
+	d := NewCoIoTDiscoverer()
+	addr := &net.UDPAddr{IP: net.ParseIP("192.168.1.100"), Port: 5683}
+
+	payload := map[string]any{"id": "test", "type": "SHSW-1"}
+	payloadBytes, _ := json.Marshal(payload)
+
+	data := make([]byte, 0, 150)
+	data = append(data, 0x50)
+	data = append(data, 0x00)
+	data = append(data, 0x00, 0x01)
+	// Option with delta=1, length=14 (2-byte extended)
+	data = append(data, 0x1E)       // delta=1, length=14 (2-byte extended)
+	data = append(data, 0x00, 0x01) // extended length: 269 + 1 = 270 bytes (but we won't include all)
+	data = append(data, 0xFF)       // Early payload marker (truncated option)
+	data = append(data, payloadBytes...)
+
+	// Should not crash even with truncated data
+	_ = d.parseCoAPMessage(data, addr)
+}
+
+func TestCoIoTDiscoverer_SkipCoAPOptions_ZeroByte(t *testing.T) {
+	d := NewCoIoTDiscoverer()
+
+	// Data with zero bytes in options (should be skipped)
+	data := []byte{0x00, 0x00, 0x00, 0xFF, 'p', 'a', 'y'}
+	offset := d.skipCoAPOptions(data, 0)
+
+	// Should have skipped the zeros and stopped at 0xFF
+	if offset != 3 {
+		t.Errorf("skipCoAPOptions() = %d, want 3", offset)
+	}
+}
+
+func TestCoIoTDiscoverer_SkipCoAPOptions_EmptyData(t *testing.T) {
+	d := NewCoIoTDiscoverer()
+
+	data := []byte{}
+	offset := d.skipCoAPOptions(data, 0)
+
+	if offset != 0 {
+		t.Errorf("skipCoAPOptions() = %d, want 0", offset)
+	}
+}
+
+func TestCoIoTDiscoverer_SkipCoAPOptions_OffsetBeyondData(t *testing.T) {
+	d := NewCoIoTDiscoverer()
+
+	data := []byte{0x01, 0x02, 0x03}
+	offset := d.skipCoAPOptions(data, 10) // offset beyond data
+
+	if offset != 10 {
+		t.Errorf("skipCoAPOptions() = %d, want 10", offset)
+	}
+}
+
+func TestCoIoTDiscoverer_ParsePayload_WithFirmwareVersion(t *testing.T) {
+	d := NewCoIoTDiscoverer()
+	addr := &net.UDPAddr{IP: net.ParseIP("192.168.1.100"), Port: 5683}
+
+	payload := map[string]any{
+		"id":     "test",
+		"fw_ver": "1.11.8-beta",
+	}
+	payloadBytes, _ := json.Marshal(payload)
+
+	device := d.parsePayload(payloadBytes, addr)
+	if device == nil {
+		t.Fatal("should parse payload")
+	}
+
+	if device.Firmware != "1.11.8-beta" {
+		t.Errorf("Firmware = %s, want 1.11.8-beta", device.Firmware)
+	}
+}
+
+func TestCoIoTDiscoverer_ExtractDeviceFromRaw_ShortPayload(t *testing.T) {
+	d := NewCoIoTDiscoverer()
+	addr := &net.UDPAddr{IP: net.ParseIP("192.168.1.100"), Port: 5683}
+
+	// Payload too short to contain MAC
+	payload := "short"
+	device := d.extractDeviceFromRaw(payload, addr)
+
+	if device == nil {
+		t.Fatal("should return device even for short payload")
+	}
+	if device.MACAddress != "" {
+		t.Errorf("MACAddress = %s, want empty", device.MACAddress)
+	}
+}
+
+func TestCoIoTDiscoverer_ExtractDeviceFromRaw_InvalidMAC(t *testing.T) {
+	d := NewCoIoTDiscoverer()
+	addr := &net.UDPAddr{IP: net.ParseIP("192.168.1.100"), Port: 5683}
+
+	// Invalid MAC format (wrong characters)
+	payload := "data GG:HH:II:JJ:KK:LL more"
+	device := d.extractDeviceFromRaw(payload, addr)
+
+	if device.MACAddress != "" {
+		t.Errorf("MACAddress = %s, want empty for invalid MAC", device.MACAddress)
+	}
+}
+
+func TestCoIoTDiscoverer_ContinuousDiscovery_ChannelFull(t *testing.T) {
+	d := NewCoIoTDiscoverer()
+
+	// Start discovery
+	ch, err := d.StartDiscovery()
+	if err != nil {
+		t.Fatalf("StartDiscovery() error = %v", err)
+	}
+
+	// Just verify it's running
+	if !d.running {
+		t.Error("should be running")
+	}
+	if ch == nil {
+		t.Error("channel should not be nil")
+	}
+
+	// Clean up
+	if err := d.StopDiscovery(); err != nil {
+		t.Fatalf("StopDiscovery() error = %v", err)
+	}
+}

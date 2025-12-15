@@ -678,6 +678,97 @@ func TestShelly_PutTLSClientKey(t *testing.T) {
 	// Note: Parameter validation omitted - we're testing method calls, not parameter marshaling
 }
 
+func TestShelly_GetStatus_InvalidJSON(t *testing.T) {
+	mt := &mockTransport{
+		response: []byte(`{invalid json`),
+	}
+	client := newTestClient(mt)
+	shelly := NewShelly(client)
+
+	_, err := shelly.GetStatus(context.Background())
+	if err == nil {
+		t.Error("GetStatus() expected error for invalid JSON")
+	}
+}
+
+func TestShelly_GetConfig_InvalidJSON(t *testing.T) {
+	mt := &mockTransport{
+		response: []byte(`{invalid json`),
+	}
+	client := newTestClient(mt)
+	shelly := NewShelly(client)
+
+	_, err := shelly.GetConfig(context.Background())
+	if err == nil {
+		t.Error("GetConfig() expected error for invalid JSON")
+	}
+}
+
+func TestShelly_ListMethods_InvalidJSON(t *testing.T) {
+	mt := &mockTransport{
+		response: []byte(`{invalid json`),
+	}
+	client := newTestClient(mt)
+	shelly := NewShelly(client)
+
+	_, err := shelly.ListMethods(context.Background())
+	if err == nil {
+		t.Error("ListMethods() expected error for invalid JSON")
+	}
+}
+
+func TestShelly_CheckForUpdate_InvalidJSON(t *testing.T) {
+	mt := &mockTransport{
+		response: []byte(`{invalid json`),
+	}
+	client := newTestClient(mt)
+	shelly := NewShelly(client)
+
+	_, err := shelly.CheckForUpdate(context.Background())
+	if err == nil {
+		t.Error("CheckForUpdate() expected error for invalid JSON")
+	}
+}
+
+func TestShelly_GetComponents_InvalidJSON(t *testing.T) {
+	mt := &mockTransport{
+		response: []byte(`{invalid json`),
+	}
+	client := newTestClient(mt)
+	shelly := NewShelly(client)
+
+	_, err := shelly.GetComponents(context.Background(), true, true)
+	if err == nil {
+		t.Error("GetComponents() expected error for invalid JSON")
+	}
+}
+
+func TestShelly_DetectLocation_InvalidJSON(t *testing.T) {
+	mt := &mockTransport{
+		response: []byte(`{invalid json`),
+	}
+	client := newTestClient(mt)
+	shelly := NewShelly(client)
+
+	_, err := shelly.DetectLocation(context.Background())
+	if err == nil {
+		t.Error("DetectLocation() expected error for invalid JSON")
+	}
+}
+
+func TestShelly_ListProfiles_InvalidJSON(t *testing.T) {
+	mt := &mockTransport{
+		response: []byte(`{invalid json`),
+	}
+	client := newTestClient(mt)
+	shelly := NewShelly(client)
+
+	_, err := shelly.ListProfiles(context.Background())
+	if err == nil {
+		t.Error("ListProfiles() expected error for invalid JSON")
+	}
+}
+
 func TestShelly_ErrorHandling(t *testing.T) {
 	testErr := errors.New("test error")
 
