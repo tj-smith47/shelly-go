@@ -257,6 +257,13 @@ func TestWebhook_Update(t *testing.T) {
 			},
 		},
 		{
+			name: "enable webhook",
+			id:   1,
+			config: &WebhookConfig{
+				Enable: true,
+			},
+		},
+		{
 			name: "update URLs",
 			id:   2,
 			config: &WebhookConfig{
@@ -268,6 +275,41 @@ func TestWebhook_Update(t *testing.T) {
 			id:   3,
 			config: &WebhookConfig{
 				Event: "switch.off",
+			},
+		},
+		{
+			name: "update name",
+			id:   4,
+			config: &WebhookConfig{
+				Name: ptr("MyWebhook"),
+			},
+		},
+		{
+			name: "update ssl_ca",
+			id:   5,
+			config: &WebhookConfig{
+				SSLCA: ptr("ca-cert"),
+			},
+		},
+		{
+			name: "update active_between",
+			id:   6,
+			config: &WebhookConfig{
+				ActiveBetween: []string{"09:00", "17:00"},
+			},
+		},
+		{
+			name: "update condition",
+			id:   7,
+			config: &WebhookConfig{
+				Condition: ptr("temperature > 30"),
+			},
+		},
+		{
+			name: "update repeat_period",
+			id:   8,
+			config: &WebhookConfig{
+				RepeatPeriod: ptr(60),
 			},
 		},
 	}

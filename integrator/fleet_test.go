@@ -3,6 +3,7 @@ package integrator
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -627,5 +628,34 @@ func TestFleetManager_getUniqueHosts(t *testing.T) {
 	// Should be sorted
 	if hosts[0] != "host1" || hosts[1] != "host2" {
 		t.Error("hosts not sorted")
+	}
+}
+
+func TestFleetManager_Disconnect_CloseError(t *testing.T) {
+	client := New("tag", "token")
+	fm := NewFleetManager(client)
+
+	// Create connection with mock WS that returns error on Close
+	closeErr := fmt.Errorf("close error")
+	conn := &Connection{
+		host:    "host1",
+		closeCh: make(chan struct{}),
+		ws: &mockWSConnector{
+			closeFunc: func() error { return closeErr },
+		},
+	}
+	fm.connections["host1"] = conn
+
+	err := fm.Disconnect("host1")
+	if err == nil {
+		t.Error("Disconnect() should return error when Close() fails")
+	}
+	if err.Error() != "close error" {
+		t.Errorf("error = %v, want 'close error'", err)
+	}
+
+	// Connection should be removed from map even on error
+	if _, ok := fm.connections["host1"]; ok {
+		t.Error("connection should be removed from map after disconnect")
 	}
 }

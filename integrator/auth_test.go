@@ -546,3 +546,71 @@ func TestTokenManager_NilClient(t *testing.T) {
 		t.Error("NeedsRefresh() = true, want false (nil client)")
 	}
 }
+
+func TestTokenManager_EnsureValid_RateLimited(t *testing.T) {
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		resp := AuthResponse{
+			IsOK: true,
+			Data: &AuthData{
+				Token:     "new-token",
+				ExpiresAt: time.Now().Add(24 * time.Hour).Unix(),
+			},
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	client := NewWithOptions("tag", "token", server.URL, nil)
+	// Set expired token that needs refresh
+	client.authData = &AuthData{
+		Token:     "expired",
+		ExpiresAt: time.Now().Add(-1 * time.Hour).Unix(),
+	}
+	tm := NewTokenManager(client)
+
+	// First call should trigger auth
+	err := tm.EnsureValid(context.Background())
+	if err != nil {
+		t.Fatalf("First EnsureValid() error = %v", err)
+	}
+	if callCount != 1 {
+		t.Errorf("First call: callCount = %d, want 1", callCount)
+	}
+
+	// Reset to expired token to force NeedsRefresh() = true
+	client.authData = &AuthData{
+		Token:     "expired-again",
+		ExpiresAt: time.Now().Add(-1 * time.Hour).Unix(),
+	}
+
+	// Second call immediately after should be rate limited (lastRefresh is recent)
+	err = tm.EnsureValid(context.Background())
+	if err != nil {
+		t.Fatalf("Second EnsureValid() error = %v", err)
+	}
+	// Should NOT have called Authenticate again due to rate limiting
+	if callCount != 1 {
+		t.Errorf("Second call should be rate limited: callCount = %d, want 1", callCount)
+	}
+}
+
+func TestTokenManager_EnsureValid_AuthError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Return error response (isok: false)
+		resp := AuthResponse{
+			IsOK: false,
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	client := NewWithOptions("tag", "token", server.URL, nil)
+	tm := NewTokenManager(client)
+
+	err := tm.EnsureValid(context.Background())
+	if err == nil {
+		t.Error("EnsureValid() should return error when auth fails")
+	}
+}

@@ -619,3 +619,118 @@ func TestRelayGetConfigInvalidJSON(t *testing.T) {
 		t.Fatal("expected error for invalid JSON")
 	}
 }
+
+// TestRelaySetNameError tests SetName error handling.
+func TestRelaySetNameError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/relay/0?name=Test", errors.New("set failed"))
+
+	relay := NewRelay(mt, 0)
+	ctx := context.Background()
+
+	err := relay.SetName(ctx, "Test")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+// TestRelaySetDefaultStateError tests SetDefaultState error handling.
+func TestRelaySetDefaultStateError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/relay/0?default_state=on", errors.New("set failed"))
+
+	relay := NewRelay(mt, 0)
+	ctx := context.Background()
+
+	err := relay.SetDefaultState(ctx, "on")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+// TestRelaySetButtonTypeError tests SetButtonType error handling.
+func TestRelaySetButtonTypeError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/relay/0?btn_type=toggle", errors.New("set failed"))
+
+	relay := NewRelay(mt, 0)
+	ctx := context.Background()
+
+	err := relay.SetButtonType(ctx, "toggle")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+// TestRelaySetAutoOnError tests SetAutoOn error handling.
+func TestRelaySetAutoOnError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/relay/0?auto_on=60", errors.New("set failed"))
+
+	relay := NewRelay(mt, 0)
+	ctx := context.Background()
+
+	err := relay.SetAutoOn(ctx, 60)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+// TestRelaySetAutoOffError tests SetAutoOff error handling.
+func TestRelaySetAutoOffError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/relay/0?auto_off=120", errors.New("set failed"))
+
+	relay := NewRelay(mt, 0)
+	ctx := context.Background()
+
+	err := relay.SetAutoOff(ctx, 120)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+// TestRelaySetMaxPowerError tests SetMaxPower error handling.
+func TestRelaySetMaxPowerError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/relay/0?max_power=1000", errors.New("set failed"))
+
+	relay := NewRelay(mt, 0)
+	ctx := context.Background()
+
+	err := relay.SetMaxPower(ctx, 1000)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+// TestRelaySetScheduleError tests SetSchedule error handling.
+func TestRelaySetScheduleError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/relay/0?schedule=true", errors.New("set failed"))
+
+	relay := NewRelay(mt, 0)
+	ctx := context.Background()
+
+	err := relay.SetSchedule(ctx, true)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+// TestRelaySetConfigError tests SetConfig error handling.
+func TestRelaySetConfigError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/relay/0?name=Test", errors.New("set failed"))
+
+	relay := NewRelay(mt, 0)
+	ctx := context.Background()
+
+	config := &RelayConfig{
+		Name: "Test",
+	}
+	err := relay.SetConfig(ctx, config)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}

@@ -565,3 +565,129 @@ func TestRollerGetConfigInvalidJSON(t *testing.T) {
 		t.Fatal("expected error for invalid JSON")
 	}
 }
+
+// TestRollerSetMaxTimeError tests SetMaxTime error handling.
+func TestRollerSetMaxTimeError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/roller/0?maxtime=60", errors.New("set failed"))
+
+	roller := NewRoller(mt, 0)
+	ctx := context.Background()
+
+	err := roller.SetMaxTime(ctx, 60)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+// TestRollerSetDefaultStateError tests SetDefaultState error handling.
+func TestRollerSetDefaultStateError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/roller/0?default_state=stop", errors.New("set failed"))
+
+	roller := NewRoller(mt, 0)
+	ctx := context.Background()
+
+	err := roller.SetDefaultState(ctx, "stop")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+// TestRollerSetInputModeError tests SetInputMode error handling.
+func TestRollerSetInputModeError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/roller/0?input_mode=openclose", errors.New("set failed"))
+
+	roller := NewRoller(mt, 0)
+	ctx := context.Background()
+
+	err := roller.SetInputMode(ctx, "openclose")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+// TestRollerSetButtonTypeError tests SetButtonType error handling.
+func TestRollerSetButtonTypeError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/roller/0?btn_type=toggle", errors.New("set failed"))
+
+	roller := NewRoller(mt, 0)
+	ctx := context.Background()
+
+	err := roller.SetButtonType(ctx, "toggle")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+// TestRollerEnablePositioningError tests EnablePositioning error handling.
+func TestRollerEnablePositioningError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/roller/0?positioning=true", errors.New("set failed"))
+
+	roller := NewRoller(mt, 0)
+	ctx := context.Background()
+
+	err := roller.EnablePositioning(ctx, true)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+// TestRollerSetObstacleDetectionError tests SetObstacleDetection error handling.
+func TestRollerSetObstacleDetectionError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/roller/0?obstacle_mode=while_opening&obstacle_action=stop&obstacle_power=100&obstacle_delay=0", errors.New("set failed"))
+
+	roller := NewRoller(mt, 0)
+	ctx := context.Background()
+
+	err := roller.SetObstacleDetection(ctx, "while_opening", "stop", 100, 0)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+// TestRollerSetSafetySwitchError tests SetSafetySwitch error handling.
+func TestRollerSetSafetySwitchError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/roller/0?safety_mode=while_opening&safety_action=stop", errors.New("set failed"))
+
+	roller := NewRoller(mt, 0)
+	ctx := context.Background()
+
+	err := roller.SetSafetySwitch(ctx, "while_opening", "stop")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+// TestRollerSwapDirectionError tests SwapDirection error handling.
+func TestRollerSwapDirectionError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/roller/0?swap=true", errors.New("set failed"))
+
+	roller := NewRoller(mt, 0)
+	ctx := context.Background()
+
+	err := roller.SwapDirection(ctx, true)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+// TestRollerSwapInputsError tests SwapInputs error handling.
+func TestRollerSwapInputsError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/roller/0?swap_inputs=true", errors.New("set failed"))
+
+	roller := NewRoller(mt, 0)
+	ctx := context.Background()
+
+	err := roller.SwapInputs(ctx, true)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}

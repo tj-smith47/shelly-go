@@ -38,7 +38,7 @@ func LoadFixtureJSON(name string, v any) error {
 }
 
 // AssertEqual asserts that two values are equal.
-func AssertEqual(t *testing.T, expected, actual any) {
+func AssertEqual(t testing.TB, expected, actual any) {
 	t.Helper()
 	if !reflect.DeepEqual(expected, actual) {
 		t.Errorf("expected %v, got %v", expected, actual)
@@ -46,7 +46,7 @@ func AssertEqual(t *testing.T, expected, actual any) {
 }
 
 // AssertNotEqual asserts that two values are not equal.
-func AssertNotEqual(t *testing.T, expected, actual any) {
+func AssertNotEqual(t testing.TB, expected, actual any) {
 	t.Helper()
 	if reflect.DeepEqual(expected, actual) {
 		t.Errorf("expected values to differ, both are %v", expected)
@@ -54,7 +54,7 @@ func AssertNotEqual(t *testing.T, expected, actual any) {
 }
 
 // AssertNil asserts that a value is nil.
-func AssertNil(t *testing.T, actual any) {
+func AssertNil(t testing.TB, actual any) {
 	t.Helper()
 	if actual != nil && !reflect.ValueOf(actual).IsNil() {
 		t.Errorf("expected nil, got %v", actual)
@@ -62,7 +62,7 @@ func AssertNil(t *testing.T, actual any) {
 }
 
 // AssertNotNil asserts that a value is not nil.
-func AssertNotNil(t *testing.T, actual any) {
+func AssertNotNil(t testing.TB, actual any) {
 	t.Helper()
 	if actual == nil || reflect.ValueOf(actual).IsNil() {
 		t.Error("expected non-nil value")
@@ -70,7 +70,7 @@ func AssertNotNil(t *testing.T, actual any) {
 }
 
 // AssertNoError asserts that an error is nil.
-func AssertNoError(t *testing.T, err error) {
+func AssertNoError(t testing.TB, err error) {
 	t.Helper()
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
@@ -78,7 +78,7 @@ func AssertNoError(t *testing.T, err error) {
 }
 
 // AssertError asserts that an error is not nil.
-func AssertError(t *testing.T, err error) {
+func AssertError(t testing.TB, err error) {
 	t.Helper()
 	if err == nil {
 		t.Error("expected error, got nil")
@@ -86,7 +86,7 @@ func AssertError(t *testing.T, err error) {
 }
 
 // AssertErrorContains asserts that an error contains a substring.
-func AssertErrorContains(t *testing.T, err error, substr string) {
+func AssertErrorContains(t testing.TB, err error, substr string) {
 	t.Helper()
 	if err == nil {
 		t.Errorf("expected error containing %q, got nil", substr)
@@ -98,7 +98,7 @@ func AssertErrorContains(t *testing.T, err error, substr string) {
 }
 
 // AssertTrue asserts that a value is true.
-func AssertTrue(t *testing.T, actual bool) {
+func AssertTrue(t testing.TB, actual bool) {
 	t.Helper()
 	if !actual {
 		t.Error("expected true, got false")
@@ -106,7 +106,7 @@ func AssertTrue(t *testing.T, actual bool) {
 }
 
 // AssertFalse asserts that a value is false.
-func AssertFalse(t *testing.T, actual bool) {
+func AssertFalse(t testing.TB, actual bool) {
 	t.Helper()
 	if actual {
 		t.Error("expected false, got true")
@@ -114,7 +114,7 @@ func AssertFalse(t *testing.T, actual bool) {
 }
 
 // AssertLen asserts the length of a slice, map, or string.
-func AssertLen(t *testing.T, obj any, length int) {
+func AssertLen(t testing.TB, obj any, length int) {
 	t.Helper()
 	v := reflect.ValueOf(obj)
 	if v.Len() != length {
@@ -123,7 +123,7 @@ func AssertLen(t *testing.T, obj any, length int) {
 }
 
 // AssertContains asserts that a slice contains an element.
-func AssertContains(t *testing.T, slice, element any) {
+func AssertContains(t testing.TB, slice, element any) {
 	t.Helper()
 	v := reflect.ValueOf(slice)
 	for i := 0; i < v.Len(); i++ {
@@ -135,7 +135,7 @@ func AssertContains(t *testing.T, slice, element any) {
 }
 
 // AssertStringContains asserts that a string contains a substring.
-func AssertStringContains(t *testing.T, s, substr string) {
+func AssertStringContains(t testing.TB, s, substr string) {
 	t.Helper()
 	if !containsString(s, substr) {
 		t.Errorf("expected %q to contain %q", s, substr)
@@ -169,7 +169,7 @@ func JSONEqual(a, b []byte) bool {
 }
 
 // AssertJSONEqual asserts that two JSON values are equal.
-func AssertJSONEqual(t *testing.T, expected, actual []byte) {
+func AssertJSONEqual(t testing.TB, expected, actual []byte) {
 	t.Helper()
 	if !JSONEqual(expected, actual) {
 		t.Errorf("JSON not equal:\nexpected: %s\nactual: %s", expected, actual)

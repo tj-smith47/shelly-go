@@ -611,3 +611,76 @@ func TestColorGetConfigInvalidJSON(t *testing.T) {
 		t.Fatal("expected error for invalid JSON")
 	}
 }
+
+// TestColorSetNameError tests SetName error handling.
+func TestColorSetNameError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/color/0?name=Test", errors.New("set failed"))
+
+	color := NewColor(mt, 0)
+	ctx := context.Background()
+
+	err := color.SetName(ctx, "Test")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+// TestColorSetDefaultStateError tests SetDefaultState error handling.
+func TestColorSetDefaultStateError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/color/0?default_state=on", errors.New("set failed"))
+
+	color := NewColor(mt, 0)
+	ctx := context.Background()
+
+	err := color.SetDefaultState(ctx, "on")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+// TestColorSetAutoOnError tests SetAutoOn error handling.
+func TestColorSetAutoOnError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/color/0?auto_on=60", errors.New("set failed"))
+
+	color := NewColor(mt, 0)
+	ctx := context.Background()
+
+	err := color.SetAutoOn(ctx, 60)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+// TestColorSetAutoOffError tests SetAutoOff error handling.
+func TestColorSetAutoOffError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/color/0?auto_off=120", errors.New("set failed"))
+
+	color := NewColor(mt, 0)
+	ctx := context.Background()
+
+	err := color.SetAutoOff(ctx, 120)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+// TestColorSetConfigError tests SetConfig error handling.
+func TestColorSetConfigError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/color/0?name=Test", errors.New("set failed"))
+
+	color := NewColor(mt, 0)
+	ctx := context.Background()
+
+	config := &ColorConfig{
+		Name: "Test",
+	}
+	err := color.SetConfig(ctx, config)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}

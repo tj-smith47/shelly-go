@@ -3,6 +3,7 @@ package components
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/tj-smith47/shelly-go/rpc"
@@ -499,6 +500,46 @@ func TestInput_ResetCounters(t *testing.T) {
 				tt.validateFunc(t, result)
 			}
 		})
+	}
+}
+
+func TestInput_CheckExpressionError(t *testing.T) {
+	client := rpc.NewClient(errorTransport(errors.New("device unreachable")))
+	input := NewInput(client, 0)
+
+	_, err := input.CheckExpression(context.Background(), "x*2", []any{10})
+	if err == nil {
+		t.Error("CheckExpression() should return error")
+	}
+}
+
+func TestInput_CheckExpressionInvalidJSON(t *testing.T) {
+	client := rpc.NewClient(invalidJSONTransport())
+	input := NewInput(client, 0)
+
+	_, err := input.CheckExpression(context.Background(), "x*2", []any{10})
+	if err == nil {
+		t.Error("CheckExpression() should return error for invalid JSON")
+	}
+}
+
+func TestInput_ResetCountersError(t *testing.T) {
+	client := rpc.NewClient(errorTransport(errors.New("device unreachable")))
+	input := NewInput(client, 0)
+
+	_, err := input.ResetCounters(context.Background(), nil)
+	if err == nil {
+		t.Error("ResetCounters() should return error")
+	}
+}
+
+func TestInput_ResetCountersInvalidJSON(t *testing.T) {
+	client := rpc.NewClient(invalidJSONTransport())
+	input := NewInput(client, 0)
+
+	_, err := input.ResetCounters(context.Background(), nil)
+	if err == nil {
+		t.Error("ResetCounters() should return error for invalid JSON")
 	}
 }
 

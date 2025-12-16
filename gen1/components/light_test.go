@@ -507,3 +507,104 @@ func TestLightGetConfigInvalidJSON(t *testing.T) {
 		t.Fatal("expected error for invalid JSON")
 	}
 }
+
+// TestLightSetNameError tests SetName error handling.
+func TestLightSetNameError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/light/0?name=Test", errors.New("set failed"))
+
+	light := NewLight(mt, 0)
+	ctx := context.Background()
+
+	err := light.SetName(ctx, "Test")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+// TestLightSetDefaultStateError tests SetDefaultState error handling.
+func TestLightSetDefaultStateError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/light/0?default_state=on", errors.New("set failed"))
+
+	light := NewLight(mt, 0)
+	ctx := context.Background()
+
+	err := light.SetDefaultState(ctx, "on")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+// TestLightSetButtonTypeError tests SetButtonType error handling.
+func TestLightSetButtonTypeError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/light/0?btn_type=toggle", errors.New("set failed"))
+
+	light := NewLight(mt, 0)
+	ctx := context.Background()
+
+	err := light.SetButtonType(ctx, "toggle")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+// TestLightSetAutoOnError tests SetAutoOn error handling.
+func TestLightSetAutoOnError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/light/0?auto_on=60", errors.New("set failed"))
+
+	light := NewLight(mt, 0)
+	ctx := context.Background()
+
+	err := light.SetAutoOn(ctx, 60)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+// TestLightSetAutoOffError tests SetAutoOff error handling.
+func TestLightSetAutoOffError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/light/0?auto_off=120", errors.New("set failed"))
+
+	light := NewLight(mt, 0)
+	ctx := context.Background()
+
+	err := light.SetAutoOff(ctx, 120)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+// TestLightSetMinBrightnessError tests SetMinBrightness error handling.
+func TestLightSetMinBrightnessError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/light/0?min_brightness=10", errors.New("set failed"))
+
+	light := NewLight(mt, 0)
+	ctx := context.Background()
+
+	err := light.SetMinBrightness(ctx, 10)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+// TestLightSetConfigError tests SetConfig error handling.
+func TestLightSetConfigError(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetError("/settings/light/0?name=Test", errors.New("set failed"))
+
+	light := NewLight(mt, 0)
+	ctx := context.Background()
+
+	config := &LightConfig{
+		Name: "Test",
+	}
+	err := light.SetConfig(ctx, config)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
