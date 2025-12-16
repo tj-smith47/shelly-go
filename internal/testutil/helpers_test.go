@@ -11,24 +11,24 @@ type mockTB struct {
 	failed bool
 }
 
-func (m *mockTB) Helper()                        {}
-func (m *mockTB) Errorf(string, ...any)          { m.failed = true }
-func (m *mockTB) Error(...any)                   { m.failed = true }
-func (m *mockTB) Fatalf(string, ...any)          { m.failed = true }
-func (m *mockTB) Fatal(...any)                   { m.failed = true }
-func (m *mockTB) Fail()                          { m.failed = true }
-func (m *mockTB) FailNow()                       { m.failed = true }
-func (m *mockTB) Failed() bool                   { return m.failed }
-func (m *mockTB) Log(...any)                     {}
-func (m *mockTB) Logf(string, ...any)            {}
-func (m *mockTB) Name() string                   { return "mock" }
-func (m *mockTB) Skip(...any)                    {}
-func (m *mockTB) SkipNow()                       {}
-func (m *mockTB) Skipf(string, ...any)           {}
-func (m *mockTB) Skipped() bool                  { return false }
-func (m *mockTB) TempDir() string                { return "" }
-func (m *mockTB) Setenv(string, string)          {}
-func (m *mockTB) Cleanup(func())                 {}
+func (m *mockTB) Helper()               {}
+func (m *mockTB) Errorf(string, ...any) { m.failed = true }
+func (m *mockTB) Error(...any)          { m.failed = true }
+func (m *mockTB) Fatalf(string, ...any) { m.failed = true }
+func (m *mockTB) Fatal(...any)          { m.failed = true }
+func (m *mockTB) Fail()                 { m.failed = true }
+func (m *mockTB) FailNow()              { m.failed = true }
+func (m *mockTB) Failed() bool          { return m.failed }
+func (m *mockTB) Log(...any)            {}
+func (m *mockTB) Logf(string, ...any)   {}
+func (m *mockTB) Name() string          { return "mock" }
+func (m *mockTB) Skip(...any)           {}
+func (m *mockTB) SkipNow()              {}
+func (m *mockTB) Skipf(string, ...any)  {}
+func (m *mockTB) Skipped() bool         { return false }
+func (m *mockTB) TempDir() string       { return "" }
+func (m *mockTB) Setenv(string, string) {}
+func (m *mockTB) Cleanup(func())        {}
 
 func newMockTB() *mockTB { return &mockTB{} }
 

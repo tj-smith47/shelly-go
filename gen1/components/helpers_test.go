@@ -13,11 +13,11 @@ type mockLightConfig struct {
 	schedule     bool
 }
 
-func (m *mockLightConfig) getName() string       { return m.name }
+func (m *mockLightConfig) getName() string         { return m.name }
 func (m *mockLightConfig) getDefaultState() string { return m.defaultState }
-func (m *mockLightConfig) getAutoOn() float64    { return m.autoOn }
-func (m *mockLightConfig) getAutoOff() float64   { return m.autoOff }
-func (m *mockLightConfig) getSchedule() bool     { return m.schedule }
+func (m *mockLightConfig) getAutoOn() float64      { return m.autoOn }
+func (m *mockLightConfig) getAutoOff() float64     { return m.autoOff }
+func (m *mockLightConfig) getSchedule() bool       { return m.schedule }
 
 func TestBuildLightConfigQuery_Empty(t *testing.T) {
 	config := &mockLightConfig{}
