@@ -1,10 +1,10 @@
 # shelly-go
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/tj-smith47/shelly-go.svg)](https://pkg.go.dev/github.com/tj-smith47/shelly-go)
-[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/tj-smith47/shelly-go/badges/coverage.json)](https://github.com/tj-smith47/shelly-go/actions)
-[![Go Report Card](https://goreportcard.com/badge/github.com/tj-smith47/shelly-go)](https://goreportcard.com/report/github.com/tj-smith47/shelly-go)
 [![CI](https://github.com/tj-smith47/shelly-go/workflows/CI/badge.svg)](https://github.com/tj-smith47/shelly-go/actions)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/tj-smith47/shelly-go/badges/coverage.json)](https://github.com/tj-smith47/shelly-go/actions)
+[![Go Reference](https://pkg.go.dev/badge/github.com/tj-smith47/shelly-go.svg)](https://pkg.go.dev/github.com/tj-smith47/shelly-go)
+[![Go Report Card](https://goreportcard.com/badge/github.com/tj-smith47/shelly-go)](https://goreportcard.com/report/github.com/tj-smith47/shelly-go)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 A comprehensive, production-ready Go library for controlling Shelly smart home devices across **all generations** (Gen1, Gen2, Gen3, Gen4) and **all communication protocols** (HTTP, WebSocket, MQTT, CoAP/CoIoT).
 
