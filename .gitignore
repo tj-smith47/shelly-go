@@ -38,6 +38,7 @@ coverage.out
 coverage.txt
 coverage.html
 *.coverprofile
+*.cov
 
 # Test cache
 .test-cache/
