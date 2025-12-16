@@ -1,8 +1,10 @@
 package cloud
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -955,5 +957,263 @@ func TestConnectWebSocketNoBaseURL(t *testing.T) {
 	_, err := client.ConnectWebSocket(context.Background(), WithDialer(mockDialer))
 	if err == nil {
 		t.Error("Expected error for no base URL, got nil")
+	}
+}
+
+// mockRoundTripper intercepts HTTP requests for testing Login function.
+type mockRoundTripper struct {
+	response *http.Response
+	err      error
+}
+
+func (m *mockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.response, nil
+}
+
+func TestLogin_Success(t *testing.T) {
+	respBody := `{"isok":true,"data":{"token":"eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2FwaV91cmwiOiJodHRwczovL3NoZWxseS00OS1ldS5zaGVsbHkuY2xvdWQiLCJleHAiOjIwMDAwMDAwMDB9.sig","user_api_url":"https://shelly-49-eu.shelly.cloud"}}`
+
+	client := NewClient()
+	client.httpClient = &http.Client{
+		Transport: &mockRoundTripper{
+			response: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(respBody)),
+				Header:     make(http.Header),
+			},
+		},
+	}
+
+	ctx := context.Background()
+	token, err := client.Login(ctx, "test@example.com", "hashedpassword")
+	if err != nil {
+		t.Fatalf("Login failed: %v", err)
+	}
+
+	if token == nil {
+		t.Fatal("Token should not be nil")
+	}
+	if token.UserAPIURL != "https://shelly-49-eu.shelly.cloud" {
+		t.Errorf("UserAPIURL = %v, want https://shelly-49-eu.shelly.cloud", token.UserAPIURL)
+	}
+}
+
+func TestLogin_InvalidCredentials(t *testing.T) {
+	respBody := `{"isok":false,"errors":["Invalid credentials"]}`
+
+	client := NewClient()
+	client.httpClient = &http.Client{
+		Transport: &mockRoundTripper{
+			response: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(respBody)),
+				Header:     make(http.Header),
+			},
+		},
+	}
+
+	ctx := context.Background()
+	_, err := client.Login(ctx, "test@example.com", "wrongpassword")
+	if err == nil {
+		t.Error("Expected error for invalid credentials")
+	}
+}
+
+func TestLogin_InvalidCredentialsNoErrors(t *testing.T) {
+	respBody := `{"isok":false}`
+
+	client := NewClient()
+	client.httpClient = &http.Client{
+		Transport: &mockRoundTripper{
+			response: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(respBody)),
+				Header:     make(http.Header),
+			},
+		},
+	}
+
+	ctx := context.Background()
+	_, err := client.Login(ctx, "test@example.com", "wrongpassword")
+	if err == nil {
+		t.Error("Expected error for failed login")
+	}
+}
+
+func TestLogin_NoToken(t *testing.T) {
+	respBody := `{"isok":true,"data":{"token":"","user_api_url":""}}`
+
+	client := NewClient()
+	client.httpClient = &http.Client{
+		Transport: &mockRoundTripper{
+			response: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(respBody)),
+				Header:     make(http.Header),
+			},
+		},
+	}
+
+	ctx := context.Background()
+	_, err := client.Login(ctx, "test@example.com", "hashedpassword")
+	if err == nil {
+		t.Error("Expected error for empty token")
+	}
+}
+
+func TestLogin_NilData(t *testing.T) {
+	respBody := `{"isok":true,"data":null}`
+
+	client := NewClient()
+	client.httpClient = &http.Client{
+		Transport: &mockRoundTripper{
+			response: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(respBody)),
+				Header:     make(http.Header),
+			},
+		},
+	}
+
+	ctx := context.Background()
+	_, err := client.Login(ctx, "test@example.com", "hashedpassword")
+	if err == nil {
+		t.Error("Expected error for nil data")
+	}
+}
+
+func TestLogin_NetworkError(t *testing.T) {
+	client := NewClient()
+	client.httpClient = &http.Client{
+		Transport: &mockRoundTripper{
+			err: errors.New("network error"),
+		},
+	}
+
+	ctx := context.Background()
+	_, err := client.Login(ctx, "test@example.com", "hashedpassword")
+	if err == nil {
+		t.Error("Expected error for network failure")
+	}
+}
+
+func TestLogin_InvalidJSON(t *testing.T) {
+	client := NewClient()
+	client.httpClient = &http.Client{
+		Transport: &mockRoundTripper{
+			response: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(`{invalid json`)),
+				Header:     make(http.Header),
+			},
+		},
+	}
+
+	ctx := context.Background()
+	_, err := client.Login(ctx, "test@example.com", "hashedpassword")
+	if err == nil {
+		t.Error("Expected error for invalid JSON")
+	}
+}
+
+func TestLogin_InvalidTokenFormat(t *testing.T) {
+	// Token that passes isok but has invalid JWT format
+	respBody := `{"isok":true,"data":{"token":"not-a-valid-jwt","user_api_url":""}}`
+
+	client := NewClient()
+	client.httpClient = &http.Client{
+		Transport: &mockRoundTripper{
+			response: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(respBody)),
+				Header:     make(http.Header),
+			},
+		},
+	}
+
+	ctx := context.Background()
+	_, err := client.Login(ctx, "test@example.com", "hashedpassword")
+	if err == nil {
+		t.Error("Expected error for invalid token format")
+	}
+}
+
+func TestLogin_ContextCanceled(t *testing.T) {
+	client := NewClient()
+	client.rateLimiter = newRateLimiter(0.01) // Very slow rate limiter
+
+	// Make one call to start the rate limiter
+	client.httpClient = &http.Client{
+		Transport: &mockRoundTripper{
+			response: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(`{"isok":true,"data":{"token":"eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2FwaV91cmwiOiJodHRwczovL3NoZWxseS40OS1ldS5zaGVsbHkuY2xvdWQiLCJleHAiOjIwMDAwMDAwMDB9.sig","user_api_url":""}}`)),
+				Header:     make(http.Header),
+			},
+		},
+	}
+	_, _ = client.Login(context.Background(), "test@example.com", "hashedpassword")
+
+	// Second call with canceled context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := client.Login(ctx, "test@example.com", "hashedpassword")
+	if err == nil {
+		t.Error("Expected error for canceled context")
+	}
+}
+
+func TestNewClientWithCredentials_Success(t *testing.T) {
+	respBody := `{"isok":true,"data":{"token":"eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2FwaV91cmwiOiJodHRwczovL3NoZWxseS00OS1ldS5zaGVsbHkuY2xvdWQiLCJleHAiOjIwMDAwMDAwMDB9.sig","user_api_url":"https://shelly-49-eu.shelly.cloud"}}`
+
+	// We need to intercept at HTTP client level since NewClientWithCredentials creates its own client
+	originalClient := &http.Client{
+		Transport: &mockRoundTripper{
+			response: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(respBody)),
+				Header:     make(http.Header),
+			},
+		},
+	}
+
+	ctx := context.Background()
+	client, err := NewClientWithCredentials(ctx, "test@example.com", "hashedpassword", WithHTTPClient(originalClient))
+	if err != nil {
+		t.Fatalf("NewClientWithCredentials failed: %v", err)
+	}
+
+	if client == nil {
+		t.Fatal("Client should not be nil")
+	}
+	if client.GetToken() == "" {
+		t.Error("Token should be set")
+	}
+	if client.GetBaseURL() != "https://shelly-49-eu.shelly.cloud" {
+		t.Errorf("BaseURL = %v, want https://shelly-49-eu.shelly.cloud", client.GetBaseURL())
+	}
+}
+
+func TestNewClientWithCredentials_LoginError(t *testing.T) {
+	respBody := `{"isok":false,"errors":["Invalid credentials"]}`
+
+	originalClient := &http.Client{
+		Transport: &mockRoundTripper{
+			response: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(respBody)),
+				Header:     make(http.Header),
+			},
+		},
+	}
+
+	ctx := context.Background()
+	_, err := NewClientWithCredentials(ctx, "test@example.com", "wrongpassword", WithHTTPClient(originalClient))
+	if err == nil {
+		t.Error("Expected error for failed login")
 	}
 }
