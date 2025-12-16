@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -11,6 +12,18 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
+
+// skipContainerTest skips tests that require Docker containers on platforms
+// where Docker is not available (macOS ARM64 GitHub Actions runners).
+func skipContainerTest(t *testing.T) {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("Skipping container test in short mode")
+	}
+	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
+		t.Skip("Skipping container test on macOS ARM64 (Docker not available in CI)")
+	}
+}
 
 // startMQTTBrokerContainer starts an MQTT broker container for testing.
 func startMQTTBrokerContainer(ctx context.Context, t *testing.T) (testcontainers.Container, string) {
@@ -60,9 +73,7 @@ func waitForState(m *MQTT, want ConnectionState, timeout time.Duration) bool { /
 }
 
 func TestMQTT_Connect_WithBroker(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping container test in short mode")
-	}
+	skipContainerTest(t)
 
 	ctx := context.Background()
 	container, brokerURL := startMQTTBrokerContainer(ctx, t)
@@ -83,9 +94,7 @@ func TestMQTT_Connect_WithBroker(t *testing.T) {
 }
 
 func TestMQTT_Subscribe_WithBroker(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping container test in short mode")
-	}
+	skipContainerTest(t)
 
 	ctx := context.Background()
 	container, brokerURL := startMQTTBrokerContainer(ctx, t)
@@ -116,9 +125,7 @@ func TestMQTT_Subscribe_WithBroker(t *testing.T) {
 }
 
 func TestMQTT_StateChanges_WithBroker(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping container test in short mode")
-	}
+	skipContainerTest(t)
 
 	ctx := context.Background()
 	container, brokerURL := startMQTTBrokerContainer(ctx, t)
@@ -166,9 +173,7 @@ func TestMQTT_StateChanges_WithBroker(t *testing.T) {
 }
 
 func TestMQTT_Call_Timeout_WithBroker(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping container test in short mode")
-	}
+	skipContainerTest(t)
 
 	ctx := context.Background()
 	container, brokerURL := startMQTTBrokerContainer(ctx, t)
@@ -197,9 +202,7 @@ func TestMQTT_Call_Timeout_WithBroker(t *testing.T) {
 }
 
 func TestMQTT_Call_WithMockDevice(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping container test in short mode")
-	}
+	skipContainerTest(t)
 
 	ctx := context.Background()
 	container, brokerURL := startMQTTBrokerContainer(ctx, t)
@@ -229,9 +232,7 @@ func TestMQTT_Call_WithMockDevice(t *testing.T) {
 }
 
 func TestMQTT_MultipleConnections_WithBroker(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping container test in short mode")
-	}
+	skipContainerTest(t)
 
 	ctx := context.Background()
 	container, brokerURL := startMQTTBrokerContainer(ctx, t)
@@ -263,9 +264,7 @@ func TestMQTT_MultipleConnections_WithBroker(t *testing.T) {
 }
 
 func TestMQTT_Reconnect_WithBroker(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping container test in short mode")
-	}
+	skipContainerTest(t)
 
 	ctx := context.Background()
 	container, brokerURL := startMQTTBrokerContainer(ctx, t)
@@ -292,9 +291,7 @@ func TestMQTT_Reconnect_WithBroker(t *testing.T) {
 }
 
 func TestMQTT_SubscribeWhileConnected_WithBroker(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping container test in short mode")
-	}
+	skipContainerTest(t)
 
 	ctx := context.Background()
 	container, brokerURL := startMQTTBrokerContainer(ctx, t)

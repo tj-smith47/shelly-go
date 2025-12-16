@@ -105,10 +105,6 @@ jobs:
           go-version: ${{ matrix.go-version }}
           cache: true
 
-      - name: Setup Docker (macOS)
-        if: matrix.os == 'macos-latest'
-        uses: docker/setup-docker-action@v4
-
       - name: Download dependencies
         run: go mod download
 
