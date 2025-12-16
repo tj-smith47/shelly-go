@@ -182,7 +182,7 @@ func TestWebSocket_handleMessage_Response(t *testing.T) {
 	select {
 	case resp := <-respChan:
 		if resp == nil {
-			t.Error("response is nil")
+			t.Fatal("response is nil")
 		}
 		if resp.ID != 1 {
 			t.Errorf("response ID = %d, want 1", resp.ID)
@@ -389,10 +389,10 @@ func TestWebSocket_handleMessageError(t *testing.T) {
 	select {
 	case resp := <-respChan:
 		if resp == nil {
-			t.Error("response is nil")
+			t.Fatal("response is nil")
 		}
 		if resp.Error == nil {
-			t.Error("expected error in response")
+			t.Fatal("expected error in response")
 		}
 		if resp.Error.Code != -1 {
 			t.Errorf("error code = %d, want -1", resp.Error.Code)

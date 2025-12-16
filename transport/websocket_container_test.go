@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+
 	"github.com/tj-smith47/shelly-go/types"
 )
 
@@ -340,15 +341,15 @@ func TestWebSocket_ConcurrentCalls_WithMockServer(t *testing.T) {
 	const numCalls = 10
 	errCh := make(chan error, numCalls)
 
-	for i := 0; i < numCalls; i++ {
-		go func(id int) {
+	for range numCalls {
+		go func() {
 			_, err := ws.Call(ctx, "Shelly.GetDeviceInfo", nil)
 			errCh <- err
-		}(i)
+		}()
 	}
 
 	// Collect results
-	for i := 0; i < numCalls; i++ {
+	for i := range numCalls {
 		if err := <-errCh; err != nil {
 			t.Errorf("Concurrent call %d error = %v", i, err)
 		}
@@ -536,12 +537,12 @@ func TestWebSocket_CallWithContext(t *testing.T) {
 	}
 	defer ws.Close()
 
-	// Create a cancelled context
+	// Create a canceled context
 	cancelCtx, cancel := context.WithCancel(ctx)
 	cancel() // Cancel immediately
 
 	_, err = ws.Call(cancelCtx, "Shelly.GetDeviceInfo", nil)
 	if err == nil {
-		t.Error("Call() with cancelled context should error")
+		t.Error("Call() with canceled context should error")
 	}
 }

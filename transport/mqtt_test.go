@@ -232,7 +232,7 @@ func TestMQTT_handleResponse(t *testing.T) {
 	select {
 	case resp := <-respChan:
 		if resp == nil {
-			t.Error("response is nil")
+			t.Fatal("response is nil")
 		}
 		if resp.ID != 1 {
 			t.Errorf("response ID = %d, want 1", resp.ID)
@@ -421,7 +421,7 @@ func TestMQTT_handleResponseWithMock(t *testing.T) {
 	select {
 	case resp := <-respChan:
 		if resp == nil {
-			t.Error("response is nil")
+			t.Fatal("response is nil")
 		}
 		if resp.ID != 1 {
 			t.Errorf("response ID = %d, want 1", resp.ID)
@@ -504,20 +504,20 @@ type mockToken struct {
 	err error
 }
 
-func (t *mockToken) Wait() bool                         { return true }
-func (t *mockToken) WaitTimeout(d time.Duration) bool   { return true }
-func (t *mockToken) Done() <-chan struct{}              { ch := make(chan struct{}); close(ch); return ch }
-func (t *mockToken) Error() error                       { return t.err }
+func (t *mockToken) Wait() bool                       { return true }
+func (t *mockToken) WaitTimeout(d time.Duration) bool { return true }
+func (t *mockToken) Done() <-chan struct{}            { ch := make(chan struct{}); close(ch); return ch }
+func (t *mockToken) Error() error                     { return t.err }
 
 // mockClient implements mqtt.Client interface for testing
 type mockClient struct {
 	connected bool
 }
 
-func (c *mockClient) IsConnected() bool                                                 { return c.connected }
-func (c *mockClient) IsConnectionOpen() bool                                            { return c.connected }
-func (c *mockClient) Connect() mqtt.Token                                               { return &mockToken{} }
-func (c *mockClient) Disconnect(quiesce uint)                                           {}
+func (c *mockClient) IsConnected() bool       { return c.connected }
+func (c *mockClient) IsConnectionOpen() bool  { return c.connected }
+func (c *mockClient) Connect() mqtt.Token     { return &mockToken{} }
+func (c *mockClient) Disconnect(quiesce uint) {}
 func (c *mockClient) Publish(topic string, qos byte, retained bool, payload interface{}) mqtt.Token {
 	return &mockToken{}
 }
@@ -527,9 +527,9 @@ func (c *mockClient) Subscribe(topic string, qos byte, callback mqtt.MessageHand
 func (c *mockClient) SubscribeMultiple(filters map[string]byte, callback mqtt.MessageHandler) mqtt.Token {
 	return &mockToken{}
 }
-func (c *mockClient) Unsubscribe(topics ...string) mqtt.Token { return &mockToken{} }
+func (c *mockClient) Unsubscribe(topics ...string) mqtt.Token             { return &mockToken{} }
 func (c *mockClient) AddRoute(topic string, callback mqtt.MessageHandler) {}
-func (c *mockClient) OptionsReader() mqtt.ClientOptionsReader { return mqtt.ClientOptionsReader{} }
+func (c *mockClient) OptionsReader() mqtt.ClientOptionsReader             { return mqtt.ClientOptionsReader{} }
 
 func TestMQTT_onConnectWithMock(t *testing.T) {
 	m := NewMQTT("tcp://192.168.1.10:1883", "shellyplus1pm-abc123")

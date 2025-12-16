@@ -12,15 +12,15 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-// startMosquittoContainer starts a Mosquitto MQTT broker container for testing.
-func startMosquittoContainer(ctx context.Context, t *testing.T) (testcontainers.Container, string) {
+// startMQTTBrokerContainer starts an MQTT broker container for testing.
+func startMQTTBrokerContainer(ctx context.Context, t *testing.T) (testcontainers.Container, string) {
 	t.Helper()
 
 	req := testcontainers.ContainerRequest{
-		Image:        "eclipse-mosquitto:2",
+		Image:        "eclipse-mosquitto:2", //nolint:misspell // Mosquitto is the correct name
 		ExposedPorts: []string{"1883/tcp"},
 		WaitingFor:   wait.ForListeningPort("1883/tcp").WithStartupTimeout(60 * time.Second),
-		Cmd:          []string{"sh", "-c", "echo 'listener 1883\nallow_anonymous true' > /mosquitto/config/mosquitto.conf && mosquitto -c /mosquitto/config/mosquitto.conf"},
+		Cmd:          []string{"sh", "-c", "echo 'listener 1883\nallow_anonymous true' > /mosquitto/config/mosquitto.conf && mosquitto -c /mosquitto/config/mosquitto.conf"}, //nolint:misspell // Mosquitto is the correct name
 	}
 
 	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
@@ -28,7 +28,7 @@ func startMosquittoContainer(ctx context.Context, t *testing.T) (testcontainers.
 		Started:          true,
 	})
 	if err != nil {
-		t.Skipf("Failed to start Mosquitto container (Docker not available?): %v", err)
+		t.Skipf("Failed to start MQTT broker container (Docker not available?): %v", err)
 	}
 
 	host, err := container.Host(ctx)
@@ -48,7 +48,7 @@ func startMosquittoContainer(ctx context.Context, t *testing.T) (testcontainers.
 }
 
 // waitForState waits for the MQTT transport to reach the expected state.
-func waitForState(m *MQTT, want ConnectionState, timeout time.Duration) bool {
+func waitForState(m *MQTT, want ConnectionState, timeout time.Duration) bool { //nolint:unparam // want may vary in future tests
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		if m.State() == want {
@@ -65,7 +65,7 @@ func TestMQTT_Connect_WithBroker(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	container, brokerURL := startMosquittoContainer(ctx, t)
+	container, brokerURL := startMQTTBrokerContainer(ctx, t)
 	defer container.Terminate(ctx)
 
 	mqtt := NewMQTT(brokerURL, "test-device-123", WithTimeout(10*time.Second))
@@ -88,7 +88,7 @@ func TestMQTT_Subscribe_WithBroker(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	container, brokerURL := startMosquittoContainer(ctx, t)
+	container, brokerURL := startMQTTBrokerContainer(ctx, t)
 	defer container.Terminate(ctx)
 
 	mqtt := NewMQTT(brokerURL, "test-device-456", WithTimeout(10*time.Second))
@@ -121,7 +121,7 @@ func TestMQTT_StateChanges_WithBroker(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	container, brokerURL := startMosquittoContainer(ctx, t)
+	container, brokerURL := startMQTTBrokerContainer(ctx, t)
 	defer container.Terminate(ctx)
 
 	mqtt := NewMQTT(brokerURL, "test-device-789", WithTimeout(10*time.Second))
@@ -171,7 +171,7 @@ func TestMQTT_Call_Timeout_WithBroker(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	container, brokerURL := startMosquittoContainer(ctx, t)
+	container, brokerURL := startMQTTBrokerContainer(ctx, t)
 	defer container.Terminate(ctx)
 
 	mqtt := NewMQTT(brokerURL, "test-device-call", WithTimeout(10*time.Second))
@@ -202,7 +202,7 @@ func TestMQTT_Call_WithMockDevice(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	container, brokerURL := startMosquittoContainer(ctx, t)
+	container, brokerURL := startMQTTBrokerContainer(ctx, t)
 	defer container.Terminate(ctx)
 
 	deviceID := "shellyplus1pm-mockdevice"
@@ -234,7 +234,7 @@ func TestMQTT_MultipleConnections_WithBroker(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	container, brokerURL := startMosquittoContainer(ctx, t)
+	container, brokerURL := startMQTTBrokerContainer(ctx, t)
 	defer container.Terminate(ctx)
 
 	// Create multiple MQTT clients
@@ -268,7 +268,7 @@ func TestMQTT_Reconnect_WithBroker(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	container, brokerURL := startMosquittoContainer(ctx, t)
+	container, brokerURL := startMQTTBrokerContainer(ctx, t)
 	defer container.Terminate(ctx)
 
 	mqtt := NewMQTT(brokerURL, "reconnect-device", WithTimeout(10*time.Second), WithReconnect(true))
@@ -297,7 +297,7 @@ func TestMQTT_SubscribeWhileConnected_WithBroker(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	container, brokerURL := startMosquittoContainer(ctx, t)
+	container, brokerURL := startMQTTBrokerContainer(ctx, t)
 	defer container.Terminate(ctx)
 
 	mqtt := NewMQTT(brokerURL, "subscribe-device", WithTimeout(10*time.Second))

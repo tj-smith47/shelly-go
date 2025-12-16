@@ -651,13 +651,13 @@ func TestParseShellySSID_EdgeCases(t *testing.T) {
 		wantType string
 		wantID   string
 	}{
-		{"shelly", "", ""},                         // No hyphen
-		{"shelly-", "", ""},                        // Empty after hyphen
+		{"shelly", "", ""},                            // No hyphen
+		{"shelly-", "", ""},                           // Empty after hyphen
 		{"SHELLYPLUS1PM-ABC123", "plus1pm", "ABC123"}, // Case insensitive
 		{"ShellyPro4PM-DEADBEEF", "pro4pm", "DEADBEEF"},
-		{"shellyaabbcc", "", "AABBCC"},             // All hex suffix
-		{"shellyABCDEF", "", "ABCDEF"},             // All hex digits
-		{"shelly1pmAABBCC", "1pm", "aabbcc"},       // Model with hex suffix, no separator (early return doesn't uppercase)
+		{"shellyaabbcc", "", "AABBCC"},       // All hex suffix
+		{"shellyABCDEF", "", "ABCDEF"},       // All hex digits
+		{"shelly1pmAABBCC", "1pm", "aabbcc"}, // Model with hex suffix, no separator (early return doesn't uppercase)
 	}
 
 	for _, tt := range tests {

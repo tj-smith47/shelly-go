@@ -955,9 +955,9 @@ func TestParseDeviceError(t *testing.T) {
 	client := NewClient()
 
 	tests := []struct {
-		name    string
-		errors  []string
-		want    error
+		name   string
+		errors []string
+		want   error
 	}{
 		{
 			name:   "empty errors",

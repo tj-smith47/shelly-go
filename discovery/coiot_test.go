@@ -533,8 +533,8 @@ func TestCoIoTDiscoverer_ParseCoAPMessage_ExtendedOptionLength13(t *testing.T) {
 	data = append(data, 0x00)
 	data = append(data, 0x00, 0x01)
 	// Option with delta=1, length=13 (extended)
-	data = append(data, 0x1D)               // delta=1, length=13 (extended)
-	data = append(data, 0x02)               // extended length: 13 + 2 = 15 bytes
+	data = append(data, 0x1D)                // delta=1, length=13 (extended)
+	data = append(data, 0x02)                // extended length: 13 + 2 = 15 bytes
 	data = append(data, make([]byte, 15)...) // 15 bytes of option value
 	data = append(data, 0xFF)
 	data = append(data, payloadBytes...)

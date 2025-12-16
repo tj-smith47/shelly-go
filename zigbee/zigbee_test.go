@@ -1845,7 +1845,7 @@ func TestScanner_DiscoverDevices_WithConcurrency(t *testing.T) {
 		t.Errorf("DiscoverDevices() error = %v", err)
 	}
 	// Empty addresses returns nil or empty slice - both acceptable
-	if devices != nil && len(devices) != 0 {
+	if len(devices) != 0 {
 		t.Errorf("DiscoverDevices() returned %d devices, want 0", len(devices))
 	}
 }
@@ -1859,7 +1859,7 @@ func TestScanner_DiscoverZigbeeDevices_NoDevices(t *testing.T) {
 		t.Errorf("DiscoverZigbeeDevices() error = %v", err)
 	}
 	// Empty input returns empty result
-	if devices != nil && len(devices) != 0 {
+	if len(devices) != 0 {
 		t.Errorf("DiscoverZigbeeDevices() returned %d devices, want 0", len(devices))
 	}
 }
@@ -1922,23 +1922,24 @@ func TestScanner_ContextCancelledDuringDiscovery(t *testing.T) {
 	scanner := NewScanner()
 	scanner.Concurrency = 1 // Low concurrency
 
-	// Create context that's already cancelled
+	// Create context that's already canceled
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	// Should return quickly due to cancelled context with empty addresses
+	// Should return quickly due to canceled context with empty addresses
 	devices, err := scanner.DiscoverDevices(ctx, []string{})
 	if err != nil {
 		t.Errorf("DiscoverDevices() error = %v", err)
 	}
-	// With cancelled context and empty addresses, result is nil or empty
-	if devices != nil && len(devices) != 0 {
+	// With canceled context and empty addresses, result is nil or empty
+	if len(devices) != 0 {
 		t.Errorf("DiscoverDevices() returned %d devices, want 0", len(devices))
 	}
 }
 
 // createMockShellyServer creates an httptest server that simulates a Shelly device
 func createMockShellyServer(t *testing.T, deviceInfo map[string]any, zigbeeStatus map[string]any) *httptest.Server {
+	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/rpc" {
 			http.Error(w, "not found", http.StatusNotFound)
@@ -1996,11 +1997,11 @@ func TestScanner_ProbeDevice_Gen2WithZigbee(t *testing.T) {
 		"gen":   2,
 	}
 	zigbeeStatus := map[string]any{
-		"network_state":   "joined",
-		"channel":         15,
-		"eui64":           "0x1234567890ABCDEF",
+		"network_state":     "joined",
+		"channel":           15,
+		"eui64":             "0x1234567890ABCDEF",
 		"coordinator_eui64": "0xFEDCBA0987654321",
-		"pan_id":          12345,
+		"pan_id":            12345,
 	}
 
 	server := createMockShellyServer(t, deviceInfo, zigbeeStatus)

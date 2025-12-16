@@ -20,14 +20,14 @@ func TestParseNmcliLine(t *testing.T) {
 		wantNil    bool
 	}{
 		{
-			name:     "not current network",
-			line:     " :HomeNetwork:75:WPA2",
-			wantNil:  true,
+			name:    "not current network",
+			line:    " :HomeNetwork:75:WPA2",
+			wantNil: true,
 		},
 		{
-			name:     "empty line",
-			line:     "",
-			wantNil:  true,
+			name:    "empty line",
+			line:    "",
+			wantNil: true,
 		},
 		{
 			name:       "current network with all fields",
@@ -51,14 +51,14 @@ func TestParseNmcliLine(t *testing.T) {
 			wantNil:    false,
 		},
 		{
-			name:     "empty SSID after asterisk",
-			line:     "*::80:WPA2",
-			wantNil:  true,
+			name:    "empty SSID after asterisk",
+			line:    "*::80:WPA2",
+			wantNil: true,
 		},
 		{
-			name:     "only asterisk and colon",
-			line:     "*:",
-			wantNil:  true,
+			name:    "only asterisk and colon",
+			line:    "*:",
+			wantNil: true,
 		},
 	}
 
@@ -89,10 +89,10 @@ func TestParseNmcliLine(t *testing.T) {
 
 func TestParseIntFromString(t *testing.T) {
 	tests := []struct {
-		name    string
-		input   string
-		want    int
-		wantOK  bool
+		name   string
+		input  string
+		want   int
+		wantOK bool
 	}{
 		{
 			name:   "simple number",
@@ -125,10 +125,10 @@ func TestParseIntFromString(t *testing.T) {
 			wantOK: true,
 		},
 		{
-			name:    "empty string",
-			input:   "",
-			want:    0,
-			wantOK:  false, // EOF error expected
+			name:   "empty string",
+			input:  "",
+			want:   0,
+			wantOK: false, // EOF error expected
 		},
 		{
 			name:   "negative prefix",
