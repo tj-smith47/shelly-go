@@ -97,10 +97,11 @@ type TemperatureSensor struct {
 
 // SwitchSetParams contains parameters for the Switch.Set method.
 type SwitchSetParams struct {
+	ID          int      `json:"id"`
+	On          bool     `json:"on"`
 	ToggleAfter *float64 `json:"toggle_after,omitempty"`
-	types.RawFields
-	ID int  `json:"id"`
-	On bool `json:"on"`
+
+	types.RawFields `json:"-"` // Ignore RawFields during serialization
 }
 
 // SwitchSetResult contains the result of a Switch.Set call.
