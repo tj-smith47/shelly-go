@@ -128,7 +128,7 @@ func TestManager_CheckForUpdate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mt := &mockTransport{
 				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+					method := req.GetMethod()
 					switch method {
 					case "Shelly.CheckForUpdate":
 						return jsonrpcResponse(tt.response)
@@ -166,7 +166,7 @@ func TestManager_CheckForUpdate(t *testing.T) {
 func TestManager_CheckForUpdate_Error(t *testing.T) {
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return nil, errors.New("connection failed")
 		},
 	}
@@ -211,7 +211,7 @@ func TestManager_Update(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mt := &mockTransport{
 				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+					method := req.GetMethod()
 					if method != "Shelly.Update" {
 						t.Errorf("unexpected method: %s", method)
 					}
@@ -232,7 +232,7 @@ func TestManager_Update(t *testing.T) {
 func TestManager_Update_Error(t *testing.T) {
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return nil, errors.New("update failed")
 		},
 	}
@@ -248,7 +248,7 @@ func TestManager_Update_Error(t *testing.T) {
 func TestManager_GetVersion(t *testing.T) {
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "Shelly.GetDeviceInfo" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -285,7 +285,7 @@ func TestManager_GetVersion(t *testing.T) {
 func TestManager_GetVersion_Error(t *testing.T) {
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return nil, errors.New("device not found")
 		},
 	}
@@ -301,7 +301,7 @@ func TestManager_GetVersion_Error(t *testing.T) {
 func TestManager_GetStatus(t *testing.T) {
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "Shelly.GetStatus" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -335,7 +335,7 @@ func TestManager_GetStatus(t *testing.T) {
 func TestManager_GetStatus_NoUpdate(t *testing.T) {
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return jsonrpcResponse(map[string]any{
 				"sys": map[string]any{},
 			})
@@ -360,7 +360,7 @@ func TestManager_GetStatus_NoUpdate(t *testing.T) {
 func TestManager_Rollback(t *testing.T) {
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "Shelly.Rollback" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -379,7 +379,7 @@ func TestManager_Rollback(t *testing.T) {
 func TestManager_Rollback_Error(t *testing.T) {
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return nil, errors.New("rollback not available")
 		},
 	}
@@ -414,7 +414,7 @@ func TestManager_GetRollbackStatus(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mt := &mockTransport{
 				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+					_ = req.GetMethod()
 					return jsonrpcResponse(map[string]any{
 						"sys": map[string]any{
 							"safe_mode": tt.safeMode,
@@ -441,7 +441,7 @@ func TestManager_UpdateStable(t *testing.T) {
 	var calledMethod string
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+			method := req.GetMethod()
 			calledMethod = method
 			return jsonrpcResponse(nil)
 		},
@@ -463,7 +463,7 @@ func TestManager_UpdateBeta(t *testing.T) {
 	var calledMethod string
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+			method := req.GetMethod()
 			calledMethod = method
 			return jsonrpcResponse(nil)
 		},
@@ -485,7 +485,7 @@ func TestManager_UpdateFromURL(t *testing.T) {
 	var calledMethod string
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+			method := req.GetMethod()
 			calledMethod = method
 			return jsonrpcResponse(nil)
 		},
@@ -541,7 +541,7 @@ func TestManager_IsUpdateAvailable(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mt := &mockTransport{
 				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+					method := req.GetMethod()
 					switch method {
 					case "Shelly.CheckForUpdate":
 						return jsonrpcResponse(tt.response)
@@ -603,7 +603,7 @@ func TestManager_IsBetaAvailable(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mt := &mockTransport{
 				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+					method := req.GetMethod()
 					switch method {
 					case "Shelly.CheckForUpdate":
 						return jsonrpcResponse(tt.response)
@@ -700,7 +700,7 @@ func TestUpdateInfo_HasBeta(t *testing.T) {
 func TestBatchCheckUpdates(t *testing.T) {
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.CheckForUpdate":
 				return jsonrpcResponse(map[string]any{
@@ -761,7 +761,7 @@ func TestBatchCheckUpdates_NilClient(t *testing.T) {
 func TestBatchUpdate(t *testing.T) {
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return jsonrpcResponse(nil)
 		},
 	}
@@ -811,7 +811,7 @@ func TestUpdateDevicesWithUpdates(t *testing.T) {
 	updateCalls := 0
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.CheckForUpdate":
 				return jsonrpcResponse(map[string]any{
@@ -851,7 +851,7 @@ func TestUpdateDevicesWithUpdates(t *testing.T) {
 func TestUpdateDevicesWithUpdates_NoUpdates(t *testing.T) {
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.CheckForUpdate":
 				return jsonrpcResponse(map[string]any{
@@ -1040,7 +1040,7 @@ func TestDownloader_DownloadToWriter_WriteError(t *testing.T) {
 func TestManager_GetFirmwareURL(t *testing.T) {
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.CheckForUpdate":
 				return jsonrpcResponse(map[string]any{
@@ -1075,7 +1075,7 @@ func TestManager_GetFirmwareURL(t *testing.T) {
 func TestManager_GetFirmwareURL_Beta(t *testing.T) {
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.CheckForUpdate":
 				return jsonrpcResponse(map[string]any{
@@ -1114,7 +1114,7 @@ func TestManager_GetFirmwareURL_Beta(t *testing.T) {
 func TestManager_GetFirmwareURL_NoUpdate(t *testing.T) {
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.CheckForUpdate":
 				return jsonrpcResponse(map[string]any{})
@@ -1139,7 +1139,7 @@ func TestManager_GetFirmwareURL_NoUpdate(t *testing.T) {
 func TestManager_GetFirmwareURL_Error(t *testing.T) {
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return nil, errors.New("connection failed")
 		},
 	}
@@ -1252,7 +1252,7 @@ func TestStagedRollout_SelectDevices_All(t *testing.T) {
 func TestStagedRollout_Start(t *testing.T) {
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return jsonrpcResponse(nil)
 		},
 	}
@@ -1279,7 +1279,7 @@ func TestStagedRollout_Start(t *testing.T) {
 func TestStagedRollout_Start_WithProgress(t *testing.T) {
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return jsonrpcResponse(nil)
 		},
 	}
@@ -1341,7 +1341,7 @@ func TestStagedRollout_Start_NoDevices(t *testing.T) {
 func TestStagedRollout_Start_ContextCancelled(t *testing.T) {
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return jsonrpcResponse(nil)
 		},
 	}
@@ -1373,7 +1373,7 @@ func TestStagedRollout_Start_ContextCancelled(t *testing.T) {
 func TestStagedRollout_Cancel(t *testing.T) {
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return jsonrpcResponse(nil)
 		},
 	}
@@ -1509,7 +1509,7 @@ func TestManager_GetRollbackStatus_Error(t *testing.T) {
 func TestManager_IsUpdateAvailable_Error(t *testing.T) {
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return nil, errors.New("connection failed")
 		},
 	}
@@ -1525,7 +1525,7 @@ func TestManager_IsUpdateAvailable_Error(t *testing.T) {
 func TestManager_IsBetaAvailable_Error(t *testing.T) {
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return nil, errors.New("connection failed")
 		},
 	}
@@ -1541,7 +1541,7 @@ func TestManager_IsBetaAvailable_Error(t *testing.T) {
 func TestManager_GetVersion_InvalidJSON(t *testing.T) {
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return json.RawMessage(`{invalid`), nil
 		},
 	}
@@ -1557,7 +1557,7 @@ func TestManager_GetVersion_InvalidJSON(t *testing.T) {
 func TestManager_GetStatus_InvalidJSON(t *testing.T) {
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return json.RawMessage(`{invalid`), nil
 		},
 	}

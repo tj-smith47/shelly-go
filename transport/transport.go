@@ -51,12 +51,12 @@ func NewSimpleRequest(path string) *SimpleRequest {
 	return &SimpleRequest{Path: path}
 }
 
-func (r *SimpleRequest) GetID() any            { return nil }
-func (r *SimpleRequest) GetMethod() string     { return r.Path }
+func (r *SimpleRequest) GetID() any                 { return nil }
+func (r *SimpleRequest) GetMethod() string          { return r.Path }
 func (r *SimpleRequest) GetParams() json.RawMessage { return nil }
-func (r *SimpleRequest) GetAuth() any          { return nil }
-func (r *SimpleRequest) GetJSONRPC() string    { return "" }
-func (r *SimpleRequest) IsREST() bool          { return true }
+func (r *SimpleRequest) GetAuth() any               { return nil }
+func (r *SimpleRequest) GetJSONRPC() string         { return "" }
+func (r *SimpleRequest) IsREST() bool               { return true }
 
 // Transport defines the interface for communicating with Shelly devices.
 // Implementations handle different protocols (HTTP, WebSocket, MQTT, CoAP).

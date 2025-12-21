@@ -7,7 +7,6 @@ import (
 	"testing"
 )
 
-
 func TestNewCoAP(t *testing.T) {
 	tests := []struct {
 		name    string

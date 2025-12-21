@@ -534,7 +534,7 @@ func TestProvisioner_IsConnected(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			transport := &mockTransport{
 				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-			_ = req.GetMethod()
+					_ = req.GetMethod()
 					return jsonrpcResponse(tt.result)
 				},
 			}
@@ -1641,7 +1641,7 @@ func TestBulkProvisioner_ProvisionBulk_NoConfig(t *testing.T) {
 	factory := func(address string) (*rpc.Client, error) {
 		transport := &mockTransport{
 			callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-			_ = req.GetMethod()
+				_ = req.GetMethod()
 				return jsonrpcResponse(`{"id":"test"}`)
 			},
 		}
@@ -1671,7 +1671,7 @@ func TestBulkProvisioner_ProvisionBulk_WithProfile(t *testing.T) {
 	factory := func(address string) (*rpc.Client, error) {
 		transport := &mockTransport{
 			callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-			method := req.GetMethod()
+				method := req.GetMethod()
 				callCount++
 				switch method {
 				case "Shelly.GetDeviceInfo":
@@ -1727,7 +1727,7 @@ func TestBulkProvisioner_ProvisionBulk_WithDirectConfig(t *testing.T) {
 	factory := func(address string) (*rpc.Client, error) {
 		transport := &mockTransport{
 			callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-			method := req.GetMethod()
+				method := req.GetMethod()
 				switch method {
 				case "Shelly.GetDeviceInfo":
 					return jsonrpcResponse(`{"id":"test"}`)
@@ -1776,7 +1776,7 @@ func TestBulkProvisioner_ProvisionBulk_MultipleDevices(t *testing.T) {
 	factory := func(address string) (*rpc.Client, error) {
 		transport := &mockTransport{
 			callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-			method := req.GetMethod()
+				method := req.GetMethod()
 				switch method {
 				case "Shelly.GetDeviceInfo":
 					return jsonrpcResponse(`{"id":"test"}`)

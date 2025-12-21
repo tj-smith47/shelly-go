@@ -97,7 +97,7 @@ func TestLoRa_GetConfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			transport := &mockTransport{
 				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+					method := req.GetMethod()
 					if method != "LoRa.GetConfig" {
 						t.Errorf("unexpected method: %s", method)
 					}
@@ -139,7 +139,7 @@ func TestLoRa_GetConfig(t *testing.T) {
 func TestLoRa_GetConfig_Error(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -156,7 +156,7 @@ func TestLoRa_GetConfig_Error(t *testing.T) {
 func TestLoRa_GetConfig_InvalidJSON(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return jsonrpcResponse(`{invalid json}`)
 		},
 	}
@@ -173,7 +173,7 @@ func TestLoRa_GetConfig_InvalidJSON(t *testing.T) {
 func TestLoRa_SetConfig(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "LoRa.SetConfig" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -198,7 +198,7 @@ func TestLoRa_SetConfig(t *testing.T) {
 func TestLoRa_SetConfig_Error(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -235,7 +235,7 @@ func TestLoRa_GetStatus(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			transport := &mockTransport{
 				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+					method := req.GetMethod()
 					if method != "LoRa.GetStatus" {
 						t.Errorf("unexpected method: %s", method)
 					}
@@ -268,7 +268,7 @@ func TestLoRa_GetStatus(t *testing.T) {
 func TestLoRa_GetStatus_Error(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -285,7 +285,7 @@ func TestLoRa_GetStatus_Error(t *testing.T) {
 func TestLoRa_GetStatus_InvalidJSON(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return jsonrpcResponse(`{invalid json}`)
 		},
 	}
@@ -302,7 +302,7 @@ func TestLoRa_GetStatus_InvalidJSON(t *testing.T) {
 func TestLoRa_SendBytes(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "LoRa.SendBytes" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -322,7 +322,7 @@ func TestLoRa_SendBytes(t *testing.T) {
 func TestLoRa_SendBytes_Error(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -339,7 +339,7 @@ func TestLoRa_SendBytes_Error(t *testing.T) {
 func TestLoRa_SendString(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "LoRa.SendBytes" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -359,7 +359,7 @@ func TestLoRa_SendString(t *testing.T) {
 func TestLoRa_SendRaw(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "LoRa.SendBytes" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -379,7 +379,7 @@ func TestLoRa_SendRaw(t *testing.T) {
 func TestLoRa_GetAddOnInfo(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "AddOn.GetInfo" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -407,7 +407,7 @@ func TestLoRa_GetAddOnInfo(t *testing.T) {
 func TestLoRa_GetAddOnInfo_Error(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -424,7 +424,7 @@ func TestLoRa_GetAddOnInfo_Error(t *testing.T) {
 func TestLoRa_GetAddOnInfo_InvalidJSON(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return jsonrpcResponse(`{invalid json}`)
 		},
 	}
@@ -452,7 +452,7 @@ func TestLoRa_CheckForUpdate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			transport := &mockTransport{
 				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+					method := req.GetMethod()
 					if method != "AddOn.CheckForUpdate" {
 						t.Errorf("unexpected method: %s", method)
 					}
@@ -478,7 +478,7 @@ func TestLoRa_CheckForUpdate(t *testing.T) {
 func TestLoRa_CheckForUpdate_Error(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -495,7 +495,7 @@ func TestLoRa_CheckForUpdate_Error(t *testing.T) {
 func TestLoRa_CheckForUpdate_InvalidJSON(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return jsonrpcResponse(`{invalid json}`)
 		},
 	}
@@ -512,7 +512,7 @@ func TestLoRa_CheckForUpdate_InvalidJSON(t *testing.T) {
 func TestLoRa_Update(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "AddOn.Update" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -532,7 +532,7 @@ func TestLoRa_Update(t *testing.T) {
 func TestLoRa_Update_Error(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -549,7 +549,7 @@ func TestLoRa_Update_Error(t *testing.T) {
 func TestLoRa_SetFrequency(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "LoRa.SetConfig" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -569,7 +569,7 @@ func TestLoRa_SetFrequency(t *testing.T) {
 func TestLoRa_SetTransmitPower(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "LoRa.SetConfig" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -589,7 +589,7 @@ func TestLoRa_SetTransmitPower(t *testing.T) {
 func TestLoRa_SetDataRate(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "LoRa.SetConfig" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -609,7 +609,7 @@ func TestLoRa_SetDataRate(t *testing.T) {
 func TestLoRa_SetBandwidth(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "LoRa.SetConfig" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -629,7 +629,7 @@ func TestLoRa_SetBandwidth(t *testing.T) {
 func TestLoRa_GetFrequency(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return jsonrpcResponse(`{"id":100,"freq":865000000}`)
 		},
 	}
@@ -650,7 +650,7 @@ func TestLoRa_GetFrequency(t *testing.T) {
 func TestLoRa_GetFrequency_Error(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -667,7 +667,7 @@ func TestLoRa_GetFrequency_Error(t *testing.T) {
 func TestLoRa_GetTransmitPower(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return jsonrpcResponse(`{"id":100,"txp":14}`)
 		},
 	}
@@ -688,7 +688,7 @@ func TestLoRa_GetTransmitPower(t *testing.T) {
 func TestLoRa_GetTransmitPower_Error(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -705,7 +705,7 @@ func TestLoRa_GetTransmitPower_Error(t *testing.T) {
 func TestLoRa_GetLastRSSI(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return jsonrpcResponse(`{"id":100,"rssi":-75}`)
 		},
 	}
@@ -726,7 +726,7 @@ func TestLoRa_GetLastRSSI(t *testing.T) {
 func TestLoRa_GetLastRSSI_Error(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -743,7 +743,7 @@ func TestLoRa_GetLastRSSI_Error(t *testing.T) {
 func TestLoRa_GetLastSNR(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return jsonrpcResponse(`{"id":100,"snr":8.5}`)
 		},
 	}
@@ -764,7 +764,7 @@ func TestLoRa_GetLastSNR(t *testing.T) {
 func TestLoRa_GetLastSNR_Error(t *testing.T) {
 	transport := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}

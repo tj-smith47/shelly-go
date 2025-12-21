@@ -157,7 +157,7 @@ func TestEM1Data_SetConfig(t *testing.T) {
 	methodCalled := false
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "EM1Data.SetConfig" {
 				t.Errorf("unexpected method call: %s", method)
 			}
@@ -587,7 +587,7 @@ func TestEM1Data_DeleteAllData(t *testing.T) {
 	methodCalled := false
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "EM1Data.DeleteAllData" {
 				t.Errorf("unexpected method call: %s", method)
 			}

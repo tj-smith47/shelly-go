@@ -355,7 +355,7 @@ func TestWebhook_Update_Error(t *testing.T) {
 func TestWebhook_Delete(t *testing.T) {
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "Webhook.Delete" {
 				t.Errorf("method = %q, want %q", method, "Webhook.Delete")
 			}
@@ -387,7 +387,7 @@ func TestWebhook_Delete_Error(t *testing.T) {
 func TestWebhook_DeleteAll(t *testing.T) {
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "Webhook.DeleteAll" {
 				t.Errorf("method = %q, want %q", method, "Webhook.DeleteAll")
 			}
@@ -550,8 +550,8 @@ func TestWebhookConfig_JSONSerialization(t *testing.T) {
 func TestWebhook_ContextCancellation(t *testing.T) {
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					_ = req.GetMethod()
-					select {
+			_ = req.GetMethod()
+			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			default:

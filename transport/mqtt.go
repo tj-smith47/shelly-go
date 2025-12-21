@@ -207,6 +207,25 @@ func (m *MQTT) handleNotification(client mqtt.Client, msg mqtt.Message) {
 	}
 }
 
+// waitForPublish waits for an MQTT publish token to complete with context cancellation.
+func waitForPublish(ctx context.Context, token mqtt.Token) error {
+	done := make(chan struct{})
+	go func() {
+		token.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-done:
+		if token.Error() != nil {
+			return fmt.Errorf("publish: %w", token.Error())
+		}
+		return nil
+	}
+}
+
 // Call executes an RPC method call via MQTT.
 //
 // If not connected, this will attempt to connect first.
@@ -246,15 +265,8 @@ func (m *MQTT) Call(ctx context.Context, rpcReq RPCRequest) (json.RawMessage, er
 	}
 
 	// Get request ID for response correlation
-	var requestID int64
-	switch id := rpcReq.GetID().(type) {
-	case int64:
-		requestID = id
-	case uint64:
-		requestID = int64(id)
-	case int:
-		requestID = int64(id)
-	default:
+	requestID := toInt64ID(rpcReq.GetID())
+	if requestID < 0 {
 		requestID = m.requestID.Add(1)
 		reqBody["id"] = requestID
 	}
@@ -280,21 +292,8 @@ func (m *MQTT) Call(ctx context.Context, rpcReq RPCRequest) (json.RawMessage, er
 	// Publish to device RPC topic
 	rpcTopic := m.deviceID + "/rpc"
 	token := m.client.Publish(rpcTopic, m.opts.mqttQoS, false, data)
-
-	// Wait for publish with context timeout
-	done := make(chan struct{})
-	go func() {
-		token.Wait()
-		close(done)
-	}()
-
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-done:
-		if token.Error() != nil {
-			return nil, fmt.Errorf("publish: %w", token.Error())
-		}
+	if err := waitForPublish(ctx, token); err != nil {
+		return nil, err
 	}
 
 	// Wait for response

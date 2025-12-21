@@ -147,7 +147,7 @@ func TestEM1_SetConfig(t *testing.T) {
 
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "EM1.SetConfig" {
 				t.Errorf("method = %q, want %q", method, "EM1.SetConfig")
 			}
@@ -394,7 +394,7 @@ func TestEM1_GetCTTypes(t *testing.T) {
 
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "EM1.GetCTTypes" {
 				t.Errorf("method = %q, want %q", method, "EM1.GetCTTypes")
 			}

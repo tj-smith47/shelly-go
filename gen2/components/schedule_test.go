@@ -317,7 +317,7 @@ func TestSchedule_Update_Error(t *testing.T) {
 func TestSchedule_Delete(t *testing.T) {
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "Schedule.Delete" {
 				t.Errorf("method = %q, want %q", method, "Schedule.Delete")
 			}
@@ -349,7 +349,7 @@ func TestSchedule_Delete_Error(t *testing.T) {
 func TestSchedule_DeleteAll(t *testing.T) {
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "Schedule.DeleteAll" {
 				t.Errorf("method = %q, want %q", method, "Schedule.DeleteAll")
 			}
@@ -515,8 +515,8 @@ func TestScheduleCall_JSONSerialization(t *testing.T) {
 func TestSchedule_ContextCancellation(t *testing.T) {
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					_ = req.GetMethod()
-					select {
+			_ = req.GetMethod()
+			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			default:

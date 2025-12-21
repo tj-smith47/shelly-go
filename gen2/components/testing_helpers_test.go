@@ -66,8 +66,8 @@ func testComponentInvalidJSON(t *testing.T, methodName string, fn func() error) 
 func errorTransport(err error) *mockTransport {
 	return &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					_ = req.GetMethod()
-					return nil, err
+			_ = req.GetMethod()
+			return nil, err
 		},
 	}
 }
@@ -83,8 +83,8 @@ func errorTransport(err error) *mockTransport {
 func invalidJSONTransport() *mockTransport {
 	return &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					_ = req.GetMethod()
-					return json.RawMessage(`{invalid`), nil
+			_ = req.GetMethod()
+			return json.RawMessage(`{invalid`), nil
 		},
 	}
 }

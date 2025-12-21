@@ -129,7 +129,7 @@ func TestPM_SetConfig(t *testing.T) {
 
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "PM.SetConfig" {
 				t.Errorf("method = %q, want %q", method, "PM.SetConfig")
 			}

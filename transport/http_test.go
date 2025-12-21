@@ -33,12 +33,12 @@ func newTestRPCRequest(method string, params any) *testRPCRequest {
 	}
 }
 
-func (r *testRPCRequest) GetID() any               { return r.id }
-func (r *testRPCRequest) GetJSONRPC() string       { return r.jsonrpc }
-func (r *testRPCRequest) GetMethod() string        { return r.method }
+func (r *testRPCRequest) GetID() any                 { return r.id }
+func (r *testRPCRequest) GetJSONRPC() string         { return r.jsonrpc }
+func (r *testRPCRequest) GetMethod() string          { return r.method }
 func (r *testRPCRequest) GetParams() json.RawMessage { return r.params }
-func (r *testRPCRequest) GetAuth() any             { return nil }
-func (r *testRPCRequest) IsREST() bool             { return false }
+func (r *testRPCRequest) GetAuth() any               { return nil }
+func (r *testRPCRequest) IsREST() bool               { return false }
 
 // testRPCRequestWithAuth is a test RPC request that includes auth info
 type testRPCRequestWithAuth struct {
@@ -669,7 +669,6 @@ func TestHTTP_Call_DigestAuth_SHA256(t *testing.T) {
 	expectedRealm := "shelly"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
 		authHeader := r.Header.Get("Authorization")
 
 		// First request - return 401 with SHA-256 challenge
@@ -832,16 +831,16 @@ func TestSHA256Hash(t *testing.T) {
 func TestCalculateDigestResponse_SHA256(t *testing.T) {
 	// Test with SHA-256 algorithm
 	response := calculateDigestResponse(
-		"admin",     // username
-		"password",  // password
-		"shelly",    // realm
-		"abc123",    // nonce
-		"00000001",  // nc
-		"xyz789",    // cnonce
-		"auth",      // qop
-		"POST",      // method
-		"/rpc",      // uri
-		"SHA-256",   // algorithm
+		"admin",    // username
+		"password", // password
+		"shelly",   // realm
+		"abc123",   // nonce
+		"00000001", // nc
+		"xyz789",   // cnonce
+		"auth",     // qop
+		"POST",     // method
+		"/rpc",     // uri
+		"SHA-256",  // algorithm
 	)
 
 	// Verify it's a 64-char hex string (SHA-256 produces 256 bits = 64 hex chars)

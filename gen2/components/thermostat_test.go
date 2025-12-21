@@ -59,7 +59,7 @@ func TestThermostat_GetConfig(t *testing.T) {
 
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "Thermostat.GetConfig" {
 				t.Errorf("method = %q, want %q", method, "Thermostat.GetConfig")
 			}
@@ -114,7 +114,7 @@ func TestThermostat_GetConfig_InvalidJSON(t *testing.T) {
 func TestThermostat_SetConfig(t *testing.T) {
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "Thermostat.SetConfig" {
 				t.Errorf("method = %q, want %q", method, "Thermostat.SetConfig")
 			}
@@ -157,7 +157,7 @@ func TestThermostat_SetConfig(t *testing.T) {
 func TestThermostat_SetConfig_WithFlags(t *testing.T) {
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					_ = req.GetMethod()
+			_ = req.GetMethod()
 			paramsMap := extractThermostatParams(req.GetParams())
 			config := paramsMap["config"].(map[string]any)
 			flags, ok := config["flags"].(map[string]any)
@@ -192,7 +192,7 @@ func TestThermostat_SetConfig_WithFlags(t *testing.T) {
 func TestThermostat_SetConfig_AllFields(t *testing.T) {
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					_ = req.GetMethod()
+			_ = req.GetMethod()
 			paramsMap := extractThermostatParams(req.GetParams())
 			config := paramsMap["config"].(map[string]any)
 			// Verify all fields are present
@@ -259,7 +259,7 @@ func TestThermostat_GetStatus(t *testing.T) {
 
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "Thermostat.GetStatus" {
 				t.Errorf("method = %q, want %q", method, "Thermostat.GetStatus")
 			}
@@ -306,8 +306,8 @@ func TestThermostat_GetStatus_WithBoost(t *testing.T) {
 
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					_ = req.GetMethod()
-					return jsonrpcResponse(result)
+			_ = req.GetMethod()
+			return jsonrpcResponse(result)
 		},
 	}
 	client := rpc.NewClient(tr)
@@ -341,8 +341,8 @@ func TestThermostat_GetStatus_WithOverride(t *testing.T) {
 
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					_ = req.GetMethod()
-					return jsonrpcResponse(result)
+			_ = req.GetMethod()
+			return jsonrpcResponse(result)
 		},
 	}
 	client := rpc.NewClient(tr)
@@ -374,8 +374,8 @@ func TestThermostat_GetStatus_WithErrors(t *testing.T) {
 
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					_ = req.GetMethod()
-					return jsonrpcResponse(result)
+			_ = req.GetMethod()
+			return jsonrpcResponse(result)
 		},
 	}
 	client := rpc.NewClient(tr)
@@ -417,7 +417,7 @@ func TestThermostat_GetStatus_InvalidJSON(t *testing.T) {
 func TestThermostat_SetTarget(t *testing.T) {
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "Thermostat.SetConfig" {
 				t.Errorf("method = %q, want %q", method, "Thermostat.SetConfig")
 			}
@@ -502,7 +502,7 @@ func TestThermostat_Boost(t *testing.T) {
 	t.Run("with duration", func(t *testing.T) {
 		tr := &mockTransport{
 			callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+				method := req.GetMethod()
 				if method != "Thermostat.Boost" {
 					t.Errorf("method = %q, want %q", method, "Thermostat.Boost")
 				}
@@ -528,7 +528,7 @@ func TestThermostat_Boost(t *testing.T) {
 	t.Run("without duration", func(t *testing.T) {
 		tr := &mockTransport{
 			callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					_ = req.GetMethod()
+				_ = req.GetMethod()
 				paramsMap := extractThermostatParams(req.GetParams())
 				if id, ok := paramsMap["id"].(float64); !ok || int(id) != 0 {
 					t.Errorf("expected id 0, got %v", paramsMap["id"])
@@ -552,7 +552,7 @@ func TestThermostat_Boost(t *testing.T) {
 func TestThermostat_CancelBoost(t *testing.T) {
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "Thermostat.CancelBoost" {
 				t.Errorf("method = %q, want %q", method, "Thermostat.CancelBoost")
 			}
@@ -576,7 +576,7 @@ func TestThermostat_Override(t *testing.T) {
 	t.Run("with target and duration", func(t *testing.T) {
 		tr := &mockTransport{
 			callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+				method := req.GetMethod()
 				if method != "Thermostat.Override" {
 					t.Errorf("method = %q, want %q", method, "Thermostat.Override")
 				}
@@ -605,7 +605,7 @@ func TestThermostat_Override(t *testing.T) {
 	t.Run("without optional params", func(t *testing.T) {
 		tr := &mockTransport{
 			callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					_ = req.GetMethod()
+				_ = req.GetMethod()
 				paramsMap := extractThermostatParams(req.GetParams())
 				if id, ok := paramsMap["id"].(float64); !ok || int(id) != 0 {
 					t.Errorf("expected id 0, got %v", paramsMap["id"])
@@ -632,7 +632,7 @@ func TestThermostat_Override(t *testing.T) {
 func TestThermostat_CancelOverride(t *testing.T) {
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "Thermostat.CancelOverride" {
 				t.Errorf("method = %q, want %q", method, "Thermostat.CancelOverride")
 			}
@@ -655,7 +655,7 @@ func TestThermostat_CancelOverride(t *testing.T) {
 func TestThermostat_Calibrate(t *testing.T) {
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "Thermostat.Calibrate" {
 				t.Errorf("method = %q, want %q", method, "Thermostat.Calibrate")
 			}

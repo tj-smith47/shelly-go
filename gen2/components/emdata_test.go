@@ -461,7 +461,7 @@ func TestEMData_DeleteAllData(t *testing.T) {
 	methodCalled := false
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "EMData.DeleteAllData" {
 				t.Errorf("unexpected method call: %s", method)
 			}

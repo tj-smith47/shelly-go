@@ -222,7 +222,7 @@ func TestBTHome_AddDevice_InvalidJSON(t *testing.T) {
 func TestBTHome_DeleteDevice(t *testing.T) {
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "BTHome.DeleteDevice" {
 				t.Errorf("method = %q, want %q", method, "BTHome.DeleteDevice")
 			}
@@ -322,7 +322,7 @@ func TestBTHome_AddSensor_InvalidJSON(t *testing.T) {
 func TestBTHome_DeleteSensor(t *testing.T) {
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "BTHome.DeleteSensor" {
 				t.Errorf("method = %q, want %q", method, "BTHome.DeleteSensor")
 			}
@@ -527,8 +527,8 @@ func TestBTHomeStatus_JSONUnmarshal(t *testing.T) {
 func TestBTHome_ContextCancellation(t *testing.T) {
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					_ = req.GetMethod()
-					select {
+			_ = req.GetMethod()
+			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			default:

@@ -50,7 +50,7 @@ func TestUI_GetConfig(t *testing.T) {
 
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "Ui.GetConfig" {
 				t.Errorf("method = %q, want %q", method, "Ui.GetConfig")
 			}
@@ -99,7 +99,7 @@ func TestUI_GetConfig_InvalidJSON(t *testing.T) {
 func TestUI_SetConfig(t *testing.T) {
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "Ui.SetConfig" {
 				t.Errorf("method = %q, want %q", method, "Ui.SetConfig")
 			}
@@ -129,7 +129,7 @@ func TestUI_SetConfig(t *testing.T) {
 func TestUI_SetConfig_AllFields(t *testing.T) {
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					_ = req.GetMethod()
+			_ = req.GetMethod()
 			paramsMap := extractUIParams(req.GetParams())
 			config, ok := paramsMap["config"].(map[string]any)
 			if !ok {
@@ -168,7 +168,7 @@ func TestUI_SetConfig_AllFields(t *testing.T) {
 func TestUI_SetIdleBrightness(t *testing.T) {
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					_ = req.GetMethod()
+			_ = req.GetMethod()
 			paramsMap := extractUIParams(req.GetParams())
 			config, ok := paramsMap["config"].(map[string]any)
 			if !ok {
@@ -323,7 +323,7 @@ func TestPlugsUI_GetConfig(t *testing.T) {
 
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "PLUGS_UI.GetConfig" {
 				t.Errorf("method = %q, want %q", method, "PLUGS_UI.GetConfig")
 			}
@@ -375,7 +375,7 @@ func TestPlugsUI_GetConfig_InvalidJSON(t *testing.T) {
 func TestPlugsUI_SetConfig(t *testing.T) {
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "PLUGS_UI.SetConfig" {
 				t.Errorf("method = %q, want %q", method, "PLUGS_UI.SetConfig")
 			}
@@ -411,7 +411,7 @@ func TestPlugsUI_SetConfig(t *testing.T) {
 func TestPlugsUI_SetConfig_WithColors(t *testing.T) {
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					_ = req.GetMethod()
+			_ = req.GetMethod()
 			paramsMap := extractUIParams(req.GetParams())
 			config, ok := paramsMap["config"].(map[string]any)
 			if !ok {
@@ -484,7 +484,7 @@ func TestPlugsUI_SetLEDMode(t *testing.T) {
 func TestPlugsUI_SetLEDBrightness(t *testing.T) {
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					_ = req.GetMethod()
+			_ = req.GetMethod()
 			paramsMap := extractUIParams(req.GetParams())
 			config, ok := paramsMap["config"].(map[string]any)
 			if !ok {

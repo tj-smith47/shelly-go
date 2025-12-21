@@ -299,8 +299,8 @@ func TestCloudConfig_JSONSerialization(t *testing.T) {
 func TestCloud_ContextCancellation(t *testing.T) {
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					_ = req.GetMethod()
-					select {
+			_ = req.GetMethod()
+			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			default:

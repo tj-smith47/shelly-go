@@ -3,7 +3,7 @@ package transport
 import (
 	"bytes"
 	"context"
-	"crypto/md5"  //nolint:gosec // MD5 required by RFC 2617 HTTP Digest Authentication
+	"crypto/md5" //nolint:gosec // MD5 required by RFC 2617 HTTP Digest Authentication
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"

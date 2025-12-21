@@ -115,7 +115,7 @@ func TestSwitch_Set(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
 				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+					method := req.GetMethod()
 					if method != "Switch.Set" {
 						t.Errorf("method = %q, want %q", method, "Switch.Set")
 					}
@@ -179,7 +179,7 @@ func TestSwitch_Toggle(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
 				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+					method := req.GetMethod()
 					if method != "Switch.Toggle" {
 						t.Errorf("method = %q, want %q", method, "Switch.Toggle")
 					}
@@ -244,7 +244,7 @@ func TestSwitch_ResetCounters(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
 				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+					method := req.GetMethod()
 					if method != "Switch.ResetCounters" {
 						t.Errorf("method = %q, want %q", method, "Switch.ResetCounters")
 					}
@@ -284,7 +284,7 @@ func TestSwitch_GetConfig(t *testing.T) {
 
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "Switch.GetConfig" {
 				t.Errorf("method = %q, want %q", method, "Switch.GetConfig")
 			}
@@ -355,7 +355,7 @@ func TestSwitch_SetConfig(t *testing.T) {
 
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "Switch.SetConfig" {
 				t.Errorf("method = %q, want %q", method, "Switch.SetConfig")
 			}
@@ -416,7 +416,7 @@ func TestSwitch_GetStatus(t *testing.T) {
 
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "Switch.GetStatus" {
 				t.Errorf("method = %q, want %q", method, "Switch.GetStatus")
 			}

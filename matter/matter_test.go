@@ -67,7 +67,7 @@ func TestMatter_GetConfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mt := &mockTransport{
 				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+					method := req.GetMethod()
 					if method != "Matter.GetConfig" {
 						t.Errorf("unexpected method: %s", method)
 					}
@@ -115,7 +115,7 @@ func TestMatter_SetConfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mt := &mockTransport{
 				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+					method := req.GetMethod()
 					if method != "Matter.SetConfig" {
 						t.Errorf("unexpected method: %s", method)
 					}
@@ -171,7 +171,7 @@ func TestMatter_GetStatus(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mt := &mockTransport{
 				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+					method := req.GetMethod()
 					if method != "Matter.GetStatus" {
 						t.Errorf("unexpected method: %s", method)
 					}
@@ -203,7 +203,7 @@ func TestMatter_GetStatus(t *testing.T) {
 func TestMatter_FactoryReset(t *testing.T) {
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "Matter.FactoryReset" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -223,7 +223,7 @@ func TestMatter_FactoryReset(t *testing.T) {
 func TestMatter_Enable(t *testing.T) {
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "Matter.SetConfig" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -243,7 +243,7 @@ func TestMatter_Enable(t *testing.T) {
 func TestMatter_Disable(t *testing.T) {
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "Matter.SetConfig" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -283,7 +283,7 @@ func TestMatter_IsEnabled(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mt := &mockTransport{
 				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+					method := req.GetMethod()
 					if method != "Matter.GetConfig" {
 						t.Errorf("unexpected method: %s", method)
 					}
@@ -330,7 +330,7 @@ func TestMatter_IsCommissionable(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mt := &mockTransport{
 				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+					method := req.GetMethod()
 					if method != "Matter.GetStatus" {
 						t.Errorf("unexpected method: %s", method)
 					}
@@ -382,7 +382,7 @@ func TestMatter_GetFabricsCount(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mt := &mockTransport{
 				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				method := req.GetMethod()
+					method := req.GetMethod()
 					if method != "Matter.GetStatus" {
 						t.Errorf("unexpected method: %s", method)
 					}
@@ -554,7 +554,7 @@ func TestMatter_ErrorHandling(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mt := &mockTransport{
 				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+					_ = req.GetMethod()
 					return nil, errTest
 				},
 			}
@@ -591,7 +591,7 @@ func TestNewMatter(t *testing.T) {
 func TestMatter_GetConfig_InvalidJSON(t *testing.T) {
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return jsonrpcResponse(`{invalid json}`)
 		},
 	}
@@ -608,7 +608,7 @@ func TestMatter_GetConfig_InvalidJSON(t *testing.T) {
 func TestMatter_GetStatus_InvalidJSON(t *testing.T) {
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return jsonrpcResponse(`{invalid json}`)
 		},
 	}
@@ -626,7 +626,7 @@ func TestMatter_IsEnabled_Error(t *testing.T) {
 	errTest := errors.New("test error")
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -644,7 +644,7 @@ func TestMatter_IsCommissionable_Error(t *testing.T) {
 	errTest := errors.New("test error")
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -662,7 +662,7 @@ func TestMatter_GetFabricsCount_Error(t *testing.T) {
 	errTest := errors.New("test error")
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -680,7 +680,7 @@ func TestMatter_Enable_Error(t *testing.T) {
 	errTest := errors.New("test error")
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -698,7 +698,7 @@ func TestMatter_Disable_Error(t *testing.T) {
 	errTest := errors.New("test error")
 	mt := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-				_ = req.GetMethod()
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}

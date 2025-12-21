@@ -112,7 +112,7 @@ func TestDevicePower_SetConfig(t *testing.T) {
 
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "DevicePower.SetConfig" {
 				t.Errorf("method = %q, want %q", method, "DevicePower.SetConfig")
 			}

@@ -12,17 +12,21 @@ type batchRPCRequest struct {
 	requests []*Request
 }
 
-func (b *batchRPCRequest) GetID() any            { return nil }
-func (b *batchRPCRequest) GetMethod() string     { return "" }
+func (b *batchRPCRequest) GetID() any        { return nil }
+func (b *batchRPCRequest) GetMethod() string { return "" }
 func (b *batchRPCRequest) GetParams() json.RawMessage {
 	// Marshal the batch of requests as params
-	data, _ := json.Marshal(b.requests)
+	// This should never fail as we're marshaling known valid Request structs
+	data, err := json.Marshal(b.requests)
+	if err != nil {
+		return nil
+	}
 	return data
 }
-func (b *batchRPCRequest) GetAuth() any          { return nil }
-func (b *batchRPCRequest) GetJSONRPC() string    { return "" }
-func (b *batchRPCRequest) IsREST() bool          { return false }
-func (b *batchRPCRequest) IsBatch() bool         { return true }
+func (b *batchRPCRequest) GetAuth() any            { return nil }
+func (b *batchRPCRequest) GetJSONRPC() string      { return "" }
+func (b *batchRPCRequest) IsREST() bool            { return false }
+func (b *batchRPCRequest) IsBatch() bool           { return true }
 func (b *batchRPCRequest) GetRequests() []*Request { return b.requests }
 
 // Batch represents a collection of RPC requests to be executed together.

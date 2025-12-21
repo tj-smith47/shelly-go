@@ -127,7 +127,7 @@ func TestRGBW_SetInvalidJSON(t *testing.T) {
 func TestRGBW_Toggle(t *testing.T) {
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "RGBW.Toggle" {
 				t.Errorf("method = %q, want %q", method, "RGBW.Toggle")
 			}
@@ -173,7 +173,7 @@ func TestRGBW_ToggleInvalidJSON(t *testing.T) {
 func TestRGBW_GetConfig(t *testing.T) {
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "RGBW.GetConfig" {
 				t.Errorf("method = %q, want %q", method, "RGBW.GetConfig")
 			}
@@ -224,7 +224,7 @@ func TestRGBW_GetConfigError(t *testing.T) {
 func TestRGBW_SetConfig(t *testing.T) {
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "RGBW.SetConfig" {
 				t.Errorf("method = %q, want %q", method, "RGBW.SetConfig")
 			}
@@ -259,7 +259,7 @@ func TestRGBW_SetConfigError(t *testing.T) {
 func TestRGBW_GetStatus(t *testing.T) {
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "RGBW.GetStatus" {
 				t.Errorf("method = %q, want %q", method, "RGBW.GetStatus")
 			}
@@ -315,7 +315,7 @@ func TestRGBW_GetStatusError(t *testing.T) {
 func TestRGBW_ResetCounters(t *testing.T) {
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "RGBW.ResetCounters" {
 				t.Errorf("method = %q, want %q", method, "RGBW.ResetCounters")
 			}

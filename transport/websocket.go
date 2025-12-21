@@ -40,14 +40,6 @@ type WebSocket struct {
 	closed         bool
 }
 
-// rpcRequest represents a JSON-RPC request.
-type rpcRequest struct {
-	Params any    `json:"params,omitempty"`
-	Src    string `json:"src"`
-	Method string `json:"method"`
-	ID     int64  `json:"id"`
-}
-
 // rpcResponse represents a JSON-RPC response.
 type rpcResponse struct {
 	Error  *rpcError       `json:"error,omitempty"`
@@ -69,6 +61,20 @@ type rpcNotification struct {
 	Dst    string          `json:"dst,omitempty"`
 	Method string          `json:"method"`
 	Params json.RawMessage `json:"params,omitempty"`
+}
+
+// toInt64ID converts an interface ID to int64, returning -1 if not a numeric type.
+func toInt64ID(id any) int64 {
+	switch v := id.(type) {
+	case int64:
+		return v
+	case uint64:
+		return int64(v)
+	case int:
+		return int64(v)
+	default:
+		return -1
+	}
 }
 
 // NewWebSocket creates a new WebSocket transport.
@@ -184,15 +190,8 @@ func (w *WebSocket) Call(ctx context.Context, rpcReq RPCRequest) (json.RawMessag
 	}
 
 	// Get request ID for response correlation
-	var requestID int64
-	switch id := rpcReq.GetID().(type) {
-	case int64:
-		requestID = id
-	case uint64:
-		requestID = int64(id)
-	case int:
-		requestID = int64(id)
-	default:
+	requestID := toInt64ID(rpcReq.GetID())
+	if requestID < 0 {
 		requestID = w.requestID.Add(1)
 		reqBody["id"] = requestID
 	}

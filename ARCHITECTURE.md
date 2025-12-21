@@ -67,8 +67,18 @@ Common types, interfaces, and errors used across all packages.
 ```go
 // Core interfaces
 type Transport interface {
-    Call(ctx context.Context, method string, params any) (json.RawMessage, error)
+    Call(ctx context.Context, req RPCRequest) (json.RawMessage, error)
     Close() error
+}
+
+// RPCRequest represents a request that can be sent via transport
+type RPCRequest interface {
+    GetID() any
+    GetJSONRPC() string
+    GetMethod() string
+    GetParams() json.RawMessage
+    GetAuth() any
+    IsREST() bool  // True for Gen1 REST-style requests
 }
 
 // Generation identifiers
@@ -386,9 +396,11 @@ type MockTransport struct {
     responses map[string]json.RawMessage
 }
 
-func (m *MockTransport) Call(ctx context.Context, method string, params any) (json.RawMessage, error) {
-    return m.responses[method], nil
+func (m *MockTransport) Call(ctx context.Context, req types.RPCRequest) (json.RawMessage, error) {
+    return m.responses[req.GetMethod()], nil
 }
+
+func (m *MockTransport) Close() error { return nil }
 
 // Use in tests
 transport := &MockTransport{

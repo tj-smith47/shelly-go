@@ -215,7 +215,7 @@ func TestLight_GetConfig(t *testing.T) {
 
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "Light.GetConfig" {
 				t.Errorf("method = %q, want %q", method, "Light.GetConfig")
 			}
@@ -289,7 +289,7 @@ func TestLight_SetConfig(t *testing.T) {
 
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "Light.SetConfig" {
 				t.Errorf("method = %q, want %q", method, "Light.SetConfig")
 			}
@@ -312,8 +312,8 @@ func TestLight_SetConfig_AutoSetID(t *testing.T) {
 
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					_ = req.GetMethod()
-					return jsonrpcResponse(`{}`)
+			_ = req.GetMethod()
+			return jsonrpcResponse(`{}`)
 		},
 	}
 	client := rpc.NewClient(tr)
@@ -344,7 +344,7 @@ func TestLight_GetStatus(t *testing.T) {
 
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					method := req.GetMethod()
+			method := req.GetMethod()
 			if method != "Light.GetStatus" {
 				t.Errorf("method = %q, want %q", method, "Light.GetStatus")
 			}
@@ -406,8 +406,8 @@ func TestLight_GetStatus_WithErrors(t *testing.T) {
 
 	tr := &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-					_ = req.GetMethod()
-					return jsonrpcResponse(result)
+			_ = req.GetMethod()
+			return jsonrpcResponse(result)
 		},
 	}
 	client := rpc.NewClient(tr)

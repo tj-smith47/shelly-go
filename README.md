@@ -50,7 +50,7 @@ func main() {
 
     // Control a switch
     sw := components.NewSwitch(client, 0)
-    err := sw.Set(context.Background(), true)
+    _, err := sw.Set(context.Background(), &components.SwitchSetParams{On: true})
     if err != nil {
         log.Fatal(err)
     }
@@ -60,7 +60,7 @@ func main() {
     if err != nil {
         log.Fatal(err)
     }
-    fmt.Printf("Switch is %s\n", status.Output)
+    fmt.Printf("Switch is on: %v\n", status.Output)
 }
 ```
 
