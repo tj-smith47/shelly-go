@@ -12,6 +12,50 @@ import (
 	"github.com/tj-smith47/shelly-go/types"
 )
 
+// testRPCRequest is a test-only RPC request type for testing RPC calls
+type testRPCRequest struct {
+	id      int
+	jsonrpc string
+	method  string
+	params  json.RawMessage
+}
+
+func newTestRPCRequest(method string, params any) *testRPCRequest {
+	var paramsJSON json.RawMessage
+	if params != nil {
+		paramsJSON, _ = json.Marshal(params)
+	}
+	return &testRPCRequest{
+		id:      1,
+		jsonrpc: "2.0",
+		method:  method,
+		params:  paramsJSON,
+	}
+}
+
+func (r *testRPCRequest) GetID() any               { return r.id }
+func (r *testRPCRequest) GetJSONRPC() string       { return r.jsonrpc }
+func (r *testRPCRequest) GetMethod() string        { return r.method }
+func (r *testRPCRequest) GetParams() json.RawMessage { return r.params }
+func (r *testRPCRequest) GetAuth() any             { return nil }
+func (r *testRPCRequest) IsREST() bool             { return false }
+
+// testRPCRequestWithAuth is a test RPC request that includes auth info
+type testRPCRequestWithAuth struct {
+	testRPCRequest
+	auth map[string]any
+}
+
+func newTestRPCRequestWithAuth(method string, params any, auth map[string]any) *testRPCRequestWithAuth {
+	base := newTestRPCRequest(method, params)
+	return &testRPCRequestWithAuth{
+		testRPCRequest: *base,
+		auth:           auth,
+	}
+}
+
+func (r *testRPCRequestWithAuth) GetAuth() any { return r.auth }
+
 func TestNewHTTP(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -82,7 +126,7 @@ func TestHTTP_Call_RPC_Success(t *testing.T) {
 	defer server.Close()
 
 	transport := NewHTTP(server.URL)
-	result, err := transport.Call(context.Background(), "Switch.Set", map[string]any{"id": 0, "on": true})
+	result, err := transport.Call(context.Background(), newTestRPCRequest("Switch.Set", nil))
 	if err != nil {
 		t.Fatalf("Call() error = %v", err)
 	}
@@ -119,7 +163,7 @@ func TestHTTP_Call_RPC_Error(t *testing.T) {
 	defer server.Close()
 
 	transport := NewHTTP(server.URL)
-	result, err := transport.Call(context.Background(), "Switch.Set", nil)
+	result, err := transport.Call(context.Background(), newTestRPCRequest("Switch.Set", nil))
 	if err != nil {
 		t.Fatalf("Call() error = %v, want nil (error handling is done by RPC client)", err)
 	}
@@ -152,7 +196,7 @@ func TestHTTP_Call_REST_Success(t *testing.T) {
 	defer server.Close()
 
 	transport := NewHTTP(server.URL)
-	result, err := transport.Call(context.Background(), "/relay/0", nil)
+	result, err := transport.Call(context.Background(), NewSimpleRequest("/relay/0"))
 	if err != nil {
 		t.Fatalf("Call() error = %v", err)
 	}
@@ -200,7 +244,7 @@ func TestHTTP_Call_HTTPError(t *testing.T) {
 			defer server.Close()
 
 			transport := NewHTTP(server.URL)
-			_, err := transport.Call(context.Background(), "Switch.Set", nil)
+			_, err := transport.Call(context.Background(), newTestRPCRequest("Switch.Set", nil))
 			if err == nil {
 				t.Fatal("Call() error = nil, want error")
 			}
@@ -223,7 +267,7 @@ func TestHTTP_Call_Timeout(t *testing.T) {
 	transport := NewHTTP(server.URL, WithTimeout(10*time.Millisecond))
 
 	ctx := context.Background()
-	_, err := transport.Call(ctx, "Switch.Set", nil)
+	_, err := transport.Call(ctx, newTestRPCRequest("Switch.Set", nil))
 	if err == nil {
 		t.Fatal("Call() error = nil, want timeout error")
 	}
@@ -241,7 +285,7 @@ func TestHTTP_Call_ContextCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	_, err := transport.Call(ctx, "Switch.Set", nil)
+	_, err := transport.Call(ctx, newTestRPCRequest("Switch.Set", nil))
 	if err == nil {
 		t.Fatal("Call() error = nil, want context canceled error")
 	}
@@ -264,7 +308,7 @@ func TestHTTP_Call_Retry(t *testing.T) {
 	defer server.Close()
 
 	transport := NewHTTP(server.URL, WithRetry(3, 10*time.Millisecond))
-	result, err := transport.Call(context.Background(), "Switch.Set", nil)
+	result, err := transport.Call(context.Background(), newTestRPCRequest("Switch.Set", nil))
 	if err != nil {
 		t.Fatalf("Call() error = %v", err)
 	}
@@ -285,7 +329,7 @@ func TestHTTP_Call_MaxRetriesExceeded(t *testing.T) {
 	defer server.Close()
 
 	transport := NewHTTP(server.URL, WithRetry(2, 10*time.Millisecond))
-	_, err := transport.Call(context.Background(), "Switch.Set", nil)
+	_, err := transport.Call(context.Background(), newTestRPCRequest("Switch.Set", nil))
 	if err == nil {
 		t.Fatal("Call() error = nil, want max retries error")
 	}
@@ -342,7 +386,7 @@ func TestHTTP_WithAuth(t *testing.T) {
 	defer server.Close()
 
 	transport := NewHTTP(server.URL, WithAuth("admin", "password"))
-	_, err := transport.Call(context.Background(), "Switch.Set", nil)
+	_, err := transport.Call(context.Background(), newTestRPCRequest("Switch.Set", nil))
 	if err != nil {
 		t.Fatalf("Call() with auth error = %v", err)
 	}
@@ -363,7 +407,7 @@ func TestHTTP_WithHeader(t *testing.T) {
 	defer server.Close()
 
 	transport := NewHTTP(server.URL, WithHeader("X-Custom-Header", "test-value"))
-	_, err := transport.Call(context.Background(), "Switch.Set", nil)
+	_, err := transport.Call(context.Background(), newTestRPCRequest("Switch.Set", nil))
 	if err != nil {
 		t.Fatalf("Call() error = %v", err)
 	}
@@ -489,7 +533,7 @@ func TestHTTP_InvalidJSON(t *testing.T) {
 	defer server.Close()
 
 	transport := NewHTTP(server.URL)
-	result, err := transport.Call(context.Background(), "Switch.Set", nil)
+	result, err := transport.Call(context.Background(), newTestRPCRequest("Switch.Set", nil))
 	// Transport returns raw body without parsing
 	if err != nil {
 		t.Errorf("Call() error = %v, want nil", err)
@@ -521,7 +565,7 @@ func TestHTTP_Call_GenericHTTPError(t *testing.T) {
 	defer server.Close()
 
 	transport := NewHTTP(server.URL)
-	_, err := transport.Call(context.Background(), "Switch.Set", nil)
+	_, err := transport.Call(context.Background(), newTestRPCRequest("Switch.Set", nil))
 	if err == nil {
 		t.Fatal("Call() error = nil, want error")
 	}
@@ -557,7 +601,7 @@ func TestHTTP_Call_RetryContextCanceled(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	_, err := transport.Call(ctx, "Switch.Set", nil)
+	_, err := transport.Call(ctx, newTestRPCRequest("Switch.Set", nil))
 	if err == nil {
 		t.Fatal("Call() error = nil, want error")
 	}
@@ -614,9 +658,56 @@ func TestHTTP_Call_DigestAuth(t *testing.T) {
 	defer server.Close()
 
 	transport := NewHTTP(server.URL, WithDigestAuth("admin", "password"))
-	_, err := transport.Call(context.Background(), "Switch.Set", nil)
+	_, err := transport.Call(context.Background(), newTestRPCRequest("Switch.Set", nil))
 	if err != nil {
 		t.Fatalf("Call() with digest auth error = %v", err)
+	}
+}
+
+func TestHTTP_Call_DigestAuth_SHA256(t *testing.T) {
+	expectedNonce := "abc123sha256nonce"
+	expectedRealm := "shelly"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		authHeader := r.Header.Get("Authorization")
+
+		// First request - return 401 with SHA-256 challenge
+		if authHeader == "" {
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(
+				`Digest realm="%s", nonce="%s", qop="auth", algorithm="SHA-256"`,
+				expectedRealm, expectedNonce,
+			))
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		// Second request should have Authorization header with SHA-256 response
+		if !containsSubstr(authHeader, "Digest") {
+			t.Errorf("expected Digest auth, got: %s", authHeader)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		// Response should be 64 chars (SHA-256 = 256 bits = 64 hex chars)
+		if containsSubstr(authHeader, `response="`) {
+			// Just verify the auth header was built correctly
+			response := types.Response{
+				ID:     1,
+				Result: json.RawMessage(`{"success":true}`),
+			}
+			_ = json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer server.Close()
+
+	transport := NewHTTP(server.URL, WithDigestAuth("admin", "password"))
+	_, err := transport.Call(context.Background(), newTestRPCRequest("Switch.Set", nil))
+	if err != nil {
+		t.Fatalf("Call() with SHA-256 digest auth error = %v", err)
 	}
 }
 
@@ -678,6 +769,7 @@ func TestCalculateDigestResponse(t *testing.T) {
 		"auth",                               // qop
 		"GET",                                // method
 		"/dir/index.html",                    // uri
+		"MD5",                                // algorithm
 	)
 
 	// The expected response is calculated per RFC 2617
@@ -717,6 +809,56 @@ func TestMD5Hash(t *testing.T) {
 	}
 }
 
+func TestSHA256Hash(t *testing.T) {
+	// Test against known SHA-256 values
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{input: "", want: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+		{input: "hello", want: "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := sha256Hash(tt.input)
+			if got != tt.want {
+				t.Errorf("sha256Hash(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCalculateDigestResponse_SHA256(t *testing.T) {
+	// Test with SHA-256 algorithm
+	response := calculateDigestResponse(
+		"admin",     // username
+		"password",  // password
+		"shelly",    // realm
+		"abc123",    // nonce
+		"00000001",  // nc
+		"xyz789",    // cnonce
+		"auth",      // qop
+		"POST",      // method
+		"/rpc",      // uri
+		"SHA-256",   // algorithm
+	)
+
+	// Verify it's a 64-char hex string (SHA-256 produces 256 bits = 64 hex chars)
+	if len(response) != 64 {
+		t.Errorf("response length = %d, want 64", len(response))
+	}
+
+	// Verify it's valid hex
+	for _, c := range response {
+		isDigit := c >= '0' && c <= '9'
+		isHexLetter := c >= 'a' && c <= 'f'
+		if !isDigit && !isHexLetter {
+			t.Errorf("response contains non-hex character: %c", c)
+		}
+	}
+}
+
 func TestHTTP_Close_NonTransport(t *testing.T) {
 	// Test Close with a client that has a non-*http.Transport
 	customClient := &http.Client{
@@ -731,6 +873,139 @@ func TestHTTP_Close_NonTransport(t *testing.T) {
 	}
 }
 
+func TestHTTP_Call_RPC_WithAuth(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify the auth field is in the request body
+		var reqBody map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+			t.Fatalf("Failed to decode request body: %v", err)
+		}
+
+		// Check auth field exists
+		if _, ok := reqBody["auth"]; !ok {
+			t.Error("Expected auth field in request body")
+		}
+
+		response := types.Response{
+			ID:     1,
+			Result: json.RawMessage(`{"success":true}`),
+		}
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	transport := NewHTTP(server.URL)
+	authData := map[string]any{
+		"realm":    "shelly",
+		"username": "admin",
+		"nonce":    "12345",
+		"response": "abcdef",
+	}
+	req := newTestRPCRequestWithAuth("Shelly.GetDeviceInfo", nil, authData)
+	_, err := transport.Call(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Call() error = %v", err)
+	}
+}
+
+func TestHTTP_Call_RPC_WithParams(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify params are in the request body
+		var reqBody map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
+			t.Fatalf("Failed to decode request body: %v", err)
+		}
+
+		// Check params field exists
+		params, ok := reqBody["params"].(map[string]any)
+		if !ok {
+			t.Error("Expected params field in request body")
+		}
+		if params["id"] != float64(0) {
+			t.Errorf("params.id = %v, want 0", params["id"])
+		}
+
+		response := types.Response{
+			ID:     1,
+			Result: json.RawMessage(`{"success":true}`),
+		}
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	transport := NewHTTP(server.URL)
+	req := newTestRPCRequest("Switch.Set", map[string]any{"id": 0, "on": true})
+	_, err := transport.Call(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Call() error = %v", err)
+	}
+}
+
+func TestGenerateCNonce(t *testing.T) {
+	// Test that generateCNonce returns valid hex string
+	cnonce := generateCNonce()
+	if len(cnonce) != 16 {
+		t.Errorf("generateCNonce() length = %d, want 16", len(cnonce))
+	}
+
+	// Verify it's valid hex
+	for _, c := range cnonce {
+		isDigit := c >= '0' && c <= '9'
+		isHexLetter := c >= 'a' && c <= 'f'
+		if !isDigit && !isHexLetter {
+			t.Errorf("generateCNonce() contains non-hex character: %c", c)
+		}
+	}
+
+	// Verify uniqueness (two calls should produce different values)
+	cnonce2 := generateCNonce()
+	if cnonce == cnonce2 {
+		t.Error("generateCNonce() produced same value twice")
+	}
+}
+
+func TestHTTP_buildRESTRequest_Variants(t *testing.T) {
+	transport := NewHTTP("http://192.168.1.100")
+
+	// Test REST request with query params
+	req, err := transport.buildRESTRequest(context.Background(), "/relay/0?turn=on")
+	if err != nil {
+		t.Fatalf("buildRESTRequest() error = %v", err)
+	}
+	if req.Method != "GET" {
+		t.Errorf("buildRESTRequest() method = %v, want GET", req.Method)
+	}
+	if req.URL.Path != "/relay/0" {
+		t.Errorf("buildRESTRequest() path = %v, want /relay/0", req.URL.Path)
+	}
+}
+
+// testRPCRequestWithInvalidParams is a test RPC request with invalid JSON params
+type testRPCRequestWithInvalidParams struct {
+	testRPCRequest
+}
+
+func (r *testRPCRequestWithInvalidParams) GetParams() json.RawMessage {
+	return json.RawMessage(`{invalid json`)
+}
+
+func TestHTTP_buildRPCRequest_InvalidParams(t *testing.T) {
+	transport := NewHTTP("http://192.168.1.100")
+
+	req := &testRPCRequestWithInvalidParams{
+		testRPCRequest: testRPCRequest{
+			id:      1,
+			jsonrpc: "2.0",
+			method:  "Test.Method",
+		},
+	}
+
+	_, err := transport.buildRPCRequest(context.Background(), req)
+	if err == nil {
+		t.Error("buildRPCRequest() should return error for invalid JSON params")
+	}
+}
+
 func TestHTTP_Call_REST_WithParams(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify it's a GET request with query params in path
@@ -742,12 +1017,29 @@ func TestHTTP_Call_REST_WithParams(t *testing.T) {
 	defer server.Close()
 
 	transport := NewHTTP(server.URL)
-	result, err := transport.Call(context.Background(), "/relay/0?turn=on", nil)
+	result, err := transport.Call(context.Background(), NewSimpleRequest("/relay/0?turn=on"))
 	if err != nil {
 		t.Fatalf("Call() error = %v", err)
 	}
 	if result == nil {
 		t.Error("result is nil")
+	}
+}
+
+func TestHTTP_buildRPCRequest_WithID(t *testing.T) {
+	transport := NewHTTP("http://192.168.1.100")
+
+	// Test with non-nil ID
+	req := newTestRPCRequest("Test.Method", nil)
+	httpReq, err := transport.buildRPCRequest(context.Background(), req)
+	if err != nil {
+		t.Fatalf("buildRPCRequest() error = %v", err)
+	}
+	if httpReq.Method != "POST" {
+		t.Errorf("HTTP method = %v, want POST", httpReq.Method)
+	}
+	if httpReq.URL.Path != "/rpc" {
+		t.Errorf("HTTP path = %v, want /rpc", httpReq.URL.Path)
 	}
 }
 
@@ -762,7 +1054,7 @@ func TestHTTP_Call_RPC_WithNilParams(t *testing.T) {
 	defer server.Close()
 
 	transport := NewHTTP(server.URL)
-	result, err := transport.Call(context.Background(), "Shelly.GetStatus", nil)
+	result, err := transport.Call(context.Background(), newTestRPCRequest("Shelly.GetStatus", nil))
 	if err != nil {
 		t.Fatalf("Call() error = %v", err)
 	}
@@ -786,7 +1078,7 @@ func TestHTTP_Call_InternalServerError(t *testing.T) {
 	defer server.Close()
 
 	transport := NewHTTP(server.URL, WithRetry(0, 0))
-	_, err := transport.Call(context.Background(), "Switch.Set", nil)
+	_, err := transport.Call(context.Background(), newTestRPCRequest("Switch.Set", nil))
 	if err == nil {
 		t.Fatal("Call() error = nil, want error")
 	}

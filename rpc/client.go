@@ -124,8 +124,8 @@ func (c *Client) Call(ctx context.Context, method string, params any) (json.RawM
 		req.WithAuth(c.auth)
 	}
 
-	// Execute request via transport (pass the request struct, transport handles JSON encoding)
-	responseData, err := c.transport.Call(ctx, method, req)
+	// Execute request via transport (transport now uses RPCRequest interface)
+	responseData, err := c.transport.Call(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -184,7 +184,7 @@ func (c *Client) Notify(ctx context.Context, method string, params any) error {
 	}
 
 	// Send notification via transport (ignore response)
-	_, err = c.transport.Call(ctx, method, req)
+	_, err = c.transport.Call(ctx, req)
 	if err != nil {
 		return fmt.Errorf("notification failed: %w", err)
 	}

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+
+	"github.com/tj-smith47/shelly-go/transport"
 )
 
 // testComponentError tests that a component method properly handles RPC errors.
@@ -63,8 +65,9 @@ func testComponentInvalidJSON(t *testing.T, methodName string, fn func() error) 
 //	client := rpc.NewClient(transport)
 func errorTransport(err error) *mockTransport {
 	return &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-			return nil, err
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					_ = req.GetMethod()
+					return nil, err
 		},
 	}
 }
@@ -79,8 +82,9 @@ func errorTransport(err error) *mockTransport {
 //	client := rpc.NewClient(transport)
 func invalidJSONTransport() *mockTransport {
 	return &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-			return json.RawMessage(`{invalid`), nil
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					_ = req.GetMethod()
+					return json.RawMessage(`{invalid`), nil
 		},
 	}
 }

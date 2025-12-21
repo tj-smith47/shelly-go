@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tj-smith47/shelly-go/transport"
 	"github.com/tj-smith47/shelly-go/types"
 )
 
@@ -37,7 +38,8 @@ func (m *mockTransport) SetError(path string, err error) {
 	m.errors[path] = err
 }
 
-func (m *mockTransport) Call(ctx context.Context, method string, params any) (json.RawMessage, error) {
+func (m *mockTransport) Call(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+	method := req.GetMethod()
 	m.calls = append(m.calls, method)
 
 	if err, ok := m.errors[method]; ok {

@@ -136,17 +136,17 @@ type EMDataValues struct {
 
 // EMDataGetDataParams contains parameters for the GetData method.
 type EMDataGetDataParams struct {
-	TS    *int64 `json:"ts,omitempty"`
-	EndTS *int64 `json:"end_ts,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	TS              *int64 `json:"ts,omitempty"`
+	EndTS           *int64 `json:"end_ts,omitempty"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // EMDataGetRecordsParams contains parameters for the GetRecords method.
 type EMDataGetRecordsParams struct {
-	TS *int64 `json:"ts,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	TS              *int64 `json:"ts,omitempty"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // GetStatus retrieves the current EMData status.

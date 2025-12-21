@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/tj-smith47/shelly-go/rpc"
+	"github.com/tj-smith47/shelly-go/transport"
 )
 
 func TestNewWiFi(t *testing.T) {
@@ -94,7 +95,8 @@ func TestWiFi_GetConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "Wifi.GetConfig" {
 						t.Errorf("unexpected method call: %s", method)
 					}
@@ -246,7 +248,8 @@ func TestWiFi_SetConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "Wifi.SetConfig" {
 						t.Errorf("method = %q, want %q", method, "Wifi.SetConfig")
 					}
@@ -325,7 +328,8 @@ func TestWiFi_GetStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "Wifi.GetStatus" {
 						t.Errorf("unexpected method call: %s", method)
 					}
@@ -445,7 +449,8 @@ func TestWiFi_Scan(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "Wifi.Scan" {
 						t.Errorf("unexpected method call: %s", method)
 					}
@@ -540,7 +545,8 @@ func TestWiFi_ListAPClients(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "Wifi.ListAPClients" {
 						t.Errorf("unexpected method call: %s", method)
 					}
@@ -730,8 +736,9 @@ func TestWiFiScanResult_AllAuthTypes(t *testing.T) {
 
 func TestWiFi_ContextCancellation(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-			select {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					_ = req.GetMethod()
+					select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			default:

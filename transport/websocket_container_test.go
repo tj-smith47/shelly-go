@@ -124,7 +124,7 @@ func TestWebSocket_Call_WithMockServer(t *testing.T) {
 	defer ws.Close()
 
 	// Call GetDeviceInfo
-	result, err := ws.Call(ctx, "Shelly.GetDeviceInfo", nil)
+	result, err := ws.Call(ctx, NewSimpleRequest("Shelly.GetDeviceInfo"))
 	if err != nil {
 		t.Fatalf("Call() error = %v", err)
 	}
@@ -160,8 +160,7 @@ func TestWebSocket_Call_SwitchSet_WithMockServer(t *testing.T) {
 	defer ws.Close()
 
 	// Call Switch.Set
-	params := map[string]any{"id": 0, "on": true}
-	result, err := ws.Call(ctx, "Switch.Set", params)
+	result, err := ws.Call(ctx, NewSimpleRequest("Switch.Set"))
 	if err != nil {
 		t.Fatalf("Call() error = %v", err)
 	}
@@ -189,7 +188,7 @@ func TestWebSocket_MultipleCalls_WithMockServer(t *testing.T) {
 
 	// Make multiple sequential calls
 	for i := 0; i < 5; i++ {
-		_, err := ws.Call(ctx, "Shelly.GetDeviceInfo", nil)
+		_, err := ws.Call(ctx, NewSimpleRequest("Shelly.GetDeviceInfo"))
 		if err != nil {
 			t.Fatalf("Call() %d error = %v", i, err)
 		}
@@ -237,7 +236,7 @@ func TestWebSocket_CallAfterClose_WithMockServer(t *testing.T) {
 	ws.Close()
 
 	// Call after close should error
-	_, err = ws.Call(ctx, "Shelly.GetDeviceInfo", nil)
+	_, err = ws.Call(ctx, NewSimpleRequest("Shelly.GetDeviceInfo"))
 	if err == nil {
 		t.Error("Call() after Close() should return error")
 	}
@@ -312,7 +311,7 @@ func TestWebSocket_Reconnect_WithMockServer(t *testing.T) {
 	}
 
 	// Make a call to verify connection works
-	_, err = ws.Call(ctx, "Shelly.GetDeviceInfo", nil)
+	_, err = ws.Call(ctx, NewSimpleRequest("Shelly.GetDeviceInfo"))
 	if err != nil {
 		t.Fatalf("Call() error = %v", err)
 	}
@@ -343,7 +342,7 @@ func TestWebSocket_ConcurrentCalls_WithMockServer(t *testing.T) {
 
 	for range numCalls {
 		go func() {
-			_, err := ws.Call(ctx, "Shelly.GetDeviceInfo", nil)
+			_, err := ws.Call(ctx, NewSimpleRequest("Shelly.GetDeviceInfo"))
 			errCh <- err
 		}()
 	}
@@ -510,7 +509,7 @@ func TestWebSocket_MultipleClients_WithMockServer(t *testing.T) {
 			t.Errorf("Client %d State() = %v, want StateConnected", i, c.State())
 		}
 
-		_, err := c.Call(ctx, "Shelly.GetDeviceInfo", nil)
+		_, err := c.Call(ctx, NewSimpleRequest("Shelly.GetDeviceInfo"))
 		if err != nil {
 			t.Errorf("Client %d Call() error = %v", i, err)
 		}
@@ -541,7 +540,7 @@ func TestWebSocket_CallWithContext(t *testing.T) {
 	cancelCtx, cancel := context.WithCancel(ctx)
 	cancel() // Cancel immediately
 
-	_, err = ws.Call(cancelCtx, "Shelly.GetDeviceInfo", nil)
+	_, err = ws.Call(cancelCtx, NewSimpleRequest("Shelly.GetDeviceInfo"))
 	if err == nil {
 		t.Error("Call() with canceled context should error")
 	}

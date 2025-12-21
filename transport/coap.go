@@ -335,7 +335,7 @@ func (c *CoAP) parseCoAPMessage(data []byte) (*CoIoTMessage, error) {
 // Note: CoAP for Gen1 devices is primarily used for receiving status updates.
 // For control commands, use the HTTP transport with REST API.
 // This method sends a CoAP request and waits for a response.
-func (c *CoAP) Call(ctx context.Context, method string, params any) (json.RawMessage, error) {
+func (c *CoAP) Call(ctx context.Context, req RPCRequest) (json.RawMessage, error) {
 	if c.isClosed() {
 		return nil, fmt.Errorf("CoAP transport is closed")
 	}

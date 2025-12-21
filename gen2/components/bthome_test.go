@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/tj-smith47/shelly-go/rpc"
+	"github.com/tj-smith47/shelly-go/transport"
 )
 
 func TestNewBTHome(t *testing.T) {
@@ -70,7 +71,8 @@ func TestBTHome_GetStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "BTHome.GetStatus" {
 						t.Errorf("unexpected method call: %s", method)
 					}
@@ -176,7 +178,8 @@ func TestBTHome_AddDevice(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "BTHome.AddDevice" {
 						t.Errorf("method = %q, want %q", method, "BTHome.AddDevice")
 					}
@@ -218,7 +221,8 @@ func TestBTHome_AddDevice_InvalidJSON(t *testing.T) {
 
 func TestBTHome_DeleteDevice(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "BTHome.DeleteDevice" {
 				t.Errorf("method = %q, want %q", method, "BTHome.DeleteDevice")
 			}
@@ -274,7 +278,8 @@ func TestBTHome_AddSensor(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "BTHome.AddSensor" {
 						t.Errorf("method = %q, want %q", method, "BTHome.AddSensor")
 					}
@@ -316,7 +321,8 @@ func TestBTHome_AddSensor_InvalidJSON(t *testing.T) {
 
 func TestBTHome_DeleteSensor(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "BTHome.DeleteSensor" {
 				t.Errorf("method = %q, want %q", method, "BTHome.DeleteSensor")
 			}
@@ -358,7 +364,8 @@ func TestBTHome_StartDeviceDiscovery(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "BTHome.StartDeviceDiscovery" {
 						t.Errorf("method = %q, want %q", method, "BTHome.StartDeviceDiscovery")
 					}
@@ -420,7 +427,8 @@ func TestBTHome_GetObjectInfos(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "BTHome.GetObjectInfos" {
 						t.Errorf("method = %q, want %q", method, "BTHome.GetObjectInfos")
 					}
@@ -518,8 +526,9 @@ func TestBTHomeStatus_JSONUnmarshal(t *testing.T) {
 
 func TestBTHome_ContextCancellation(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-			select {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					_ = req.GetMethod()
+					select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			default:

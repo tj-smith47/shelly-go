@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/tj-smith47/shelly-go/rpc"
+	"github.com/tj-smith47/shelly-go/transport"
 )
 
 func TestNewScript(t *testing.T) {
@@ -67,7 +68,8 @@ func TestScript_List(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "Script.List" {
 						t.Errorf("unexpected method call: %s", method)
 					}
@@ -133,7 +135,8 @@ func TestScript_Create(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "Script.Create" {
 						t.Errorf("method = %q, want %q", method, "Script.Create")
 					}
@@ -196,7 +199,8 @@ func TestScript_GetConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "Script.GetConfig" {
 						t.Errorf("unexpected method call: %s", method)
 					}
@@ -276,7 +280,8 @@ func TestScript_SetConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "Script.SetConfig" {
 						t.Errorf("method = %q, want %q", method, "Script.SetConfig")
 					}
@@ -334,7 +339,8 @@ func TestScript_GetStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "Script.GetStatus" {
 						t.Errorf("unexpected method call: %s", method)
 					}
@@ -410,7 +416,8 @@ func TestScript_GetCode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "Script.GetCode" {
 						t.Errorf("unexpected method call: %s", method)
 					}
@@ -476,7 +483,8 @@ func TestScript_PutCode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "Script.PutCode" {
 						t.Errorf("method = %q, want %q", method, "Script.PutCode")
 					}
@@ -504,7 +512,8 @@ func TestScript_PutCode_Error(t *testing.T) {
 
 func TestScript_Start(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Script.Start" {
 				t.Errorf("method = %q, want %q", method, "Script.Start")
 			}
@@ -530,7 +539,8 @@ func TestScript_Start_Error(t *testing.T) {
 
 func TestScript_Stop(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Script.Stop" {
 				t.Errorf("method = %q, want %q", method, "Script.Stop")
 			}
@@ -556,7 +566,8 @@ func TestScript_Stop_Error(t *testing.T) {
 
 func TestScript_Delete(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Script.Delete" {
 				t.Errorf("method = %q, want %q", method, "Script.Delete")
 			}
@@ -621,7 +632,8 @@ func TestScript_Eval(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "Script.Eval" {
 						t.Errorf("unexpected method call: %s", method)
 					}
@@ -717,8 +729,9 @@ func TestScriptConfig_JSONSerialization(t *testing.T) {
 
 func TestScript_ContextCancellation(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-			select {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					_ = req.GetMethod()
+					select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			default:

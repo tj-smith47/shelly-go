@@ -38,6 +38,11 @@ func NewDevice(t transport.Transport) *Device {
 	}
 }
 
+// restCall is a helper to make Gen1 REST API calls.
+func (d *Device) restCall(ctx context.Context, path string) (json.RawMessage, error) {
+	return d.transport.Call(ctx, transport.NewSimpleRequest(path))
+}
+
 // GetDeviceInfo retrieves and caches device information.
 //
 // This calls the /shelly endpoint to get device identification
@@ -65,7 +70,7 @@ func (d *Device) GetDeviceInfo(ctx context.Context) (*types.DeviceInfo, error) {
 
 // fetchDeviceInfo fetches device info from the /shelly endpoint.
 func (d *Device) fetchDeviceInfo(ctx context.Context) (*DeviceInfo, error) {
-	resp, err := d.transport.Call(ctx, "/shelly", nil)
+	resp, err := d.transport.Call(ctx, transport.NewSimpleRequest("/shelly"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get device info: %w", err)
 	}
@@ -89,7 +94,7 @@ func (d *Device) GetStatus(ctx context.Context) (any, error) {
 //
 // Returns a Status struct with all device component statuses.
 func (d *Device) GetFullStatus(ctx context.Context) (*Status, error) {
-	resp, err := d.transport.Call(ctx, "/status", nil)
+	resp, err := d.restCall(ctx, "/status")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get status: %w", err)
 	}
@@ -113,7 +118,7 @@ func (d *Device) GetConfig(ctx context.Context) (any, error) {
 //
 // Returns a Settings struct with all device configuration.
 func (d *Device) GetSettings(ctx context.Context) (*Settings, error) {
-	resp, err := d.transport.Call(ctx, "/settings", nil)
+	resp, err := d.restCall(ctx, "/settings")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get settings: %w", err)
 	}
@@ -131,7 +136,7 @@ func (d *Device) GetSettings(ctx context.Context) (*Settings, error) {
 // This calls the /reboot endpoint. The device will restart
 // and temporarily be unavailable.
 func (d *Device) Reboot(ctx context.Context) error {
-	_, err := d.transport.Call(ctx, "/reboot", nil)
+	_, err := d.restCall(ctx, "/reboot")
 	if err != nil {
 		return fmt.Errorf("failed to reboot: %w", err)
 	}
@@ -259,7 +264,7 @@ func (d *Device) Input(id int) *components.Input {
 // This calls the /reset endpoint. All settings will be reset
 // to factory defaults and the device will restart.
 func (d *Device) FactoryReset(ctx context.Context) error {
-	_, err := d.transport.Call(ctx, "/reset", nil)
+	_, err := d.restCall(ctx, "/reset")
 	if err != nil {
 		return fmt.Errorf("failed to factory reset: %w", err)
 	}
@@ -270,7 +275,7 @@ func (d *Device) FactoryReset(ctx context.Context) error {
 //
 // This calls the /ota/check endpoint to check for updates.
 func (d *Device) CheckForUpdate(ctx context.Context) (*UpdateInfo, error) {
-	resp, err := d.transport.Call(ctx, "/ota/check", nil)
+	resp, err := d.restCall(ctx, "/ota/check")
 	if err != nil {
 		return nil, fmt.Errorf("failed to check for update: %w", err)
 	}
@@ -293,7 +298,7 @@ func (d *Device) Update(ctx context.Context, url string) error {
 		endpoint = fmt.Sprintf("/ota?url=%s", url)
 	}
 
-	_, err := d.transport.Call(ctx, endpoint, nil)
+	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to start update: %w", err)
 	}
@@ -303,7 +308,7 @@ func (d *Device) Update(ctx context.Context, url string) error {
 // SetName sets the device name.
 func (d *Device) SetName(ctx context.Context, name string) error {
 	endpoint := fmt.Sprintf("/settings?name=%s", name)
-	_, err := d.transport.Call(ctx, endpoint, nil)
+	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set name: %w", err)
 	}
@@ -313,7 +318,7 @@ func (d *Device) SetName(ctx context.Context, name string) error {
 // SetTimezone sets the device timezone.
 func (d *Device) SetTimezone(ctx context.Context, timezone string) error {
 	endpoint := fmt.Sprintf("/settings?timezone=%s", timezone)
-	_, err := d.transport.Call(ctx, endpoint, nil)
+	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set timezone: %w", err)
 	}
@@ -323,7 +328,7 @@ func (d *Device) SetTimezone(ctx context.Context, timezone string) error {
 // SetLocation sets the device geographic location.
 func (d *Device) SetLocation(ctx context.Context, lat, lng float64) error {
 	endpoint := fmt.Sprintf("/settings?lat=%f&lng=%f", lat, lng)
-	_, err := d.transport.Call(ctx, endpoint, nil)
+	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set location: %w", err)
 	}
@@ -332,7 +337,7 @@ func (d *Device) SetLocation(ctx context.Context, lat, lng float64) error {
 
 // GetDebugLog retrieves device debug logs.
 func (d *Device) GetDebugLog(ctx context.Context) (string, error) {
-	resp, err := d.transport.Call(ctx, "/debug/log", nil)
+	resp, err := d.restCall(ctx, "/debug/log")
 	if err != nil {
 		return "", fmt.Errorf("failed to get debug log: %w", err)
 	}
@@ -354,7 +359,7 @@ func (d *Device) Transport() transport.Transport {
 // This method is useful for accessing endpoints not covered
 // by the typed methods.
 func (d *Device) Call(ctx context.Context, path string) (json.RawMessage, error) {
-	return d.transport.Call(ctx, path, nil)
+	return d.restCall(ctx, path)
 }
 
 // ClearCache clears the cached device info.

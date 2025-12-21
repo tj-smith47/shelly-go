@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/tj-smith47/shelly-go/rpc"
+	"github.com/tj-smith47/shelly-go/transport"
 )
 
 func TestNewDevicePower(t *testing.T) {
@@ -55,7 +56,8 @@ func TestDevicePower_GetConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "DevicePower.GetConfig" {
 						t.Errorf("unexpected method call: %s", method)
 					}
@@ -109,7 +111,8 @@ func TestDevicePower_SetConfig(t *testing.T) {
 	}
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "DevicePower.SetConfig" {
 				t.Errorf("method = %q, want %q", method, "DevicePower.SetConfig")
 			}
@@ -270,7 +273,8 @@ func TestDevicePower_GetStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "DevicePower.GetStatus" {
 						t.Errorf("unexpected method call: %s", method)
 					}

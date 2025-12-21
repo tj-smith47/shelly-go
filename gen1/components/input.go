@@ -56,7 +56,7 @@ type InputConfig struct {
 // GetStatus retrieves the current input status.
 func (i *Input) GetStatus(ctx context.Context) (*InputStatus, error) {
 	// Input status is part of device status, need to parse from /status
-	resp, err := i.transport.Call(ctx, "/status", nil)
+	resp, err := restCall(ctx, i.transport, "/status")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get status: %w", err)
 	}
@@ -122,7 +122,7 @@ func (i *Input) GetEventCount(ctx context.Context) (int, error) {
 func (i *Input) SetButtonType(ctx context.Context, btnType string) error {
 	// Button type is typically set per-relay
 	path := fmt.Sprintf("/settings/relay/%d?btn_type=%s", i.id, btnType)
-	_, err := i.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, i.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set button type: %w", err)
 	}
@@ -136,7 +136,7 @@ func (i *Input) SetButtonReverse(ctx context.Context, reverse bool) error {
 		val = boolTrue
 	}
 	path := fmt.Sprintf("/settings/relay/%d?btn_reverse=%s", i.id, val)
-	_, err := i.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, i.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set button reverse: %w", err)
 	}

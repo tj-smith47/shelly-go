@@ -64,7 +64,7 @@ type LightConfig struct {
 // GetStatus retrieves the current light status.
 func (l *Light) GetStatus(ctx context.Context) (*LightStatus, error) {
 	path := fmt.Sprintf("/light/%d", l.id)
-	resp, err := l.transport.Call(ctx, path, nil)
+	resp, err := restCall(ctx, l.transport, path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get light status: %w", err)
 	}
@@ -80,7 +80,7 @@ func (l *Light) GetStatus(ctx context.Context) (*LightStatus, error) {
 // TurnOn turns the light on.
 func (l *Light) TurnOn(ctx context.Context) error {
 	path := fmt.Sprintf("/light/%d?turn=on", l.id)
-	_, err := l.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, l.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to turn light on: %w", err)
 	}
@@ -90,7 +90,7 @@ func (l *Light) TurnOn(ctx context.Context) error {
 // TurnOff turns the light off.
 func (l *Light) TurnOff(ctx context.Context) error {
 	path := fmt.Sprintf("/light/%d?turn=off", l.id)
-	_, err := l.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, l.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to turn light off: %w", err)
 	}
@@ -100,7 +100,7 @@ func (l *Light) TurnOff(ctx context.Context) error {
 // Toggle toggles the light state.
 func (l *Light) Toggle(ctx context.Context) error {
 	path := fmt.Sprintf("/light/%d?turn=toggle", l.id)
-	_, err := l.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, l.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to toggle light: %w", err)
 	}
@@ -125,7 +125,7 @@ func (l *Light) SetBrightness(ctx context.Context, brightness int) error {
 	}
 
 	path := fmt.Sprintf("/light/%d?brightness=%d", l.id, brightness)
-	_, err := l.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, l.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set brightness: %w", err)
 	}
@@ -143,7 +143,7 @@ func (l *Light) SetBrightnessWithTransition(ctx context.Context, brightness, tra
 	}
 
 	path := fmt.Sprintf("/light/%d?brightness=%d&transition=%d", l.id, brightness, transitionMs)
-	_, err := l.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, l.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set brightness: %w", err)
 	}
@@ -160,7 +160,7 @@ func (l *Light) TurnOnWithBrightness(ctx context.Context, brightness int) error 
 	}
 
 	path := fmt.Sprintf("/light/%d?turn=on&brightness=%d", l.id, brightness)
-	_, err := l.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, l.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to turn on with brightness: %w", err)
 	}
@@ -173,7 +173,7 @@ func (l *Light) TurnOnWithBrightness(ctx context.Context, brightness int) error 
 //   - duration: Timer duration in seconds
 func (l *Light) TurnOnForDuration(ctx context.Context, duration int) error {
 	path := fmt.Sprintf("/light/%d?turn=on&timer=%d", l.id, duration)
-	_, err := l.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, l.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to turn on with timer: %w", err)
 	}
@@ -186,7 +186,7 @@ func (l *Light) TurnOnForDuration(ctx context.Context, duration int) error {
 //   - temp: Color temperature in Kelvin (device-dependent range)
 func (l *Light) SetColorTemp(ctx context.Context, temp int) error {
 	path := fmt.Sprintf("/light/%d?temp=%d", l.id, temp)
-	_, err := l.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, l.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set color temp: %w", err)
 	}
@@ -196,7 +196,7 @@ func (l *Light) SetColorTemp(ctx context.Context, temp int) error {
 // GetConfig retrieves the light configuration.
 func (l *Light) GetConfig(ctx context.Context) (*LightConfig, error) {
 	path := fmt.Sprintf("/settings/light/%d", l.id)
-	resp, err := l.transport.Call(ctx, path, nil)
+	resp, err := restCall(ctx, l.transport, path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get light config: %w", err)
 	}
@@ -248,7 +248,7 @@ func (l *Light) SetConfig(ctx context.Context, config *LightConfig) error {
 	// Remove trailing &
 	params = params[:len(params)-1]
 
-	_, err := l.transport.Call(ctx, path+params, nil)
+	_, err := restCall(ctx, l.transport, path+params)
 	if err != nil {
 		return fmt.Errorf("failed to set light config: %w", err)
 	}
@@ -259,7 +259,7 @@ func (l *Light) SetConfig(ctx context.Context, config *LightConfig) error {
 // SetName sets the light name.
 func (l *Light) SetName(ctx context.Context, name string) error {
 	path := fmt.Sprintf("/settings/light/%d?name=%s", l.id, name)
-	_, err := l.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, l.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set light name: %w", err)
 	}
@@ -272,7 +272,7 @@ func (l *Light) SetName(ctx context.Context, name string) error {
 //   - state: "off", "on", or "last"
 func (l *Light) SetDefaultState(ctx context.Context, state string) error {
 	path := fmt.Sprintf("/settings/light/%d?default_state=%s", l.id, state)
-	_, err := l.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, l.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set default state: %w", err)
 	}
@@ -285,7 +285,7 @@ func (l *Light) SetDefaultState(ctx context.Context, state string) error {
 //   - btnType: "momentary", "toggle", "edge", or "detached"
 func (l *Light) SetButtonType(ctx context.Context, btnType string) error {
 	path := fmt.Sprintf("/settings/light/%d?btn_type=%s", l.id, btnType)
-	_, err := l.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, l.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set button type: %w", err)
 	}
@@ -298,7 +298,7 @@ func (l *Light) SetButtonType(ctx context.Context, btnType string) error {
 //   - seconds: Seconds until auto-on (0 to disable)
 func (l *Light) SetAutoOn(ctx context.Context, seconds float64) error {
 	path := fmt.Sprintf("/settings/light/%d?auto_on=%v", l.id, seconds)
-	_, err := l.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, l.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set auto-on: %w", err)
 	}
@@ -311,7 +311,7 @@ func (l *Light) SetAutoOn(ctx context.Context, seconds float64) error {
 //   - seconds: Seconds until auto-off (0 to disable)
 func (l *Light) SetAutoOff(ctx context.Context, seconds float64) error {
 	path := fmt.Sprintf("/settings/light/%d?auto_off=%v", l.id, seconds)
-	_, err := l.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, l.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set auto-off: %w", err)
 	}
@@ -328,7 +328,7 @@ func (l *Light) SetMinBrightness(ctx context.Context, brightness int) error {
 	}
 
 	path := fmt.Sprintf("/settings/light/%d?min_brightness=%d", l.id, brightness)
-	_, err := l.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, l.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set min brightness: %w", err)
 	}

@@ -6,6 +6,25 @@ import (
 	"fmt"
 )
 
+// batchRPCRequest wraps multiple RPC requests for batch execution.
+// It implements transport.RPCRequest interface.
+type batchRPCRequest struct {
+	requests []*Request
+}
+
+func (b *batchRPCRequest) GetID() any            { return nil }
+func (b *batchRPCRequest) GetMethod() string     { return "" }
+func (b *batchRPCRequest) GetParams() json.RawMessage {
+	// Marshal the batch of requests as params
+	data, _ := json.Marshal(b.requests)
+	return data
+}
+func (b *batchRPCRequest) GetAuth() any          { return nil }
+func (b *batchRPCRequest) GetJSONRPC() string    { return "" }
+func (b *batchRPCRequest) IsREST() bool          { return false }
+func (b *batchRPCRequest) IsBatch() bool         { return true }
+func (b *batchRPCRequest) GetRequests() []*Request { return b.requests }
+
 // Batch represents a collection of RPC requests to be executed together.
 //
 // Batch requests allow multiple RPC calls to be sent in a single network
@@ -67,8 +86,11 @@ func (b *Batch) Execute(ctx context.Context) ([]BatchResult, error) {
 		return nil, fmt.Errorf("failed to build batch requests: %w", err)
 	}
 
-	// Execute batch via transport (pass the slice directly, transport handles JSON encoding)
-	responseData, err := b.client.transport.Call(ctx, "", rpcRequests)
+	// Wrap requests in a batch RPC request
+	batchReq := &batchRPCRequest{requests: rpcRequests}
+
+	// Execute batch via transport
+	responseData, err := b.client.transport.Call(ctx, batchReq)
 	if err != nil {
 		return nil, fmt.Errorf("batch request failed: %w", err)
 	}

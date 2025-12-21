@@ -112,8 +112,8 @@ type SwitchSetResult struct {
 
 // SwitchToggleParams contains parameters for the Switch.Toggle method.
 type SwitchToggleParams struct {
-	types.RawFields
-	ID int `json:"id"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // SwitchToggleResult contains the result of a Switch.Toggle call.

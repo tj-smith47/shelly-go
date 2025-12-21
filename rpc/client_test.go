@@ -19,14 +19,18 @@ type mockTransport struct {
 	mu       sync.Mutex
 }
 
-func (m *mockTransport) Call(ctx context.Context, method string, params any) (json.RawMessage, error) {
+func (m *mockTransport) Call(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
 	m.mu.Lock()
-	m.lastCall = params
+	m.lastCall = req
 	m.mu.Unlock()
 
 	// If this is a batch request, dynamically generate response IDs to match request IDs
-	if requests, ok := params.([]*Request); ok && len(requests) > 0 {
-		return m.generateBatchResponse(requests)
+	if batchReq, ok := req.(transport.BatchRPCRequest); ok && batchReq.IsBatch() {
+		// Get the requests from params (which contains the marshaled batch)
+		var requests []*Request
+		if err := json.Unmarshal(req.GetParams(), &requests); err == nil && len(requests) > 0 {
+			return m.generateBatchResponse(requests)
+		}
 	}
 
 	return m.response, m.err

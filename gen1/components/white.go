@@ -67,7 +67,7 @@ func (c *WhiteConfig) getSchedule() bool       { return c.Schedule }
 // GetStatus retrieves the current white channel status.
 func (w *White) GetStatus(ctx context.Context) (*WhiteStatus, error) {
 	path := fmt.Sprintf("/white/%d", w.id)
-	resp, err := w.transport.Call(ctx, path, nil)
+	resp, err := restCall(ctx, w.transport, path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get white status: %w", err)
 	}
@@ -83,7 +83,7 @@ func (w *White) GetStatus(ctx context.Context) (*WhiteStatus, error) {
 // TurnOn turns the white channel on.
 func (w *White) TurnOn(ctx context.Context) error {
 	path := fmt.Sprintf("/white/%d?turn=on", w.id)
-	_, err := w.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, w.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to turn white on: %w", err)
 	}
@@ -93,7 +93,7 @@ func (w *White) TurnOn(ctx context.Context) error {
 // TurnOff turns the white channel off.
 func (w *White) TurnOff(ctx context.Context) error {
 	path := fmt.Sprintf("/white/%d?turn=off", w.id)
-	_, err := w.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, w.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to turn white off: %w", err)
 	}
@@ -103,7 +103,7 @@ func (w *White) TurnOff(ctx context.Context) error {
 // Toggle toggles the white channel state.
 func (w *White) Toggle(ctx context.Context) error {
 	path := fmt.Sprintf("/white/%d?turn=toggle", w.id)
-	_, err := w.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, w.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to toggle white: %w", err)
 	}
@@ -128,7 +128,7 @@ func (w *White) SetBrightness(ctx context.Context, brightness int) error {
 	}
 
 	path := fmt.Sprintf("/white/%d?brightness=%d", w.id, brightness)
-	_, err := w.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, w.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set brightness: %w", err)
 	}
@@ -146,7 +146,7 @@ func (w *White) SetBrightnessWithTransition(ctx context.Context, brightness, tra
 	}
 
 	path := fmt.Sprintf("/white/%d?brightness=%d&transition=%d", w.id, brightness, transitionMs)
-	_, err := w.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, w.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set brightness: %w", err)
 	}
@@ -159,7 +159,7 @@ func (w *White) SetBrightnessWithTransition(ctx context.Context, brightness, tra
 //   - temp: Color temperature in Kelvin (device-dependent range)
 func (w *White) SetColorTemp(ctx context.Context, temp int) error {
 	path := fmt.Sprintf("/white/%d?temp=%d", w.id, temp)
-	_, err := w.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, w.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set color temp: %w", err)
 	}
@@ -176,7 +176,7 @@ func (w *White) TurnOnWithBrightness(ctx context.Context, brightness int) error 
 	}
 
 	path := fmt.Sprintf("/white/%d?turn=on&brightness=%d", w.id, brightness)
-	_, err := w.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, w.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to turn on with brightness: %w", err)
 	}
@@ -194,7 +194,7 @@ func (w *White) TurnOnWithColorTemp(ctx context.Context, temp, brightness int) e
 	}
 
 	path := fmt.Sprintf("/white/%d?turn=on&temp=%d&brightness=%d", w.id, temp, brightness)
-	_, err := w.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, w.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to turn on with color temp: %w", err)
 	}
@@ -207,7 +207,7 @@ func (w *White) TurnOnWithColorTemp(ctx context.Context, temp, brightness int) e
 //   - duration: Timer duration in seconds
 func (w *White) TurnOnForDuration(ctx context.Context, duration int) error {
 	path := fmt.Sprintf("/white/%d?turn=on&timer=%d", w.id, duration)
-	_, err := w.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, w.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to turn on with timer: %w", err)
 	}
@@ -217,7 +217,7 @@ func (w *White) TurnOnForDuration(ctx context.Context, duration int) error {
 // GetConfig retrieves the white channel configuration.
 func (w *White) GetConfig(ctx context.Context) (*WhiteConfig, error) {
 	path := fmt.Sprintf("/settings/white/%d", w.id)
-	resp, err := w.transport.Call(ctx, path, nil)
+	resp, err := restCall(ctx, w.transport, path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get white config: %w", err)
 	}
@@ -240,7 +240,7 @@ func (w *White) SetConfig(ctx context.Context, config *WhiteConfig) error {
 	}
 
 	path := fmt.Sprintf("/settings/white/%d?%s", w.id, params)
-	_, err := w.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, w.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set white config: %w", err)
 	}
@@ -251,7 +251,7 @@ func (w *White) SetConfig(ctx context.Context, config *WhiteConfig) error {
 // SetName sets the channel name.
 func (w *White) SetName(ctx context.Context, name string) error {
 	path := fmt.Sprintf("/settings/white/%d?name=%s", w.id, name)
-	_, err := w.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, w.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set white name: %w", err)
 	}
@@ -264,7 +264,7 @@ func (w *White) SetName(ctx context.Context, name string) error {
 //   - state: "off", "on", or "last"
 func (w *White) SetDefaultState(ctx context.Context, state string) error {
 	path := fmt.Sprintf("/settings/white/%d?default_state=%s", w.id, state)
-	_, err := w.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, w.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set default state: %w", err)
 	}
@@ -277,7 +277,7 @@ func (w *White) SetDefaultState(ctx context.Context, state string) error {
 //   - seconds: Seconds until auto-on (0 to disable)
 func (w *White) SetAutoOn(ctx context.Context, seconds float64) error {
 	path := fmt.Sprintf("/settings/white/%d?auto_on=%v", w.id, seconds)
-	_, err := w.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, w.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set auto-on: %w", err)
 	}
@@ -290,7 +290,7 @@ func (w *White) SetAutoOn(ctx context.Context, seconds float64) error {
 //   - seconds: Seconds until auto-off (0 to disable)
 func (w *White) SetAutoOff(ctx context.Context, seconds float64) error {
 	path := fmt.Sprintf("/settings/white/%d?auto_off=%v", w.id, seconds)
-	_, err := w.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, w.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set auto-off: %w", err)
 	}

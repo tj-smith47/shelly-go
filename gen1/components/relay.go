@@ -63,7 +63,7 @@ type RelayConfig struct {
 // GetStatus retrieves the current relay status.
 func (r *Relay) GetStatus(ctx context.Context) (*RelayStatus, error) {
 	path := fmt.Sprintf("/relay/%d", r.id)
-	resp, err := r.transport.Call(ctx, path, nil)
+	resp, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get relay status: %w", err)
 	}
@@ -79,7 +79,7 @@ func (r *Relay) GetStatus(ctx context.Context) (*RelayStatus, error) {
 // TurnOn turns the relay on.
 func (r *Relay) TurnOn(ctx context.Context) error {
 	path := fmt.Sprintf("/relay/%d?turn=on", r.id)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to turn relay on: %w", err)
 	}
@@ -89,7 +89,7 @@ func (r *Relay) TurnOn(ctx context.Context) error {
 // TurnOff turns the relay off.
 func (r *Relay) TurnOff(ctx context.Context) error {
 	path := fmt.Sprintf("/relay/%d?turn=off", r.id)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to turn relay off: %w", err)
 	}
@@ -99,7 +99,7 @@ func (r *Relay) TurnOff(ctx context.Context) error {
 // Toggle toggles the relay state.
 func (r *Relay) Toggle(ctx context.Context) error {
 	path := fmt.Sprintf("/relay/%d?turn=toggle", r.id)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to toggle relay: %w", err)
 	}
@@ -120,7 +120,7 @@ func (r *Relay) Set(ctx context.Context, on bool) error {
 //   - duration: Timer duration in seconds
 func (r *Relay) TurnOnForDuration(ctx context.Context, duration int) error {
 	path := fmt.Sprintf("/relay/%d?turn=on&timer=%d", r.id, duration)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to turn relay on with timer: %w", err)
 	}
@@ -133,7 +133,7 @@ func (r *Relay) TurnOnForDuration(ctx context.Context, duration int) error {
 //   - duration: Timer duration in seconds
 func (r *Relay) TurnOffForDuration(ctx context.Context, duration int) error {
 	path := fmt.Sprintf("/relay/%d?turn=off&timer=%d", r.id, duration)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to turn relay off with timer: %w", err)
 	}
@@ -143,7 +143,7 @@ func (r *Relay) TurnOffForDuration(ctx context.Context, duration int) error {
 // GetConfig retrieves the relay configuration.
 func (r *Relay) GetConfig(ctx context.Context) (*RelayConfig, error) {
 	path := fmt.Sprintf("/settings/relay/%d", r.id)
-	resp, err := r.transport.Call(ctx, path, nil)
+	resp, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get relay config: %w", err)
 	}
@@ -198,7 +198,7 @@ func (r *Relay) SetConfig(ctx context.Context, config *RelayConfig) error {
 	// Remove trailing &
 	params = params[:len(params)-1]
 
-	_, err := r.transport.Call(ctx, path+params, nil)
+	_, err := restCall(ctx, r.transport, path+params)
 	if err != nil {
 		return fmt.Errorf("failed to set relay config: %w", err)
 	}
@@ -209,7 +209,7 @@ func (r *Relay) SetConfig(ctx context.Context, config *RelayConfig) error {
 // SetName sets the relay name.
 func (r *Relay) SetName(ctx context.Context, name string) error {
 	path := fmt.Sprintf("/settings/relay/%d?name=%s", r.id, name)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set relay name: %w", err)
 	}
@@ -222,7 +222,7 @@ func (r *Relay) SetName(ctx context.Context, name string) error {
 //   - state: "off", "on", "last", or "switch"
 func (r *Relay) SetDefaultState(ctx context.Context, state string) error {
 	path := fmt.Sprintf("/settings/relay/%d?default_state=%s", r.id, state)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set default state: %w", err)
 	}
@@ -235,7 +235,7 @@ func (r *Relay) SetDefaultState(ctx context.Context, state string) error {
 //   - btnType: "momentary", "toggle", "edge", or "detached"
 func (r *Relay) SetButtonType(ctx context.Context, btnType string) error {
 	path := fmt.Sprintf("/settings/relay/%d?btn_type=%s", r.id, btnType)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set button type: %w", err)
 	}
@@ -248,7 +248,7 @@ func (r *Relay) SetButtonType(ctx context.Context, btnType string) error {
 //   - seconds: Seconds until auto-on (0 to disable)
 func (r *Relay) SetAutoOn(ctx context.Context, seconds float64) error {
 	path := fmt.Sprintf("/settings/relay/%d?auto_on=%v", r.id, seconds)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set auto-on: %w", err)
 	}
@@ -261,7 +261,7 @@ func (r *Relay) SetAutoOn(ctx context.Context, seconds float64) error {
 //   - seconds: Seconds until auto-off (0 to disable)
 func (r *Relay) SetAutoOff(ctx context.Context, seconds float64) error {
 	path := fmt.Sprintf("/settings/relay/%d?auto_off=%v", r.id, seconds)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set auto-off: %w", err)
 	}
@@ -274,7 +274,7 @@ func (r *Relay) SetAutoOff(ctx context.Context, seconds float64) error {
 //   - watts: Maximum power in watts (0 to disable)
 func (r *Relay) SetMaxPower(ctx context.Context, watts int) error {
 	path := fmt.Sprintf("/settings/relay/%d?max_power=%d", r.id, watts)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set max power: %w", err)
 	}
@@ -288,7 +288,7 @@ func (r *Relay) SetSchedule(ctx context.Context, enabled bool) error {
 		val = boolTrue
 	}
 	path := fmt.Sprintf("/settings/relay/%d?schedule=%s", r.id, val)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set schedule: %w", err)
 	}
@@ -317,7 +317,7 @@ func (r *Relay) AddScheduleRule(ctx context.Context, rule string) error {
 	}
 
 	path := fmt.Sprintf("/settings/relay/%d?schedule_rules=%s", r.id, string(rulesJSON))
-	_, err = r.transport.Call(ctx, path, nil)
+	_, err = restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to add schedule rule: %w", err)
 	}
@@ -327,7 +327,7 @@ func (r *Relay) AddScheduleRule(ctx context.Context, rule string) error {
 // ClearScheduleRules removes all schedule rules.
 func (r *Relay) ClearScheduleRules(ctx context.Context) error {
 	path := fmt.Sprintf("/settings/relay/%d?schedule_rules=[]", r.id)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to clear schedule rules: %w", err)
 	}

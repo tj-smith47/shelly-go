@@ -212,7 +212,7 @@ func (m *MQTT) handleNotification(client mqtt.Client, msg mqtt.Message) {
 // If not connected, this will attempt to connect first.
 // The request is published to the device's RPC topic.
 // The response is received on the client's response topic.
-func (m *MQTT) Call(ctx context.Context, method string, params any) (json.RawMessage, error) {
+func (m *MQTT) Call(ctx context.Context, rpcReq RPCRequest) (json.RawMessage, error) {
 	if m.isClosed() {
 		return nil, fmt.Errorf("MQTT transport is closed")
 	}
@@ -224,29 +224,55 @@ func (m *MQTT) Call(ctx context.Context, method string, params any) (json.RawMes
 		}
 	}
 
-	// Create request with unique ID
-	id := m.requestID.Add(1)
-	req := rpcRequest{
-		ID:     id,
-		Src:    m.src,
-		Method: method,
-		Params: params,
+	// Build request body from RPCRequest interface
+	reqBody := map[string]any{
+		"id":     rpcReq.GetID(),
+		"src":    m.src,
+		"method": rpcReq.GetMethod(),
+	}
+
+	// Unmarshal params from json.RawMessage and add to request
+	if params := rpcReq.GetParams(); len(params) > 0 {
+		var p any
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal params: %w", err)
+		}
+		reqBody["params"] = p
+	}
+
+	// Add auth if present
+	if auth := rpcReq.GetAuth(); auth != nil {
+		reqBody["auth"] = auth
+	}
+
+	// Get request ID for response correlation
+	var requestID int64
+	switch id := rpcReq.GetID().(type) {
+	case int64:
+		requestID = id
+	case uint64:
+		requestID = int64(id)
+	case int:
+		requestID = int64(id)
+	default:
+		requestID = m.requestID.Add(1)
+		reqBody["id"] = requestID
 	}
 
 	// Create response channel
 	respChan := make(chan *rpcResponse, 1)
 	m.pendingMu.Lock()
-	m.pending[id] = respChan
+	m.pending[requestID] = respChan
 	m.pendingMu.Unlock()
 
 	defer func() {
 		m.pendingMu.Lock()
-		delete(m.pending, id)
+		delete(m.pending, requestID)
 		m.pendingMu.Unlock()
 	}()
 
 	// Marshal request
-	data, err := json.Marshal(req)
+	data, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}

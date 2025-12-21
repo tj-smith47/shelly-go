@@ -7,17 +7,18 @@ import (
 	"testing"
 
 	"github.com/tj-smith47/shelly-go/rpc"
+	"github.com/tj-smith47/shelly-go/transport"
 )
 
 // mockTransport implements transport.Transport for testing
 type mockTransport struct {
-	callFunc  func(ctx context.Context, method string, params any) (json.RawMessage, error)
+	callFunc  func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error)
 	closeFunc func() error
 }
 
-func (m *mockTransport) Call(ctx context.Context, method string, params any) (json.RawMessage, error) {
+func (m *mockTransport) Call(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
 	if m.callFunc != nil {
-		return m.callFunc(ctx, method, params)
+		return m.callFunc(ctx, req)
 	}
 	return nil, errors.New("not implemented")
 }
@@ -113,7 +114,8 @@ func TestSwitch_Set(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				method := req.GetMethod()
 					if method != "Switch.Set" {
 						t.Errorf("method = %q, want %q", method, "Switch.Set")
 					}
@@ -176,7 +178,8 @@ func TestSwitch_Toggle(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				method := req.GetMethod()
 					if method != "Switch.Toggle" {
 						t.Errorf("method = %q, want %q", method, "Switch.Toggle")
 					}
@@ -240,7 +243,8 @@ func TestSwitch_ResetCounters(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				method := req.GetMethod()
 					if method != "Switch.ResetCounters" {
 						t.Errorf("method = %q, want %q", method, "Switch.ResetCounters")
 					}
@@ -279,7 +283,8 @@ func TestSwitch_GetConfig(t *testing.T) {
 	}`
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				method := req.GetMethod()
 			if method != "Switch.GetConfig" {
 				t.Errorf("method = %q, want %q", method, "Switch.GetConfig")
 			}
@@ -349,7 +354,8 @@ func TestSwitch_SetConfig(t *testing.T) {
 	}
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				method := req.GetMethod()
 			if method != "Switch.SetConfig" {
 				t.Errorf("method = %q, want %q", method, "Switch.SetConfig")
 			}
@@ -372,7 +378,8 @@ func TestSwitch_SetConfig_AutoSetID(t *testing.T) {
 	}
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return jsonrpcResponse(`{}`)
 		},
 	}
@@ -408,7 +415,8 @@ func TestSwitch_GetStatus(t *testing.T) {
 	}`
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				method := req.GetMethod()
 			if method != "Switch.GetStatus" {
 				t.Errorf("method = %q, want %q", method, "Switch.GetStatus")
 			}
@@ -493,7 +501,8 @@ func TestSwitch_GetStatus_WithErrors(t *testing.T) {
 	}`
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return jsonrpcResponse(result)
 		},
 	}

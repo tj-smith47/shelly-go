@@ -136,17 +136,17 @@ type EM1DataValues struct {
 
 // EM1DataGetDataParams contains parameters for the GetData method.
 type EM1DataGetDataParams struct {
-	TS    *int64 `json:"ts,omitempty"`
-	EndTS *int64 `json:"end_ts,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	TS              *int64 `json:"ts,omitempty"`
+	EndTS           *int64 `json:"end_ts,omitempty"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // EM1DataGetRecordsParams contains parameters for the GetRecords method.
 type EM1DataGetRecordsParams struct {
-	TS *int64 `json:"ts,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	TS              *int64 `json:"ts,omitempty"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // GetConfig retrieves the EM1Data configuration.

@@ -102,9 +102,9 @@ type RGBWSetParams struct {
 	White              *int     `json:"white,omitempty"`
 	TransitionDuration *float64 `json:"transition_duration,omitempty"`
 	ToggleAfter        *float64 `json:"toggle_after,omitempty"`
-	types.RawFields
-	RGB []int `json:"rgb,omitempty"`
-	ID  int   `json:"id"`
+	types.RawFields    `json:"-"`
+	RGB                []int `json:"rgb,omitempty"`
+	ID                 int   `json:"id"`
 }
 
 // RGBWSetResult contains the result of an RGBW.Set call.
@@ -115,8 +115,8 @@ type RGBWSetResult struct {
 
 // RGBWToggleParams contains parameters for the RGBW.Toggle method.
 type RGBWToggleParams struct {
-	types.RawFields
-	ID int `json:"id"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // RGBWToggleResult contains the result of an RGBW.Toggle call.

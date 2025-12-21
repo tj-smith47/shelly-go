@@ -73,7 +73,7 @@ type RollerConfig struct {
 // GetStatus retrieves the current roller status.
 func (r *Roller) GetStatus(ctx context.Context) (*RollerStatus, error) {
 	path := fmt.Sprintf("/roller/%d", r.id)
-	resp, err := r.transport.Call(ctx, path, nil)
+	resp, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get roller status: %w", err)
 	}
@@ -89,7 +89,7 @@ func (r *Roller) GetStatus(ctx context.Context) (*RollerStatus, error) {
 // Open starts opening the roller (moves to fully open position).
 func (r *Roller) Open(ctx context.Context) error {
 	path := fmt.Sprintf("/roller/%d?go=open", r.id)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to open roller: %w", err)
 	}
@@ -99,7 +99,7 @@ func (r *Roller) Open(ctx context.Context) error {
 // Close starts closing the roller (moves to fully closed position).
 func (r *Roller) Close(ctx context.Context) error {
 	path := fmt.Sprintf("/roller/%d?go=close", r.id)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to close roller: %w", err)
 	}
@@ -109,7 +109,7 @@ func (r *Roller) Close(ctx context.Context) error {
 // Stop stops the roller movement.
 func (r *Roller) Stop(ctx context.Context) error {
 	path := fmt.Sprintf("/roller/%d?go=stop", r.id)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to stop roller: %w", err)
 	}
@@ -128,7 +128,7 @@ func (r *Roller) GoToPosition(ctx context.Context, pos int) error {
 	}
 
 	path := fmt.Sprintf("/roller/%d?go=to_pos&roller_pos=%d", r.id, pos)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to go to position: %w", err)
 	}
@@ -141,7 +141,7 @@ func (r *Roller) GoToPosition(ctx context.Context, pos int) error {
 //   - seconds: Duration in seconds
 func (r *Roller) OpenForDuration(ctx context.Context, seconds float64) error {
 	path := fmt.Sprintf("/roller/%d?go=open&duration=%v", r.id, seconds)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to open for duration: %w", err)
 	}
@@ -154,7 +154,7 @@ func (r *Roller) OpenForDuration(ctx context.Context, seconds float64) error {
 //   - seconds: Duration in seconds
 func (r *Roller) CloseForDuration(ctx context.Context, seconds float64) error {
 	path := fmt.Sprintf("/roller/%d?go=close&duration=%v", r.id, seconds)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to close for duration: %w", err)
 	}
@@ -167,7 +167,7 @@ func (r *Roller) CloseForDuration(ctx context.Context, seconds float64) error {
 // This is required for position control to work accurately.
 func (r *Roller) Calibrate(ctx context.Context) error {
 	path := fmt.Sprintf("/roller/%d/calibrate", r.id)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to start calibration: %w", err)
 	}
@@ -177,7 +177,7 @@ func (r *Roller) Calibrate(ctx context.Context) error {
 // GetConfig retrieves the roller configuration.
 func (r *Roller) GetConfig(ctx context.Context) (*RollerConfig, error) {
 	path := fmt.Sprintf("/settings/roller/%d", r.id)
-	resp, err := r.transport.Call(ctx, path, nil)
+	resp, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get roller config: %w", err)
 	}
@@ -258,7 +258,7 @@ func (r *Roller) SetConfig(ctx context.Context, config *RollerConfig) error {
 	// Remove trailing &
 	params = params[:len(params)-1]
 
-	_, err := r.transport.Call(ctx, path+params, nil)
+	_, err := restCall(ctx, r.transport, path+params)
 	if err != nil {
 		return fmt.Errorf("failed to set roller config: %w", err)
 	}
@@ -269,7 +269,7 @@ func (r *Roller) SetConfig(ctx context.Context, config *RollerConfig) error {
 // SetMaxTime sets the maximum operation time.
 func (r *Roller) SetMaxTime(ctx context.Context, seconds float64) error {
 	path := fmt.Sprintf("/settings/roller/%d?maxtime=%v", r.id, seconds)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set max time: %w", err)
 	}
@@ -282,7 +282,7 @@ func (r *Roller) SetMaxTime(ctx context.Context, seconds float64) error {
 //   - state: "stop", "open", "close", or "last"
 func (r *Roller) SetDefaultState(ctx context.Context, state string) error {
 	path := fmt.Sprintf("/settings/roller/%d?default_state=%s", r.id, state)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set default state: %w", err)
 	}
@@ -295,7 +295,7 @@ func (r *Roller) SetDefaultState(ctx context.Context, state string) error {
 //   - mode: "openclose" (two buttons) or "onebutton" (single toggle)
 func (r *Roller) SetInputMode(ctx context.Context, mode string) error {
 	path := fmt.Sprintf("/settings/roller/%d?input_mode=%s", r.id, mode)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set input mode: %w", err)
 	}
@@ -308,7 +308,7 @@ func (r *Roller) SetInputMode(ctx context.Context, mode string) error {
 //   - btnType: "momentary", "toggle", or "detached"
 func (r *Roller) SetButtonType(ctx context.Context, btnType string) error {
 	path := fmt.Sprintf("/settings/roller/%d?btn_type=%s", r.id, btnType)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set button type: %w", err)
 	}
@@ -322,7 +322,7 @@ func (r *Roller) EnablePositioning(ctx context.Context, enabled bool) error {
 		val = boolTrue
 	}
 	path := fmt.Sprintf("/settings/roller/%d?positioning=%s", r.id, val)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set positioning: %w", err)
 	}
@@ -339,7 +339,7 @@ func (r *Roller) EnablePositioning(ctx context.Context, enabled bool) error {
 func (r *Roller) SetObstacleDetection(ctx context.Context, mode, action string, powerThreshold, delay int) error {
 	path := fmt.Sprintf("/settings/roller/%d?obstacle_mode=%s&obstacle_action=%s&obstacle_power=%d&obstacle_delay=%d",
 		r.id, mode, action, powerThreshold, delay)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set obstacle detection: %w", err)
 	}
@@ -353,7 +353,7 @@ func (r *Roller) SetObstacleDetection(ctx context.Context, mode, action string, 
 //   - action: "stop", "pause", or "reverse"
 func (r *Roller) SetSafetySwitch(ctx context.Context, mode, action string) error {
 	path := fmt.Sprintf("/settings/roller/%d?safety_mode=%s&safety_action=%s", r.id, mode, action)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set safety switch: %w", err)
 	}
@@ -367,7 +367,7 @@ func (r *Roller) SwapDirection(ctx context.Context, swap bool) error {
 		val = boolTrue
 	}
 	path := fmt.Sprintf("/settings/roller/%d?swap=%s", r.id, val)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to swap direction: %w", err)
 	}
@@ -381,7 +381,7 @@ func (r *Roller) SwapInputs(ctx context.Context, swap bool) error {
 		val = boolTrue
 	}
 	path := fmt.Sprintf("/settings/roller/%d?swap_inputs=%s", r.id, val)
-	_, err := r.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to swap inputs: %w", err)
 	}

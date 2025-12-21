@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/tj-smith47/shelly-go/rpc"
+	"github.com/tj-smith47/shelly-go/transport"
 )
 
 func TestNewModbus(t *testing.T) {
@@ -58,7 +59,8 @@ func TestModbus_GetConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "Modbus.GetConfig" {
 						t.Errorf("unexpected method call: %s", method)
 					}
@@ -125,7 +127,8 @@ func TestModbus_SetConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "Modbus.SetConfig" {
 						t.Errorf("method = %q, want %q", method, "Modbus.SetConfig")
 					}
@@ -177,7 +180,8 @@ func TestModbus_GetStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "Modbus.GetStatus" {
 						t.Errorf("unexpected method call: %s", method)
 					}
@@ -308,8 +312,9 @@ func TestModbusStatus_JSONUnmarshal(t *testing.T) {
 
 func TestModbus_ContextCancellation(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-			select {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					_ = req.GetMethod()
+					select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			default:

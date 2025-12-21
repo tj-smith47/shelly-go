@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/tj-smith47/shelly-go/rpc"
+	"github.com/tj-smith47/shelly-go/transport"
 )
 
 func TestNewKVS(t *testing.T) {
@@ -80,7 +81,8 @@ func TestKVS_Set(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "KVS.Set" {
 						t.Errorf("method = %q, want %q", method, "KVS.Set")
 					}
@@ -142,7 +144,8 @@ func TestKVS_SetWithEtag(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "KVS.Set" {
 						t.Errorf("method = %q, want %q", method, "KVS.Set")
 					}
@@ -221,7 +224,8 @@ func TestKVS_Get(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "KVS.Get" {
 						t.Errorf("unexpected method call: %s", method)
 					}
@@ -321,7 +325,8 @@ func TestKVS_GetMany(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "KVS.GetMany" {
 						t.Errorf("unexpected method call: %s", method)
 					}
@@ -387,7 +392,8 @@ func TestKVS_List(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "KVS.List" {
 						t.Errorf("unexpected method call: %s", method)
 					}
@@ -438,7 +444,8 @@ func TestKVS_List_InvalidJSON(t *testing.T) {
 
 func TestKVS_Delete(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "KVS.Delete" {
 				t.Errorf("method = %q, want %q", method, "KVS.Delete")
 			}
@@ -525,8 +532,9 @@ func TestKVSItem_JSONSerialization(t *testing.T) {
 
 func TestKVS_ContextCancellation(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-			select {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					_ = req.GetMethod()
+					select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			default:

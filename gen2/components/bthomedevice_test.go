@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/tj-smith47/shelly-go/rpc"
+	"github.com/tj-smith47/shelly-go/transport"
 )
 
 func TestNewBTHomeDevice(t *testing.T) {
@@ -71,7 +72,8 @@ func TestBTHomeDevice_GetConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "BTHomeDevice.GetConfig" {
 						t.Errorf("unexpected method call: %s", method)
 					}
@@ -170,7 +172,8 @@ func TestBTHomeDevice_SetConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "BTHomeDevice.SetConfig" {
 						t.Errorf("method = %q, want %q", method, "BTHomeDevice.SetConfig")
 					}
@@ -236,7 +239,8 @@ func TestBTHomeDevice_GetStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "BTHomeDevice.GetStatus" {
 						t.Errorf("unexpected method call: %s", method)
 					}
@@ -348,7 +352,8 @@ func TestBTHomeDevice_GetKnownObjects(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "BTHomeDevice.GetKnownObjects" {
 						t.Errorf("method = %q, want %q", method, "BTHomeDevice.GetKnownObjects")
 					}
@@ -513,8 +518,9 @@ func TestBTHomeDeviceStatus_JSONUnmarshal(t *testing.T) {
 
 func TestBTHomeDevice_ContextCancellation(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-			select {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					_ = req.GetMethod()
+					select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			default:

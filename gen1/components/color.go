@@ -73,7 +73,7 @@ func (c *ColorConfig) getSchedule() bool       { return c.Schedule }
 // GetStatus retrieves the current color status.
 func (c *Color) GetStatus(ctx context.Context) (*ColorStatus, error) {
 	path := fmt.Sprintf("/color/%d", c.id)
-	resp, err := c.transport.Call(ctx, path, nil)
+	resp, err := restCall(ctx, c.transport, path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get color status: %w", err)
 	}
@@ -89,7 +89,7 @@ func (c *Color) GetStatus(ctx context.Context) (*ColorStatus, error) {
 // TurnOn turns the light on.
 func (c *Color) TurnOn(ctx context.Context) error {
 	path := fmt.Sprintf("/color/%d?turn=on", c.id)
-	_, err := c.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, c.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to turn color on: %w", err)
 	}
@@ -99,7 +99,7 @@ func (c *Color) TurnOn(ctx context.Context) error {
 // TurnOff turns the light off.
 func (c *Color) TurnOff(ctx context.Context) error {
 	path := fmt.Sprintf("/color/%d?turn=off", c.id)
-	_, err := c.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, c.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to turn color off: %w", err)
 	}
@@ -109,7 +109,7 @@ func (c *Color) TurnOff(ctx context.Context) error {
 // Toggle toggles the light state.
 func (c *Color) Toggle(ctx context.Context) error {
 	path := fmt.Sprintf("/color/%d?turn=toggle", c.id)
-	_, err := c.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, c.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to toggle color: %w", err)
 	}
@@ -136,7 +136,7 @@ func (c *Color) SetRGB(ctx context.Context, red, green, blue int) error {
 	}
 
 	path := fmt.Sprintf("/color/%d?red=%d&green=%d&blue=%d", c.id, red, green, blue)
-	_, err := c.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, c.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set RGB: %w", err)
 	}
@@ -156,7 +156,7 @@ func (c *Color) SetRGBW(ctx context.Context, red, green, blue, white int) error 
 	}
 
 	path := fmt.Sprintf("/color/%d?red=%d&green=%d&blue=%d&white=%d", c.id, red, green, blue, white)
-	_, err := c.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, c.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set RGBW: %w", err)
 	}
@@ -173,7 +173,7 @@ func (c *Color) SetGain(ctx context.Context, gain int) error {
 	}
 
 	path := fmt.Sprintf("/color/%d?gain=%d", c.id, gain)
-	_, err := c.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, c.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set gain: %w", err)
 	}
@@ -190,7 +190,7 @@ func (c *Color) SetWhiteChannel(ctx context.Context, white int) error {
 	}
 
 	path := fmt.Sprintf("/color/%d?white=%d", c.id, white)
-	_, err := c.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, c.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set white channel: %w", err)
 	}
@@ -203,7 +203,7 @@ func (c *Color) SetWhiteChannel(ctx context.Context, white int) error {
 //   - effect: Effect index (0 = off, 1+ = various effects)
 func (c *Color) SetEffect(ctx context.Context, effect int) error {
 	path := fmt.Sprintf("/color/%d?effect=%d", c.id, effect)
-	_, err := c.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, c.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set effect: %w", err)
 	}
@@ -216,7 +216,7 @@ func (c *Color) SetEffect(ctx context.Context, effect int) error {
 //   - transitionMs: Transition time in milliseconds
 func (c *Color) SetTransition(ctx context.Context, transitionMs int) error {
 	path := fmt.Sprintf("/color/%d?transition=%d", c.id, transitionMs)
-	_, err := c.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, c.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set transition: %w", err)
 	}
@@ -237,7 +237,7 @@ func (c *Color) TurnOnWithRGB(ctx context.Context, red, green, blue, gain int) e
 	}
 
 	path := fmt.Sprintf("/color/%d?turn=on&red=%d&green=%d&blue=%d&gain=%d", c.id, red, green, blue, gain)
-	_, err := c.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, c.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to turn on with RGB: %w", err)
 	}
@@ -250,7 +250,7 @@ func (c *Color) TurnOnWithRGB(ctx context.Context, red, green, blue, gain int) e
 //   - duration: Timer duration in seconds
 func (c *Color) TurnOnForDuration(ctx context.Context, duration int) error {
 	path := fmt.Sprintf("/color/%d?turn=on&timer=%d", c.id, duration)
-	_, err := c.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, c.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to turn on with timer: %w", err)
 	}
@@ -260,7 +260,7 @@ func (c *Color) TurnOnForDuration(ctx context.Context, duration int) error {
 // GetConfig retrieves the color configuration.
 func (c *Color) GetConfig(ctx context.Context) (*ColorConfig, error) {
 	path := fmt.Sprintf("/settings/color/%d", c.id)
-	resp, err := c.transport.Call(ctx, path, nil)
+	resp, err := restCall(ctx, c.transport, path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get color config: %w", err)
 	}
@@ -283,7 +283,7 @@ func (c *Color) SetConfig(ctx context.Context, config *ColorConfig) error {
 	}
 
 	path := fmt.Sprintf("/settings/color/%d?%s", c.id, params)
-	_, err := c.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, c.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set color config: %w", err)
 	}
@@ -294,7 +294,7 @@ func (c *Color) SetConfig(ctx context.Context, config *ColorConfig) error {
 // SetName sets the light name.
 func (c *Color) SetName(ctx context.Context, name string) error {
 	path := fmt.Sprintf("/settings/color/%d?name=%s", c.id, name)
-	_, err := c.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, c.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set color name: %w", err)
 	}
@@ -307,7 +307,7 @@ func (c *Color) SetName(ctx context.Context, name string) error {
 //   - state: "off", "on", or "last"
 func (c *Color) SetDefaultState(ctx context.Context, state string) error {
 	path := fmt.Sprintf("/settings/color/%d?default_state=%s", c.id, state)
-	_, err := c.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, c.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set default state: %w", err)
 	}
@@ -320,7 +320,7 @@ func (c *Color) SetDefaultState(ctx context.Context, state string) error {
 //   - seconds: Seconds until auto-on (0 to disable)
 func (c *Color) SetAutoOn(ctx context.Context, seconds float64) error {
 	path := fmt.Sprintf("/settings/color/%d?auto_on=%v", c.id, seconds)
-	_, err := c.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, c.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set auto-on: %w", err)
 	}
@@ -333,7 +333,7 @@ func (c *Color) SetAutoOn(ctx context.Context, seconds float64) error {
 //   - seconds: Seconds until auto-off (0 to disable)
 func (c *Color) SetAutoOff(ctx context.Context, seconds float64) error {
 	path := fmt.Sprintf("/settings/color/%d?auto_off=%v", c.id, seconds)
-	_, err := c.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, c.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set auto-off: %w", err)
 	}

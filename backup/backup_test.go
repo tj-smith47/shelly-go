@@ -8,17 +8,18 @@ import (
 	"time"
 
 	"github.com/tj-smith47/shelly-go/rpc"
+	"github.com/tj-smith47/shelly-go/transport"
 )
 
-// mockTransport implements rpc.Transport for testing.
+// mockTransport implements transport.Transport for testing.
 type mockTransport struct {
-	callFunc  func(ctx context.Context, method string, params any) (json.RawMessage, error)
+	callFunc  func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error)
 	closeFunc func() error
 }
 
-func (m *mockTransport) Call(ctx context.Context, method string, params any) (json.RawMessage, error) {
+func (m *mockTransport) Call(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
 	if m.callFunc != nil {
-		return m.callFunc(ctx, method, params)
+		return m.callFunc(ctx, req)
 	}
 	return nil, nil
 }
@@ -57,7 +58,8 @@ func TestNew(t *testing.T) {
 
 func TestManager_Export(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"shellyplus1-123456","model":"SNSW-001X16EU","gen":2,"ver":"1.0.0"}`)
@@ -116,7 +118,8 @@ func TestManager_Export(t *testing.T) {
 
 func TestManager_Export_WithWiFi(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"test"}`)
@@ -155,7 +158,8 @@ func TestManager_Export_WithWiFi(t *testing.T) {
 
 func TestManager_Export_DeviceInfoError(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			if method == "Shelly.GetDeviceInfo" {
 				return nil, errTest
 			}
@@ -174,7 +178,8 @@ func TestManager_Export_DeviceInfoError(t *testing.T) {
 
 func TestManager_Export_ConfigError(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"test"}`)
@@ -197,7 +202,8 @@ func TestManager_Export_ConfigError(t *testing.T) {
 
 func TestManager_Export_WithScripts(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"test"}`)
@@ -241,7 +247,8 @@ func TestManager_Export_WithScripts(t *testing.T) {
 
 func TestManager_Export_WithKVS(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"test"}`)
@@ -282,7 +289,8 @@ func TestManager_Export_WithKVS(t *testing.T) {
 
 func TestManager_Restore(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return jsonrpcResponse(`{"restart_required":false}`)
 		},
 	}
@@ -347,7 +355,8 @@ func TestManager_Restore_VersionMismatch(t *testing.T) {
 
 func TestManager_Restore_DryRun(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			// Should not be called in dry run
 			t.Errorf("unexpected call to %s in dry run", method)
 			return nil, errTest
@@ -384,7 +393,8 @@ func TestManager_Restore_DryRun(t *testing.T) {
 func TestManager_Restore_WithWiFi(t *testing.T) {
 	wifiCalled := false
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			if method == "WiFi.SetConfig" {
 				wifiCalled = true
 			}
@@ -425,7 +435,8 @@ func TestManager_Restore_WithWiFi(t *testing.T) {
 func TestManager_Restore_WithScripts(t *testing.T) {
 	scriptMethods := make(map[string]bool)
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			scriptMethods[method] = true
 			if method == "Script.Create" {
 				return jsonrpcResponse(`{"id":1}`)
@@ -473,7 +484,8 @@ func TestManager_Restore_WithScripts(t *testing.T) {
 func TestManager_Restore_WithKVS(t *testing.T) {
 	kvsCalled := false
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			if method == "KVS.Set" {
 				kvsCalled = true
 			}
@@ -875,7 +887,8 @@ func TestDefaultMigrationOptions(t *testing.T) {
 
 func TestMigrator_ValidateMigration_SameDevice(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return jsonrpcResponse(`{"id":"test-device","model":"SNSW-001X16EU","gen":2}`)
 		},
 	}
@@ -902,7 +915,8 @@ func TestMigrator_ValidateMigration_SameDevice(t *testing.T) {
 func TestMigrator_ValidateMigration_DifferentModels(t *testing.T) {
 	callCount := 0
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			callCount++
 			if callCount%2 == 1 {
 				return jsonrpcResponse(`{"id":"test-device","model":"SNSW-001X16EU","gen":2}`)
@@ -933,7 +947,8 @@ func TestMigrator_ValidateMigration_DifferentModels(t *testing.T) {
 func TestMigrator_ValidateMigration_AllowDifferentModels(t *testing.T) {
 	callCount := 0
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			callCount++
 			if callCount%2 == 1 {
 				return jsonrpcResponse(`{"id":"test-device","model":"SNSW-001X16EU","gen":2}`)
@@ -964,12 +979,14 @@ func TestMigrator_ValidateMigration_AllowDifferentModels(t *testing.T) {
 
 func TestMigrator_ValidateMigration_SourceOffline(t *testing.T) {
 	srcTransport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
 	tgtTransport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return jsonrpcResponse(`{"id":"test"}`)
 		},
 	}
@@ -992,7 +1009,8 @@ func TestMigrator_ValidateMigration_SourceOffline(t *testing.T) {
 
 func TestMigrator_Migrate_DryRun(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return jsonrpcResponse(`{"id":"test-device","model":"SNSW-001X16EU","gen":2}`)
 		},
 	}
@@ -1019,7 +1037,8 @@ func TestMigrator_Migrate_DryRun(t *testing.T) {
 
 func TestMigrator_Migrate_SourceOffline(t *testing.T) {
 	srcTransport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -1039,7 +1058,8 @@ func TestMigrator_Migrate_SourceOffline(t *testing.T) {
 func TestMigrator_Migrate_IncompatibleDevices(t *testing.T) {
 	callCount := 0
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			callCount++
 			if callCount%2 == 1 {
 				return jsonrpcResponse(`{"id":"test","model":"MODEL1","gen":2}`)
@@ -1061,7 +1081,8 @@ func TestMigrator_Migrate_IncompatibleDevices(t *testing.T) {
 
 func TestMigrator_IsInProgress(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return jsonrpcResponse(`{"id":"test"}`)
 		},
 	}
@@ -1078,7 +1099,8 @@ func TestMigrator_IsInProgress(t *testing.T) {
 
 func TestMigrator_MigrationAlreadyInProgress(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			// Simulate slow response
 			return jsonrpcResponse(`{"id":"test","model":"MODEL","gen":2}`)
 		},
@@ -1102,7 +1124,8 @@ func TestMigrator_MigrationAlreadyInProgress(t *testing.T) {
 
 func TestMigrator_OnProgress(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return jsonrpcResponse(`{"id":"test-device","model":"MODEL","gen":2}`)
 		},
 	}
@@ -1151,7 +1174,8 @@ func TestEncryptedBackupVersion(t *testing.T) {
 
 func TestManager_ExportEncrypted(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"test-device","model":"SNSW-001X16EU","gen":2}`)
@@ -1186,7 +1210,8 @@ func TestManager_ExportEncrypted(t *testing.T) {
 
 func TestManager_RestoreEncrypted(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"test-device","model":"SNSW-001X16EU","gen":2}`)
@@ -1223,7 +1248,8 @@ func TestManager_RestoreEncrypted(t *testing.T) {
 
 func TestManager_RestoreEncrypted_WrongPassword(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"test-device"}`)
@@ -1255,7 +1281,8 @@ func TestManager_RestoreEncrypted_WrongPassword(t *testing.T) {
 func TestMigrator_Migrate_FullSuccess(t *testing.T) {
 	callCount := 0
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			callCount++
 			switch method {
 			case "Shelly.GetDeviceInfo":
@@ -1305,7 +1332,8 @@ func TestMigrator_Migrate_FullSuccess(t *testing.T) {
 func TestMigrator_Migrate_TargetOffline(t *testing.T) {
 	callCount := 0
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			callCount++
 			// First call is source device info (success), second is target (fail)
 			if callCount == 1 && method == "Shelly.GetDeviceInfo" {
@@ -1331,7 +1359,8 @@ func TestMigrator_Migrate_TargetOffline(t *testing.T) {
 func TestMigrator_Migrate_GenerationMismatch(t *testing.T) {
 	callCount := 0
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			callCount++
 			if method == "Shelly.GetDeviceInfo" {
 				if callCount == 1 {
@@ -1358,7 +1387,8 @@ func TestMigrator_Migrate_GenerationMismatch(t *testing.T) {
 func TestMigrator_Migrate_ExportFailed(t *testing.T) {
 	callCount := 0
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			callCount++
 			switch method {
 			case "Shelly.GetDeviceInfo":
@@ -1385,7 +1415,8 @@ func TestMigrator_Migrate_ExportFailed(t *testing.T) {
 func TestMigrator_Migrate_RestoreFailed(t *testing.T) {
 	callCount := 0
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			callCount++
 			switch method {
 			case "Shelly.GetDeviceInfo":
@@ -1418,7 +1449,8 @@ func TestMigrator_Migrate_RestoreFailed(t *testing.T) {
 func TestMigrator_Migrate_WithReboot(t *testing.T) {
 	rebootCalled := false
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"test","model":"MODEL","gen":2}`)
@@ -1455,7 +1487,8 @@ func TestMigrator_Migrate_WithReboot(t *testing.T) {
 
 func TestMigrator_Migrate_RebootFailed(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"test","model":"MODEL","gen":2}`)
@@ -1497,7 +1530,8 @@ func TestMigrator_Migrate_RebootFailed(t *testing.T) {
 
 func TestMigrator_Migrate_WithAllOptions(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"test","model":"MODEL","gen":2}`)
@@ -1549,7 +1583,8 @@ func TestMigrator_Migrate_WithAllOptions(t *testing.T) {
 
 func TestMigrator_Migrate_NilOptions(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"test","model":"MODEL","gen":2}`)
@@ -1582,7 +1617,8 @@ func TestMigrator_Migrate_NilOptions(t *testing.T) {
 
 func TestManager_Restore_WithSchedules(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"test-device","model":"SNSW-001X16EU","gen":2}`)
@@ -1635,7 +1671,8 @@ func TestManager_Restore_WithSchedules(t *testing.T) {
 
 func TestManager_Restore_WithWebhooks(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"test-device","model":"SNSW-001X16EU","gen":2}`)
@@ -1688,7 +1725,8 @@ func TestManager_Restore_WithWebhooks(t *testing.T) {
 
 func TestManager_Restore_SchedulesUnmarshalError(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"test-device","model":"SNSW-001X16EU","gen":2}`)
@@ -1731,7 +1769,8 @@ func TestManager_Restore_SchedulesUnmarshalError(t *testing.T) {
 
 func TestManager_Restore_WebhooksUnmarshalError(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"test-device","model":"SNSW-001X16EU","gen":2}`)
@@ -1774,7 +1813,8 @@ func TestManager_Restore_WebhooksUnmarshalError(t *testing.T) {
 func TestManager_Restore_StopScriptsWithRunning(t *testing.T) {
 	scriptStopCalled := false
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"test-device","model":"SNSW-001X16EU","gen":2}`)
@@ -1831,7 +1871,8 @@ func TestManager_Restore_StopScriptsWithRunning(t *testing.T) {
 
 func TestManager_Restore_StopScriptsListError(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"test-device","model":"SNSW-001X16EU","gen":2}`)
@@ -1881,7 +1922,8 @@ func TestManager_Restore_StopScriptsListError(t *testing.T) {
 
 func TestManager_Restore_StopScriptsUnmarshalError(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"test-device","model":"SNSW-001X16EU","gen":2}`)
@@ -1931,7 +1973,8 @@ func TestManager_Restore_StopScriptsUnmarshalError(t *testing.T) {
 
 func TestManager_Export_ListWebhooksError(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"test-device","model":"SNSW-001X16EU","gen":2}`)
@@ -1972,7 +2015,8 @@ func TestManager_Export_ListWebhooksError(t *testing.T) {
 
 func TestManager_Export_ListSchedulesError(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"test-device","model":"SNSW-001X16EU","gen":2}`)
@@ -2013,7 +2057,8 @@ func TestManager_Export_ListSchedulesError(t *testing.T) {
 
 func TestManager_getAuthInfo_Error(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -2032,7 +2077,8 @@ func TestManager_getAuthInfo_Error(t *testing.T) {
 
 func TestManager_getAuthInfo_UnmarshalError(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return jsonrpcResponse(`invalid json`)
 		},
 	}
@@ -2051,7 +2097,8 @@ func TestManager_getAuthInfo_UnmarshalError(t *testing.T) {
 
 func TestManager_Export_WithAuth(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				// Use auth_en which is the correct field name
@@ -2125,7 +2172,8 @@ func TestCredentialStore_Count(t *testing.T) {
 
 func TestManager_getDeviceInfo_UnmarshalError(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return jsonrpcResponse(`invalid json`)
 		},
 	}
@@ -2145,7 +2193,8 @@ func TestManager_getDeviceInfo_UnmarshalError(t *testing.T) {
 func TestMigrator_ValidateMigration_TargetOffline(t *testing.T) {
 	callCount := 0
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			callCount++
 			if callCount == 1 && method == "Shelly.GetDeviceInfo" {
 				return jsonrpcResponse(`{"id":"source","model":"MODEL","gen":2}`)
@@ -2183,7 +2232,8 @@ func TestMigrator_ValidateMigration_TargetOffline(t *testing.T) {
 func TestMigrator_ValidateMigration_VersionMismatch(t *testing.T) {
 	callCount := 0
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			callCount++
 			if method == "Shelly.GetDeviceInfo" {
 				if callCount == 1 {

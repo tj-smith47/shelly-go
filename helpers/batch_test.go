@@ -20,8 +20,8 @@ type mockTransport struct {
 	handler func(method string, params any) (json.RawMessage, error)
 }
 
-func (m *mockTransport) Call(_ context.Context, method string, params any) (json.RawMessage, error) {
-	return m.handler(method, params)
+func (m *mockTransport) Call(_ context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+	return m.handler(req.GetMethod(), req.GetParams())
 }
 
 func (m *mockTransport) Close() error {

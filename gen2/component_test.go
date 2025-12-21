@@ -20,9 +20,9 @@ type mockTransport struct {
 	response []byte
 }
 
-func (m *mockTransport) Call(ctx context.Context, method string, params any) (json.RawMessage, error) {
-	m.lastCall.method = method
-	m.lastCall.params = params
+func (m *mockTransport) Call(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+	m.lastCall.method = req.GetMethod()
+	m.lastCall.params = req.GetParams()
 
 	if m.err != nil {
 		return nil, m.err

@@ -78,35 +78,35 @@ type CoverStatus struct {
 
 // CoverOpenParams contains parameters for the Cover.Open method.
 type CoverOpenParams struct {
-	Duration *float64 `json:"duration,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	Duration        *float64 `json:"duration,omitempty"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // CoverCloseParams contains parameters for the Cover.Close method.
 type CoverCloseParams struct {
-	Duration *float64 `json:"duration,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	Duration        *float64 `json:"duration,omitempty"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // CoverStopParams contains parameters for the Cover.Stop method.
 type CoverStopParams struct {
-	types.RawFields
-	ID int `json:"id"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // CoverGoToPositionParams contains parameters for the Cover.GoToPosition method.
 type CoverGoToPositionParams struct {
-	types.RawFields
-	ID  int `json:"id"`
-	Pos int `json:"pos"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
+	Pos             int `json:"pos"`
 }
 
 // CoverCalibrateParams contains parameters for the Cover.Calibrate method.
 type CoverCalibrateParams struct {
-	types.RawFields
-	ID int `json:"id"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // Open opens the cover (moves to fully open position).

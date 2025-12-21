@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/tj-smith47/shelly-go/rpc"
+	"github.com/tj-smith47/shelly-go/transport"
 )
 
 func TestNewSchedule(t *testing.T) {
@@ -81,7 +82,8 @@ func TestSchedule_List(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "Schedule.List" {
 						t.Errorf("unexpected method call: %s", method)
 					}
@@ -191,7 +193,8 @@ func TestSchedule_Create(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "Schedule.Create" {
 						t.Errorf("method = %q, want %q", method, "Schedule.Create")
 					}
@@ -279,7 +282,8 @@ func TestSchedule_Update(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "Schedule.Update" {
 						t.Errorf("method = %q, want %q", method, "Schedule.Update")
 					}
@@ -312,7 +316,8 @@ func TestSchedule_Update_Error(t *testing.T) {
 
 func TestSchedule_Delete(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Schedule.Delete" {
 				t.Errorf("method = %q, want %q", method, "Schedule.Delete")
 			}
@@ -343,7 +348,8 @@ func TestSchedule_Delete_Error(t *testing.T) {
 
 func TestSchedule_DeleteAll(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Schedule.DeleteAll" {
 				t.Errorf("method = %q, want %q", method, "Schedule.DeleteAll")
 			}
@@ -508,8 +514,9 @@ func TestScheduleCall_JSONSerialization(t *testing.T) {
 
 func TestSchedule_ContextCancellation(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-			select {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					_ = req.GetMethod()
+					select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			default:

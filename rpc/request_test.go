@@ -298,7 +298,7 @@ func TestRequest_GetParams(t *testing.T) {
 				Params:  tt.params,
 			}
 
-			err := req.GetParams(tt.target)
+			err := req.GetParamsInto(tt.target)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetParams() error = %v, wantErr %v", err, tt.wantErr)

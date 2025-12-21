@@ -85,8 +85,8 @@ type LightSetParams struct {
 	Brightness         *int     `json:"brightness,omitempty"`
 	TransitionDuration *int     `json:"transition_duration,omitempty"`
 	ToggleAfter        *float64 `json:"toggle_after,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	types.RawFields    `json:"-"`
+	ID                 int `json:"id"`
 }
 
 // LightSetResult contains the result of a Light.Set call.
@@ -100,8 +100,8 @@ type LightSetResult struct {
 
 // LightToggleParams contains parameters for the Light.Toggle method.
 type LightToggleParams struct {
-	types.RawFields
-	ID int `json:"id"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // LightToggleResult contains the result of a Light.Toggle call.

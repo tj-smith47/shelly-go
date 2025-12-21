@@ -8,17 +8,18 @@ import (
 	"time"
 
 	"github.com/tj-smith47/shelly-go/rpc"
+	"github.com/tj-smith47/shelly-go/transport"
 )
 
-// mockTransport implements rpc.Transport for testing.
+// mockTransport implements transport.Transport for testing.
 type mockTransport struct {
-	callFunc  func(ctx context.Context, method string, params any) (json.RawMessage, error)
+	callFunc  func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error)
 	closeFunc func() error
 }
 
-func (m *mockTransport) Call(ctx context.Context, method string, params any) (json.RawMessage, error) {
+func (m *mockTransport) Call(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
 	if m.callFunc != nil {
-		return m.callFunc(ctx, method, params)
+		return m.callFunc(ctx, req)
 	}
 	return nil, nil
 }
@@ -57,7 +58,8 @@ func TestNew(t *testing.T) {
 
 func TestProvisioner_ConfigureWiFi(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			if method != "WiFi.SetConfig" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -90,7 +92,8 @@ func TestProvisioner_ConfigureWiFi_NoSSID(t *testing.T) {
 
 func TestProvisioner_ConfigureWiFi_StaticIP(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return jsonrpcResponse(`{"restart_required":false}`)
 		},
 	}
@@ -114,7 +117,8 @@ func TestProvisioner_ConfigureWiFi_StaticIP(t *testing.T) {
 
 func TestProvisioner_ConfigureWiFi_Error(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -130,7 +134,8 @@ func TestProvisioner_ConfigureWiFi_Error(t *testing.T) {
 
 func TestProvisioner_ConfigureAP(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			if method != "WiFi.SetConfig" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -156,7 +161,8 @@ func TestProvisioner_ConfigureAP(t *testing.T) {
 
 func TestProvisioner_ConfigureAP_Error(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -173,7 +179,8 @@ func TestProvisioner_ConfigureAP_Error(t *testing.T) {
 
 func TestProvisioner_SetAuth(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			if method != "Shelly.SetAuth" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -197,7 +204,8 @@ func TestProvisioner_SetAuth(t *testing.T) {
 
 func TestProvisioner_SetAuth_Disable(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return jsonrpcResponse(`null`)
 		},
 	}
@@ -214,7 +222,8 @@ func TestProvisioner_SetAuth_Disable(t *testing.T) {
 
 func TestProvisioner_SetAuth_Error(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -230,7 +239,8 @@ func TestProvisioner_SetAuth_Error(t *testing.T) {
 
 func TestProvisioner_SetDeviceName(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			if method != "Sys.SetConfig" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -249,7 +259,8 @@ func TestProvisioner_SetDeviceName(t *testing.T) {
 
 func TestProvisioner_SetDeviceName_Error(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -265,7 +276,8 @@ func TestProvisioner_SetDeviceName_Error(t *testing.T) {
 
 func TestProvisioner_SetTimezone(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			if method != "Sys.SetConfig" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -284,7 +296,8 @@ func TestProvisioner_SetTimezone(t *testing.T) {
 
 func TestProvisioner_SetTimezone_Error(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -300,7 +313,8 @@ func TestProvisioner_SetTimezone_Error(t *testing.T) {
 
 func TestProvisioner_SetLocation(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			if method != "Sys.SetConfig" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -319,7 +333,8 @@ func TestProvisioner_SetLocation(t *testing.T) {
 
 func TestProvisioner_SetLocation_Error(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -335,7 +350,8 @@ func TestProvisioner_SetLocation_Error(t *testing.T) {
 
 func TestProvisioner_ConfigureCloud(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			if method != "Cloud.SetConfig" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -358,7 +374,8 @@ func TestProvisioner_ConfigureCloud(t *testing.T) {
 
 func TestProvisioner_ConfigureCloud_Error(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -374,7 +391,8 @@ func TestProvisioner_ConfigureCloud_Error(t *testing.T) {
 
 func TestProvisioner_GetDeviceInfo(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			if method != "Shelly.GetDeviceInfo" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -404,7 +422,8 @@ func TestProvisioner_GetDeviceInfo(t *testing.T) {
 
 func TestProvisioner_GetDeviceInfo_Error(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -420,7 +439,8 @@ func TestProvisioner_GetDeviceInfo_Error(t *testing.T) {
 
 func TestProvisioner_GetDeviceInfo_InvalidJSON(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return jsonrpcResponse(`{invalid json}`)
 		},
 	}
@@ -436,7 +456,8 @@ func TestProvisioner_GetDeviceInfo_InvalidJSON(t *testing.T) {
 
 func TestProvisioner_GetWiFiStatus(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			if method != "WiFi.GetStatus" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -466,7 +487,8 @@ func TestProvisioner_GetWiFiStatus(t *testing.T) {
 
 func TestProvisioner_GetWiFiStatus_Error(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -482,7 +504,8 @@ func TestProvisioner_GetWiFiStatus_Error(t *testing.T) {
 
 func TestProvisioner_GetWiFiStatus_InvalidJSON(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return jsonrpcResponse(`{invalid json}`)
 		},
 	}
@@ -510,7 +533,8 @@ func TestProvisioner_IsConnected(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			transport := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 					return jsonrpcResponse(tt.result)
 				},
 			}
@@ -532,7 +556,8 @@ func TestProvisioner_IsConnected(t *testing.T) {
 
 func TestProvisioner_IsConnected_Error(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -549,7 +574,8 @@ func TestProvisioner_IsConnected_Error(t *testing.T) {
 func TestProvisioner_WaitForConnection_Success(t *testing.T) {
 	callCount := 0
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			callCount++
 			if callCount < 2 {
 				return jsonrpcResponse(`{"sta_ip":""}`)
@@ -573,7 +599,8 @@ func TestProvisioner_WaitForConnection_Success(t *testing.T) {
 
 func TestProvisioner_WaitForConnection_Timeout(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return jsonrpcResponse(`{"sta_ip":""}`)
 		},
 	}
@@ -589,7 +616,8 @@ func TestProvisioner_WaitForConnection_Timeout(t *testing.T) {
 
 func TestProvisioner_WaitForConnection_ContextCanceled(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return jsonrpcResponse(`{"sta_ip":""}`)
 		},
 	}
@@ -608,7 +636,8 @@ func TestProvisioner_WaitForConnection_ContextCanceled(t *testing.T) {
 
 func TestProvisioner_Reboot(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			if method != "Shelly.Reboot" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -627,7 +656,8 @@ func TestProvisioner_Reboot(t *testing.T) {
 
 func TestProvisioner_Reboot_Error(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -643,7 +673,8 @@ func TestProvisioner_Reboot_Error(t *testing.T) {
 
 func TestProvisioner_DisableBLE(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			if method != "BLE.SetConfig" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -662,7 +693,8 @@ func TestProvisioner_DisableBLE(t *testing.T) {
 
 func TestProvisioner_EnableBLE(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			if method != "BLE.SetConfig" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -681,7 +713,8 @@ func TestProvisioner_EnableBLE(t *testing.T) {
 
 func TestProvisioner_FactoryReset(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			if method != "Shelly.FactoryReset" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -700,7 +733,8 @@ func TestProvisioner_FactoryReset(t *testing.T) {
 
 func TestProvisioner_FactoryReset_Error(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -716,7 +750,8 @@ func TestProvisioner_FactoryReset_Error(t *testing.T) {
 
 func TestProvisioner_Provision(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"shellyplus1-123456","model":"SNSW-001X16EU","gen":2}`)
@@ -786,7 +821,8 @@ func TestProvisioner_Provision(t *testing.T) {
 
 func TestProvisioner_Provision_DefaultOptions(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"shellyplus1-123456"}`)
@@ -821,7 +857,8 @@ func TestProvisioner_Provision_DefaultOptions(t *testing.T) {
 
 func TestProvisioner_Provision_GetDeviceInfoError(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			if method == "Shelly.GetDeviceInfo" {
 				return nil, errTest
 			}
@@ -847,7 +884,8 @@ func TestProvisioner_Provision_GetDeviceInfoError(t *testing.T) {
 
 func TestProvisioner_Provision_WiFiError(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"shellyplus1-123456"}`)
@@ -1602,7 +1640,8 @@ func TestBulkProvisioner_ProvisionBulk_EmptyTargets(t *testing.T) {
 func TestBulkProvisioner_ProvisionBulk_NoConfig(t *testing.T) {
 	factory := func(address string) (*rpc.Client, error) {
 		transport := &mockTransport{
-			callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+			callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			_ = req.GetMethod()
 				return jsonrpcResponse(`{"id":"test"}`)
 			},
 		}
@@ -1631,7 +1670,8 @@ func TestBulkProvisioner_ProvisionBulk_WithProfile(t *testing.T) {
 	callCount := 0
 	factory := func(address string) (*rpc.Client, error) {
 		transport := &mockTransport{
-			callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+			callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 				callCount++
 				switch method {
 				case "Shelly.GetDeviceInfo":
@@ -1686,7 +1726,8 @@ func TestBulkProvisioner_ProvisionBulk_WithProfile(t *testing.T) {
 func TestBulkProvisioner_ProvisionBulk_WithDirectConfig(t *testing.T) {
 	factory := func(address string) (*rpc.Client, error) {
 		transport := &mockTransport{
-			callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+			callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 				switch method {
 				case "Shelly.GetDeviceInfo":
 					return jsonrpcResponse(`{"id":"test"}`)
@@ -1734,7 +1775,8 @@ func TestBulkProvisioner_ProvisionBulk_WithDirectConfig(t *testing.T) {
 func TestBulkProvisioner_ProvisionBulk_MultipleDevices(t *testing.T) {
 	factory := func(address string) (*rpc.Client, error) {
 		transport := &mockTransport{
-			callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+			callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 				switch method {
 				case "Shelly.GetDeviceInfo":
 					return jsonrpcResponse(`{"id":"test"}`)
@@ -1936,13 +1978,14 @@ func TestProfileRegistry_Concurrency(t *testing.T) {
 
 func TestProvisioner_Provision_APError(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"shellyplus1-123456"}`)
 			case "WiFi.SetConfig":
 				// Check if this is AP config or WiFi config based on params
-				paramsBytes, _ := json.Marshal(params)
+				paramsBytes := req.GetParams()
 				if len(paramsBytes) > 50 { // AP config has more data
 					return nil, errTest
 				}
@@ -1972,7 +2015,8 @@ func TestProvisioner_Provision_APError(t *testing.T) {
 
 func TestProvisioner_Provision_DeviceNameError(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"shellyplus1-123456"}`)
@@ -2003,7 +2047,8 @@ func TestProvisioner_Provision_DeviceNameError(t *testing.T) {
 func TestProvisioner_Provision_TimezoneError(t *testing.T) {
 	sysCallCount := 0
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"shellyplus1-123456"}`)
@@ -2039,7 +2084,8 @@ func TestProvisioner_Provision_TimezoneError(t *testing.T) {
 func TestProvisioner_Provision_LocationError(t *testing.T) {
 	sysCallCount := 0
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"shellyplus1-123456"}`)
@@ -2075,7 +2121,8 @@ func TestProvisioner_Provision_LocationError(t *testing.T) {
 
 func TestProvisioner_Provision_CloudError(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"shellyplus1-123456"}`)
@@ -2106,7 +2153,8 @@ func TestProvisioner_Provision_CloudError(t *testing.T) {
 
 func TestProvisioner_Provision_AuthError(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"shellyplus1-123456"}`)
@@ -2140,7 +2188,8 @@ func TestProvisioner_Provision_AuthError(t *testing.T) {
 func TestProvisioner_Provision_DisableAPError(t *testing.T) {
 	wifiCallCount := 0
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"shellyplus1-123456"}`)
@@ -2183,7 +2232,8 @@ func TestProvisioner_Provision_DisableAPError(t *testing.T) {
 
 func TestProvisioner_Provision_DisableBLEError(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"shellyplus1-123456"}`)
@@ -2224,7 +2274,8 @@ func TestProvisioner_Provision_DisableBLEError(t *testing.T) {
 
 func TestProvisioner_Provision_WaitForConnectionError(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			method := req.GetMethod()
 			switch method {
 			case "Shelly.GetDeviceInfo":
 				return jsonrpcResponse(`{"id":"shellyplus1-123456"}`)

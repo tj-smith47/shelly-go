@@ -59,7 +59,7 @@ type MeterConfig struct {
 // GetStatus retrieves the current meter readings.
 func (m *Meter) GetStatus(ctx context.Context) (*MeterStatus, error) {
 	path := fmt.Sprintf("/meter/%d", m.id)
-	resp, err := m.transport.Call(ctx, path, nil)
+	resp, err := restCall(ctx, m.transport, path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get meter status: %w", err)
 	}
@@ -117,7 +117,7 @@ func (m *Meter) GetCounters(ctx context.Context) ([]float64, error) {
 // Note: This may not be supported on all devices.
 func (m *Meter) ResetCounters(ctx context.Context) error {
 	path := fmt.Sprintf("/meter/%d?reset_totals=true", m.id)
-	_, err := m.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, m.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to reset counters: %w", err)
 	}
@@ -131,7 +131,7 @@ func (m *Meter) ResetCounters(ctx context.Context) error {
 func (m *Meter) SetPowerLimit(ctx context.Context, watts float64) error {
 	// Power limit is typically set on the relay settings
 	path := fmt.Sprintf("/settings/relay/%d?max_power=%v", m.id, watts)
-	_, err := m.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, m.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set power limit: %w", err)
 	}

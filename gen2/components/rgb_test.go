@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/tj-smith47/shelly-go/rpc"
+	"github.com/tj-smith47/shelly-go/transport"
 )
 
 func TestNewRGB(t *testing.T) {
@@ -75,7 +76,8 @@ func TestRGB_Set(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "RGB.Set" {
 						t.Errorf("method = %q, want %q", method, "RGB.Set")
 					}
@@ -122,7 +124,8 @@ func TestRGB_SetInvalidJSON(t *testing.T) {
 
 func TestRGB_Toggle(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "RGB.Toggle" {
 				t.Errorf("method = %q, want %q", method, "RGB.Toggle")
 			}
@@ -167,7 +170,8 @@ func TestRGB_ToggleInvalidJSON(t *testing.T) {
 
 func TestRGB_GetConfig(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "RGB.GetConfig" {
 				t.Errorf("method = %q, want %q", method, "RGB.GetConfig")
 			}
@@ -217,7 +221,8 @@ func TestRGB_GetConfigError(t *testing.T) {
 
 func TestRGB_SetConfig(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "RGB.SetConfig" {
 				t.Errorf("method = %q, want %q", method, "RGB.SetConfig")
 			}
@@ -250,7 +255,8 @@ func TestRGB_SetConfigError(t *testing.T) {
 
 func TestRGB_GetStatus(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "RGB.GetStatus" {
 				t.Errorf("method = %q, want %q", method, "RGB.GetStatus")
 			}
@@ -300,7 +306,8 @@ func TestRGB_GetStatusError(t *testing.T) {
 
 func TestRGB_ResetCounters(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "RGB.ResetCounters" {
 				t.Errorf("method = %q, want %q", method, "RGB.ResetCounters")
 			}

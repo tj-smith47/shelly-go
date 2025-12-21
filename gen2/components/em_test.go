@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/tj-smith47/shelly-go/rpc"
+	"github.com/tj-smith47/shelly-go/transport"
 )
 
 func TestNewEM(t *testing.T) {
@@ -74,7 +75,8 @@ func TestEM_GetConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "EM.GetConfig" {
 						t.Errorf("unexpected method call: %s", method)
 					}
@@ -150,7 +152,8 @@ func TestEM_SetConfig(t *testing.T) {
 	}
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "EM.SetConfig" {
 				t.Errorf("method = %q, want %q", method, "EM.SetConfig")
 			}
@@ -305,7 +308,8 @@ func TestEM_GetStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "EM.GetStatus" {
 						t.Errorf("unexpected method call: %s", method)
 					}
@@ -414,7 +418,8 @@ func TestEM_GetCTTypes(t *testing.T) {
 	result := `{"types": ["120A", "400A", "630A"]}`
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "EM.GetCTTypes" {
 				t.Errorf("method = %q, want %q", method, "EM.GetCTTypes")
 			}
@@ -484,7 +489,8 @@ func TestEM_ResetCounters(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "EM.ResetCounters" {
 						t.Errorf("method = %q, want %q", method, "EM.ResetCounters")
 					}

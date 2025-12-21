@@ -191,7 +191,7 @@ func TestMQTT_Call_Timeout_WithBroker(t *testing.T) {
 	callCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 	defer cancel()
 
-	_, err = mqtt.Call(callCtx, "Shelly.GetDeviceInfo", nil)
+	_, err = mqtt.Call(callCtx, NewSimpleRequest("Shelly.GetDeviceInfo"))
 	if err == nil {
 		t.Error("Call() should timeout when no device responds")
 	}
@@ -222,7 +222,7 @@ func TestMQTT_Call_WithMockDevice(t *testing.T) {
 	callCtx, cancel := context.WithTimeout(ctx, 1*time.Second)
 	defer cancel()
 
-	_, err = clientMQTT.Call(callCtx, "Shelly.GetDeviceInfo", nil)
+	_, err = clientMQTT.Call(callCtx, NewSimpleRequest("Shelly.GetDeviceInfo"))
 	// We expect a timeout since no device responds
 	if err == nil {
 		t.Log("Call() succeeded unexpectedly")

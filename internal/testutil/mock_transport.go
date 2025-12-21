@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+
+	"github.com/tj-smith47/shelly-go/transport"
 )
 
 // CallHandler is a function that handles RPC calls and returns a response.
@@ -72,7 +74,10 @@ func (mt *MockTransport) OnCallError(method string, err error) *MockTransport {
 }
 
 // Call implements the transport.Transport interface.
-func (mt *MockTransport) Call(ctx context.Context, method string, params any) (json.RawMessage, error) {
+func (mt *MockTransport) Call(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+	method := req.GetMethod()
+	params := req.GetParams()
+
 	mt.mu.Lock()
 	if mt.closed {
 		mt.mu.Unlock()

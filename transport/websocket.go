@@ -150,7 +150,7 @@ func (w *WebSocket) Connect(ctx context.Context) error {
 //
 // If not connected, this will attempt to connect first.
 // The request is correlated with the response using a unique ID.
-func (w *WebSocket) Call(ctx context.Context, method string, params any) (json.RawMessage, error) {
+func (w *WebSocket) Call(ctx context.Context, rpcReq RPCRequest) (json.RawMessage, error) {
 	if w.isClosed() {
 		return nil, fmt.Errorf("websocket is closed")
 	}
@@ -162,29 +162,55 @@ func (w *WebSocket) Call(ctx context.Context, method string, params any) (json.R
 		}
 	}
 
-	// Create request with unique ID
-	id := w.requestID.Add(1)
-	req := rpcRequest{
-		ID:     id,
-		Src:    w.src,
-		Method: method,
-		Params: params,
+	// Build request body from RPCRequest interface
+	reqBody := map[string]any{
+		"id":     rpcReq.GetID(),
+		"src":    w.src,
+		"method": rpcReq.GetMethod(),
+	}
+
+	// Unmarshal params from json.RawMessage and add to request
+	if params := rpcReq.GetParams(); len(params) > 0 {
+		var p any
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal params: %w", err)
+		}
+		reqBody["params"] = p
+	}
+
+	// Add auth if present
+	if auth := rpcReq.GetAuth(); auth != nil {
+		reqBody["auth"] = auth
+	}
+
+	// Get request ID for response correlation
+	var requestID int64
+	switch id := rpcReq.GetID().(type) {
+	case int64:
+		requestID = id
+	case uint64:
+		requestID = int64(id)
+	case int:
+		requestID = int64(id)
+	default:
+		requestID = w.requestID.Add(1)
+		reqBody["id"] = requestID
 	}
 
 	// Create response channel
 	respChan := make(chan *rpcResponse, 1)
 	w.pendingMu.Lock()
-	w.pending[id] = respChan
+	w.pending[requestID] = respChan
 	w.pendingMu.Unlock()
 
 	defer func() {
 		w.pendingMu.Lock()
-		delete(w.pending, id)
+		delete(w.pending, requestID)
 		w.pendingMu.Unlock()
 	}()
 
 	// Marshal and send request
-	data, err := json.Marshal(req)
+	data, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}

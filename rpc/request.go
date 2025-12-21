@@ -182,10 +182,41 @@ func (r *Request) WithAuth(auth *AuthData) *Request {
 	return r
 }
 
-// GetParams unmarshals the request params into the provided value.
-func (r *Request) GetParams(v any) error {
+// GetParamsInto unmarshals the request params into the provided value.
+func (r *Request) GetParamsInto(v any) error {
 	if len(r.Params) == 0 {
 		return nil
 	}
 	return json.Unmarshal(r.Params, v)
+}
+
+// GetID implements transport.RPCRequest interface.
+func (r *Request) GetID() any {
+	return r.ID
+}
+
+// GetMethod implements transport.RPCRequest interface.
+func (r *Request) GetMethod() string {
+	return r.Method
+}
+
+// GetParams implements transport.RPCRequest interface.
+func (r *Request) GetParams() json.RawMessage {
+	return r.Params
+}
+
+// GetAuth implements transport.RPCRequest interface.
+func (r *Request) GetAuth() any {
+	return r.Auth
+}
+
+// GetJSONRPC implements transport.RPCRequest interface.
+func (r *Request) GetJSONRPC() string {
+	return r.JSONRPC
+}
+
+// IsREST implements transport.RPCRequest interface.
+// Always returns false since rpc.Request is for Gen2+ JSON-RPC, not Gen1 REST.
+func (r *Request) IsREST() bool {
+	return false
 }

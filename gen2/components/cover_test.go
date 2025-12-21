@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/tj-smith47/shelly-go/rpc"
+	"github.com/tj-smith47/shelly-go/transport"
 )
 
 func TestNewCover(t *testing.T) {
@@ -50,7 +51,8 @@ func TestCover_Open(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "Cover.Open" {
 						t.Errorf("method = %q, want %q", method, "Cover.Open")
 					}
@@ -95,7 +97,8 @@ func TestCover_Close(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "Cover.Close" {
 						t.Errorf("method = %q, want %q", method, "Cover.Close")
 					}
@@ -124,7 +127,8 @@ func TestCover_Close_Error(t *testing.T) {
 
 func TestCover_Stop(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Cover.Stop" {
 				t.Errorf("method = %q, want %q", method, "Cover.Stop")
 			}
@@ -171,7 +175,8 @@ func TestCover_GoToPosition(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "Cover.GoToPosition" {
 						t.Errorf("method = %q, want %q", method, "Cover.GoToPosition")
 					}
@@ -200,7 +205,8 @@ func TestCover_GoToPosition_Error(t *testing.T) {
 
 func TestCover_Calibrate(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Cover.Calibrate" {
 				t.Errorf("method = %q, want %q", method, "Cover.Calibrate")
 			}
@@ -243,7 +249,8 @@ func TestCover_ResetCounters(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "Cover.ResetCounters" {
 						t.Errorf("method = %q, want %q", method, "Cover.ResetCounters")
 					}
@@ -283,7 +290,8 @@ func TestCover_GetConfig(t *testing.T) {
 	}`
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Cover.GetConfig" {
 				t.Errorf("method = %q, want %q", method, "Cover.GetConfig")
 			}
@@ -348,7 +356,8 @@ func TestCover_SetConfig(t *testing.T) {
 	}
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Cover.SetConfig" {
 				t.Errorf("method = %q, want %q", method, "Cover.SetConfig")
 			}
@@ -371,8 +380,9 @@ func TestCover_SetConfig_AutoSetID(t *testing.T) {
 	}
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-			return jsonrpcResponse(`{}`)
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					_ = req.GetMethod()
+					return jsonrpcResponse(`{}`)
 		},
 	}
 	client := rpc.NewClient(tr)
@@ -404,7 +414,8 @@ func TestCover_GetStatus(t *testing.T) {
 	}`
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Cover.GetStatus" {
 				t.Errorf("method = %q, want %q", method, "Cover.GetStatus")
 			}
@@ -465,8 +476,9 @@ func TestCover_GetStatus_WithErrors(t *testing.T) {
 	}`
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-			return jsonrpcResponse(result)
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					_ = req.GetMethod()
+					return jsonrpcResponse(result)
 		},
 	}
 	client := rpc.NewClient(tr)

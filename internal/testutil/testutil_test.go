@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/tj-smith47/shelly-go/transport"
 	"github.com/tj-smith47/shelly-go/types"
 )
 
@@ -25,7 +26,7 @@ func TestMockTransport_OnCall(t *testing.T) {
 		return json.RawMessage(`{"result":"ok"}`), nil
 	})
 
-	result, err := mt.Call(context.Background(), "Test.Method", nil)
+	result, err := mt.Call(context.Background(), transport.NewSimpleRequest("Test.Method"))
 	if err != nil {
 		t.Errorf("Call() error = %v", err)
 	}
@@ -38,7 +39,7 @@ func TestMockTransport_OnCallReturn(t *testing.T) {
 	mt := NewMockTransport()
 	mt.OnCallReturn("Test.Method", map[string]string{"status": "ok"}, nil)
 
-	result, err := mt.Call(context.Background(), "Test.Method", nil)
+	result, err := mt.Call(context.Background(), transport.NewSimpleRequest("Test.Method"))
 	if err != nil {
 		t.Errorf("Call() error = %v", err)
 	}
@@ -56,7 +57,7 @@ func TestMockTransport_OnCallReturn_NilResponse(t *testing.T) {
 	mt := NewMockTransport()
 	mt.OnCallReturn("Test.Method", nil, nil)
 
-	result, err := mt.Call(context.Background(), "Test.Method", nil)
+	result, err := mt.Call(context.Background(), transport.NewSimpleRequest("Test.Method"))
 	if err != nil {
 		t.Errorf("Call() error = %v", err)
 	}
@@ -70,7 +71,7 @@ func TestMockTransport_OnCallReturn_Error(t *testing.T) {
 	expectedErr := errors.New("test error")
 	mt.OnCallReturn("Test.Method", nil, expectedErr)
 
-	_, err := mt.Call(context.Background(), "Test.Method", nil)
+	_, err := mt.Call(context.Background(), transport.NewSimpleRequest("Test.Method"))
 	if err != expectedErr {
 		t.Errorf("Call() error = %v, want %v", err, expectedErr)
 	}
@@ -80,7 +81,7 @@ func TestMockTransport_OnCallJSON(t *testing.T) {
 	mt := NewMockTransport()
 	mt.OnCallJSON("Test.Method", `{"json":"value"}`)
 
-	result, err := mt.Call(context.Background(), "Test.Method", nil)
+	result, err := mt.Call(context.Background(), transport.NewSimpleRequest("Test.Method"))
 	if err != nil {
 		t.Errorf("Call() error = %v", err)
 	}
@@ -94,7 +95,7 @@ func TestMockTransport_OnCallError(t *testing.T) {
 	expectedErr := errors.New("method error")
 	mt.OnCallError("Test.Method", expectedErr)
 
-	_, err := mt.Call(context.Background(), "Test.Method", nil)
+	_, err := mt.Call(context.Background(), transport.NewSimpleRequest("Test.Method"))
 	if err != expectedErr {
 		t.Errorf("Call() error = %v, want %v", err, expectedErr)
 	}
@@ -103,7 +104,7 @@ func TestMockTransport_OnCallError(t *testing.T) {
 func TestMockTransport_Call_NoHandler(t *testing.T) {
 	mt := NewMockTransport()
 
-	_, err := mt.Call(context.Background(), "Unknown.Method", nil)
+	_, err := mt.Call(context.Background(), transport.NewSimpleRequest("Unknown.Method"))
 	if err == nil {
 		t.Error("Call() should return error for unknown method")
 	}
@@ -114,7 +115,7 @@ func TestMockTransport_Call_Closed(t *testing.T) {
 	mt.OnCallJSON("Test.Method", `{}`)
 	mt.Close()
 
-	_, err := mt.Call(context.Background(), "Test.Method", nil)
+	_, err := mt.Call(context.Background(), transport.NewSimpleRequest("Test.Method"))
 	if err == nil {
 		t.Error("Call() should return error when closed")
 	}
@@ -129,7 +130,7 @@ func TestMockTransport_Call_ContextCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := mt.Call(ctx, "Test.Method", nil)
+	_, err := mt.Call(ctx, transport.NewSimpleRequest("Test.Method"))
 	if err != context.Canceled {
 		t.Errorf("Call() error = %v, want %v", err, context.Canceled)
 	}
@@ -140,8 +141,8 @@ func TestMockTransport_Calls(t *testing.T) {
 	mt.OnCallJSON("Test.Method1", `{}`)
 	mt.OnCallJSON("Test.Method2", `{}`)
 
-	_, _ = mt.Call(context.Background(), "Test.Method1", "params1")
-	_, _ = mt.Call(context.Background(), "Test.Method2", "params2")
+	_, _ = mt.Call(context.Background(), transport.NewSimpleRequest("Test.Method1"))
+	_, _ = mt.Call(context.Background(), transport.NewSimpleRequest("Test.Method2"))
 
 	calls := mt.Calls()
 	if len(calls) != 2 {
@@ -150,8 +151,9 @@ func TestMockTransport_Calls(t *testing.T) {
 	if calls[0].Method != "Test.Method1" {
 		t.Errorf("calls[0].Method = %v, want Test.Method1", calls[0].Method)
 	}
-	if calls[0].Params != "params1" {
-		t.Errorf("calls[0].Params = %v, want params1", calls[0].Params)
+	// Note: SimpleRequest has no params, so Params should be empty/nil json.RawMessage
+	if len(calls[0].Params.(json.RawMessage)) != 0 {
+		t.Errorf("calls[0].Params = %v, want empty", calls[0].Params)
 	}
 }
 
@@ -163,7 +165,7 @@ func TestMockTransport_LastCall(t *testing.T) {
 		t.Error("LastCall() should be nil with no calls")
 	}
 
-	_, _ = mt.Call(context.Background(), "Test.Method", "params")
+	_, _ = mt.Call(context.Background(), transport.NewSimpleRequest("Test.Method"))
 	last := mt.LastCall()
 	if last == nil {
 		t.Fatal("LastCall() returned nil")
@@ -176,7 +178,7 @@ func TestMockTransport_LastCall(t *testing.T) {
 func TestMockTransport_Reset(t *testing.T) {
 	mt := NewMockTransport()
 	mt.OnCallJSON("Test.Method", `{}`)
-	_, _ = mt.Call(context.Background(), "Test.Method", nil)
+	_, _ = mt.Call(context.Background(), transport.NewSimpleRequest("Test.Method"))
 	mt.Close()
 
 	mt.Reset()
@@ -186,7 +188,7 @@ func TestMockTransport_Reset(t *testing.T) {
 	}
 
 	// Should be able to call again after reset
-	_, err := mt.Call(context.Background(), "Test.Method", nil)
+	_, err := mt.Call(context.Background(), transport.NewSimpleRequest("Test.Method"))
 	if err != nil {
 		t.Errorf("Call() after reset error = %v", err)
 	}
@@ -198,7 +200,7 @@ func TestMockTransport_ClearHandlers(t *testing.T) {
 
 	mt.ClearHandlers()
 
-	_, err := mt.Call(context.Background(), "Test.Method", nil)
+	_, err := mt.Call(context.Background(), transport.NewSimpleRequest("Test.Method"))
 	if err == nil {
 		t.Error("Call() should fail after ClearHandlers()")
 	}
@@ -212,7 +214,7 @@ func TestMockTransport_WasCalled(t *testing.T) {
 		t.Error("WasCalled() should be false before call")
 	}
 
-	_, _ = mt.Call(context.Background(), "Test.Method", nil)
+	_, _ = mt.Call(context.Background(), transport.NewSimpleRequest("Test.Method"))
 
 	if !mt.WasCalled("Test.Method") {
 		t.Error("WasCalled() should be true after call")
@@ -227,9 +229,9 @@ func TestMockTransport_CallsFor(t *testing.T) {
 	mt.OnCallJSON("Test.Method", `{}`)
 	mt.OnCallJSON("Other.Method", `{}`)
 
-	_, _ = mt.Call(context.Background(), "Test.Method", "p1")
-	_, _ = mt.Call(context.Background(), "Other.Method", "p2")
-	_, _ = mt.Call(context.Background(), "Test.Method", "p3")
+	_, _ = mt.Call(context.Background(), transport.NewSimpleRequest("Test.Method"))
+	_, _ = mt.Call(context.Background(), transport.NewSimpleRequest("Other.Method"))
+	_, _ = mt.Call(context.Background(), transport.NewSimpleRequest("Test.Method"))
 
 	calls := mt.CallsFor("Test.Method")
 	if len(calls) != 2 {
@@ -685,7 +687,7 @@ func TestMockTransport_OnPathMatch(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	resp, err := mt.Call(ctx, "/rpc/Switch.GetStatus", nil)
+	resp, err := mt.Call(ctx, transport.NewSimpleRequest("/rpc/Switch.GetStatus"))
 	if err != nil {
 		t.Errorf("Call() error = %v", err)
 	}
@@ -694,7 +696,7 @@ func TestMockTransport_OnPathMatch(t *testing.T) {
 	}
 
 	// Non-matching path should error
-	_, err = mt.Call(ctx, "/rpc/Other.Method", nil)
+	_, err = mt.Call(ctx, transport.NewSimpleRequest("/rpc/Other.Method"))
 	if err == nil {
 		t.Error("Call() for non-matching path should error")
 	}
@@ -707,7 +709,7 @@ func TestMockTransport_OnPathContains(t *testing.T) {
 	mt.OnPathContains("Switch", map[string]bool{"output": true}, nil)
 
 	ctx := context.Background()
-	resp, err := mt.Call(ctx, "/rpc/Switch.GetStatus", nil)
+	resp, err := mt.Call(ctx, transport.NewSimpleRequest("/rpc/Switch.GetStatus"))
 	if err != nil {
 		t.Errorf("Call() error = %v", err)
 	}
@@ -716,7 +718,7 @@ func TestMockTransport_OnPathContains(t *testing.T) {
 	}
 
 	// Also matches other Switch methods
-	_, err = mt.Call(ctx, "Switch.Set", nil)
+	_, err = mt.Call(ctx, transport.NewSimpleRequest("Switch.Set"))
 	if err != nil {
 		t.Errorf("Call() error = %v", err)
 	}
@@ -730,7 +732,7 @@ func TestMockTransport_OnPathContains_Error(t *testing.T) {
 	mt.OnPathContains("Test", nil, expectedErr)
 
 	ctx := context.Background()
-	_, err := mt.Call(ctx, "Test.Method", nil)
+	_, err := mt.Call(ctx, transport.NewSimpleRequest("Test.Method"))
 	if err == nil {
 		t.Error("Call() should return error")
 	}
@@ -743,7 +745,7 @@ func TestMockTransport_OnPathPrefix(t *testing.T) {
 	mt.OnPathPrefix("/rpc/", map[string]string{"status": "ok"}, nil)
 
 	ctx := context.Background()
-	resp, err := mt.Call(ctx, "/rpc/Any.Method", nil)
+	resp, err := mt.Call(ctx, transport.NewSimpleRequest("/rpc/Any.Method"))
 	if err != nil {
 		t.Errorf("Call() error = %v", err)
 	}
@@ -752,7 +754,7 @@ func TestMockTransport_OnPathPrefix(t *testing.T) {
 	}
 
 	// Non-prefixed path should error
-	_, err = mt.Call(ctx, "Other.Method", nil)
+	_, err = mt.Call(ctx, transport.NewSimpleRequest("Other.Method"))
 	if err == nil {
 		t.Error("Call() for non-prefixed path should error")
 	}
@@ -765,7 +767,7 @@ func TestMockTransport_ClearMatchers(t *testing.T) {
 	mt.ClearMatchers()
 
 	ctx := context.Background()
-	_, err := mt.Call(ctx, "Test.Method", nil)
+	_, err := mt.Call(ctx, transport.NewSimpleRequest("Test.Method"))
 	if err == nil {
 		t.Error("Call() after ClearMatchers() should error")
 	}

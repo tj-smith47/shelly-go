@@ -60,7 +60,7 @@ func TestMQTT_CallNotConnected(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 0)
 	cancel() // Cancel immediately to avoid waiting
 
-	_, err := mqtt.Call(ctx, "Switch.Set", nil)
+	_, err := mqtt.Call(ctx, NewSimpleRequest("Switch.Set"))
 	if err == nil {
 		t.Error("Call() error = nil, want error (should fail to connect)")
 	}
@@ -149,7 +149,7 @@ func TestMQTT_ClosedCall(t *testing.T) {
 	mqtt := NewMQTT("tcp://192.168.1.10:1883", "shellyplus1pm-abc123")
 	mqtt.Close()
 
-	_, err := mqtt.Call(context.Background(), "Switch.Set", nil)
+	_, err := mqtt.Call(context.Background(), NewSimpleRequest("Switch.Set"))
 	if err == nil {
 		t.Error("Call() on closed MQTT error = nil, want error")
 	}

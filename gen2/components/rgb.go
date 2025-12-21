@@ -97,9 +97,9 @@ type RGBSetParams struct {
 	Brightness         *int     `json:"brightness,omitempty"`
 	TransitionDuration *float64 `json:"transition_duration,omitempty"`
 	ToggleAfter        *float64 `json:"toggle_after,omitempty"`
-	types.RawFields
-	RGB []int `json:"rgb,omitempty"`
-	ID  int   `json:"id"`
+	types.RawFields    `json:"-"`
+	RGB                []int `json:"rgb,omitempty"`
+	ID                 int   `json:"id"`
 }
 
 // RGBSetResult contains the result of an RGB.Set call.
@@ -110,8 +110,8 @@ type RGBSetResult struct {
 
 // RGBToggleParams contains parameters for the RGB.Toggle method.
 type RGBToggleParams struct {
-	types.RawFields
-	ID int `json:"id"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // RGBToggleResult contains the result of an RGB.Toggle call.

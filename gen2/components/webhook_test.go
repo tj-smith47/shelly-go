@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/tj-smith47/shelly-go/rpc"
+	"github.com/tj-smith47/shelly-go/transport"
 )
 
 func TestNewWebhook(t *testing.T) {
@@ -82,7 +83,8 @@ func TestWebhook_List(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "Webhook.List" {
 						t.Errorf("unexpected method call: %s", method)
 					}
@@ -207,7 +209,8 @@ func TestWebhook_Create(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "Webhook.Create" {
 						t.Errorf("method = %q, want %q", method, "Webhook.Create")
 					}
@@ -317,7 +320,8 @@ func TestWebhook_Update(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "Webhook.Update" {
 						t.Errorf("method = %q, want %q", method, "Webhook.Update")
 					}
@@ -350,7 +354,8 @@ func TestWebhook_Update_Error(t *testing.T) {
 
 func TestWebhook_Delete(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Webhook.Delete" {
 				t.Errorf("method = %q, want %q", method, "Webhook.Delete")
 			}
@@ -381,7 +386,8 @@ func TestWebhook_Delete_Error(t *testing.T) {
 
 func TestWebhook_DeleteAll(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Webhook.DeleteAll" {
 				t.Errorf("method = %q, want %q", method, "Webhook.DeleteAll")
 			}
@@ -436,7 +442,8 @@ func TestWebhook_ListSupported(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "Webhook.ListSupported" {
 						t.Errorf("method = %q, want %q", method, "Webhook.ListSupported")
 					}
@@ -542,8 +549,9 @@ func TestWebhookConfig_JSONSerialization(t *testing.T) {
 
 func TestWebhook_ContextCancellation(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-			select {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					_ = req.GetMethod()
+					select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			default:

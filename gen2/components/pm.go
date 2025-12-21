@@ -80,9 +80,9 @@ type PMEnergyCounters struct {
 
 // PMResetCountersParams contains parameters for the PM.ResetCounters method.
 type PMResetCountersParams struct {
-	types.RawFields
-	Type []string `json:"type,omitempty"`
-	ID   int      `json:"id"`
+	types.RawFields `json:"-"`
+	Type            []string `json:"type,omitempty"`
+	ID              int      `json:"id"`
 }
 
 // GetConfig retrieves the PM configuration.

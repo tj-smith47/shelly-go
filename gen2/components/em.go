@@ -99,9 +99,9 @@ type EMGetCTTypesResult struct {
 
 // EMResetCountersParams contains parameters for the EM.ResetCounters method.
 type EMResetCountersParams struct {
-	types.RawFields
-	Type []string `json:"type,omitempty"`
-	ID   int      `json:"id"`
+	types.RawFields `json:"-"`
+	Type            []string `json:"type,omitempty"`
+	ID              int      `json:"id"`
 }
 
 // GetConfig retrieves the EM configuration.

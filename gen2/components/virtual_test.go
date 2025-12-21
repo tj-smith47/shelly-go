@@ -7,16 +7,13 @@ import (
 	"testing"
 
 	"github.com/tj-smith47/shelly-go/rpc"
+	"github.com/tj-smith47/shelly-go/transport"
 )
 
 // extractVirtualParams is a helper to extract params from the RPC request for testing
-func extractVirtualParams(params any) map[string]any {
-	req, ok := params.(*rpc.Request)
-	if !ok {
-		return nil
-	}
+func extractVirtualParams(params json.RawMessage) map[string]any {
 	var result map[string]any
-	if err := json.Unmarshal(req.Params, &result); err != nil {
+	if err := json.Unmarshal(params, &result); err != nil {
 		return nil
 	}
 	return result
@@ -47,11 +44,12 @@ func TestVirtual_Add(t *testing.T) {
 	result := `{"id": 200}`
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Virtual.Add" {
 				t.Errorf("method = %q, want %q", method, "Virtual.Add")
 			}
-			paramsMap := extractVirtualParams(params)
+			paramsMap := extractVirtualParams(req.GetParams())
 			if paramsMap == nil {
 				t.Fatal("expected params to be extractable")
 			}
@@ -78,11 +76,12 @@ func TestVirtual_Add_WithConfig(t *testing.T) {
 	result := `{"id": 201}`
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Virtual.Add" {
 				t.Errorf("method = %q, want %q", method, "Virtual.Add")
 			}
-			paramsMap := extractVirtualParams(params)
+			paramsMap := extractVirtualParams(req.GetParams())
 			if paramsMap == nil {
 				t.Fatal("expected params to be extractable")
 			}
@@ -141,11 +140,12 @@ func TestVirtual_Add_InvalidJSON(t *testing.T) {
 
 func TestVirtual_Delete(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Virtual.Delete" {
 				t.Errorf("method = %q, want %q", method, "Virtual.Delete")
 			}
-			paramsMap := extractVirtualParams(params)
+			paramsMap := extractVirtualParams(req.GetParams())
 			if paramsMap == nil {
 				t.Fatal("expected params to be extractable")
 			}
@@ -209,7 +209,8 @@ func TestVirtualBoolean_GetConfig(t *testing.T) {
 	}`
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Boolean.GetConfig" {
 				t.Errorf("method = %q, want %q", method, "Boolean.GetConfig")
 			}
@@ -260,11 +261,12 @@ func TestVirtualBoolean_GetConfig_InvalidJSON(t *testing.T) {
 
 func TestVirtualBoolean_SetConfig(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Boolean.SetConfig" {
 				t.Errorf("method = %q, want %q", method, "Boolean.SetConfig")
 			}
-			paramsMap := extractVirtualParams(params)
+			paramsMap := extractVirtualParams(req.GetParams())
 			if paramsMap == nil {
 				t.Fatal("expected params to be extractable")
 			}
@@ -316,7 +318,8 @@ func TestVirtualBoolean_GetStatus(t *testing.T) {
 	}`
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Boolean.GetStatus" {
 				t.Errorf("method = %q, want %q", method, "Boolean.GetStatus")
 			}
@@ -361,11 +364,12 @@ func TestVirtualBoolean_GetStatus_InvalidJSON(t *testing.T) {
 
 func TestVirtualBoolean_Set(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Boolean.Set" {
 				t.Errorf("method = %q, want %q", method, "Boolean.Set")
 			}
-			paramsMap := extractVirtualParams(params)
+			paramsMap := extractVirtualParams(req.GetParams())
 			if paramsMap == nil {
 				t.Fatal("expected params to be extractable")
 			}
@@ -398,11 +402,12 @@ func TestVirtualBoolean_Set_Error(t *testing.T) {
 
 func TestVirtualBoolean_Toggle(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Boolean.Toggle" {
 				t.Errorf("method = %q, want %q", method, "Boolean.Toggle")
 			}
-			paramsMap := extractVirtualParams(params)
+			paramsMap := extractVirtualParams(req.GetParams())
 			if paramsMap == nil {
 				t.Fatal("expected params to be extractable")
 			}
@@ -470,7 +475,8 @@ func TestVirtualNumber_GetConfig(t *testing.T) {
 	}`
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Number.GetConfig" {
 				t.Errorf("method = %q, want %q", method, "Number.GetConfig")
 			}
@@ -527,11 +533,12 @@ func TestVirtualNumber_GetConfig_InvalidJSON(t *testing.T) {
 
 func TestVirtualNumber_SetConfig(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Number.SetConfig" {
 				t.Errorf("method = %q, want %q", method, "Number.SetConfig")
 			}
-			paramsMap := extractVirtualParams(params)
+			paramsMap := extractVirtualParams(req.GetParams())
 			if paramsMap == nil {
 				t.Fatal("expected params to be extractable")
 			}
@@ -590,7 +597,8 @@ func TestVirtualNumber_GetStatus(t *testing.T) {
 	}`
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Number.GetStatus" {
 				t.Errorf("method = %q, want %q", method, "Number.GetStatus")
 			}
@@ -635,11 +643,12 @@ func TestVirtualNumber_GetStatus_InvalidJSON(t *testing.T) {
 
 func TestVirtualNumber_Set(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Number.Set" {
 				t.Errorf("method = %q, want %q", method, "Number.Set")
 			}
-			paramsMap := extractVirtualParams(params)
+			paramsMap := extractVirtualParams(req.GetParams())
 			if paramsMap == nil {
 				t.Fatal("expected params to be extractable")
 			}
@@ -707,7 +716,8 @@ func TestVirtualText_GetConfig(t *testing.T) {
 	}`
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Text.GetConfig" {
 				t.Errorf("method = %q, want %q", method, "Text.GetConfig")
 			}
@@ -758,11 +768,12 @@ func TestVirtualText_GetConfig_InvalidJSON(t *testing.T) {
 
 func TestVirtualText_SetConfig(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Text.SetConfig" {
 				t.Errorf("method = %q, want %q", method, "Text.SetConfig")
 			}
-			paramsMap := extractVirtualParams(params)
+			paramsMap := extractVirtualParams(req.GetParams())
 			if paramsMap == nil {
 				t.Fatal("expected params to be extractable")
 			}
@@ -815,7 +826,8 @@ func TestVirtualText_GetStatus(t *testing.T) {
 	}`
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Text.GetStatus" {
 				t.Errorf("method = %q, want %q", method, "Text.GetStatus")
 			}
@@ -860,11 +872,12 @@ func TestVirtualText_GetStatus_InvalidJSON(t *testing.T) {
 
 func TestVirtualText_Set(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Text.Set" {
 				t.Errorf("method = %q, want %q", method, "Text.Set")
 			}
-			paramsMap := extractVirtualParams(params)
+			paramsMap := extractVirtualParams(req.GetParams())
 			if paramsMap == nil {
 				t.Fatal("expected params to be extractable")
 			}
@@ -932,7 +945,8 @@ func TestVirtualEnum_GetConfig(t *testing.T) {
 	}`
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Enum.GetConfig" {
 				t.Errorf("method = %q, want %q", method, "Enum.GetConfig")
 			}
@@ -986,11 +1000,12 @@ func TestVirtualEnum_GetConfig_InvalidJSON(t *testing.T) {
 
 func TestVirtualEnum_SetConfig(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Enum.SetConfig" {
 				t.Errorf("method = %q, want %q", method, "Enum.SetConfig")
 			}
-			paramsMap := extractVirtualParams(params)
+			paramsMap := extractVirtualParams(req.GetParams())
 			if paramsMap == nil {
 				t.Fatal("expected params to be extractable")
 			}
@@ -1045,7 +1060,8 @@ func TestVirtualEnum_GetStatus(t *testing.T) {
 	}`
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Enum.GetStatus" {
 				t.Errorf("method = %q, want %q", method, "Enum.GetStatus")
 			}
@@ -1090,11 +1106,12 @@ func TestVirtualEnum_GetStatus_InvalidJSON(t *testing.T) {
 
 func TestVirtualEnum_Set(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Enum.Set" {
 				t.Errorf("method = %q, want %q", method, "Enum.Set")
 			}
-			paramsMap := extractVirtualParams(params)
+			paramsMap := extractVirtualParams(req.GetParams())
 			if paramsMap == nil {
 				t.Fatal("expected params to be extractable")
 			}
@@ -1159,7 +1176,8 @@ func TestVirtualButton_GetConfig(t *testing.T) {
 	}`
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Button.GetConfig" {
 				t.Errorf("method = %q, want %q", method, "Button.GetConfig")
 			}
@@ -1204,11 +1222,12 @@ func TestVirtualButton_GetConfig_InvalidJSON(t *testing.T) {
 
 func TestVirtualButton_SetConfig(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Button.SetConfig" {
 				t.Errorf("method = %q, want %q", method, "Button.SetConfig")
 			}
-			paramsMap := extractVirtualParams(params)
+			paramsMap := extractVirtualParams(req.GetParams())
 			if paramsMap == nil {
 				t.Fatal("expected params to be extractable")
 			}
@@ -1253,7 +1272,8 @@ func TestVirtualButton_GetStatus(t *testing.T) {
 	}`
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Button.GetStatus" {
 				t.Errorf("method = %q, want %q", method, "Button.GetStatus")
 			}
@@ -1298,11 +1318,12 @@ func TestVirtualButton_GetStatus_InvalidJSON(t *testing.T) {
 
 func TestVirtualButton_Trigger(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Button.Trigger" {
 				t.Errorf("method = %q, want %q", method, "Button.Trigger")
 			}
-			paramsMap := extractVirtualParams(params)
+			paramsMap := extractVirtualParams(req.GetParams())
 			if paramsMap == nil {
 				t.Fatal("expected params to be extractable")
 			}
@@ -1365,7 +1386,8 @@ func TestVirtualGroup_GetConfig(t *testing.T) {
 	}`
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Group.GetConfig" {
 				t.Errorf("method = %q, want %q", method, "Group.GetConfig")
 			}
@@ -1416,11 +1438,12 @@ func TestVirtualGroup_GetConfig_InvalidJSON(t *testing.T) {
 
 func TestVirtualGroup_SetConfig(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Group.SetConfig" {
 				t.Errorf("method = %q, want %q", method, "Group.SetConfig")
 			}
-			paramsMap := extractVirtualParams(params)
+			paramsMap := extractVirtualParams(req.GetParams())
 			if paramsMap == nil {
 				t.Fatal("expected params to be extractable")
 			}
@@ -1472,7 +1495,8 @@ func TestVirtualGroup_GetStatus(t *testing.T) {
 	}`
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Group.GetStatus" {
 				t.Errorf("method = %q, want %q", method, "Group.GetStatus")
 			}

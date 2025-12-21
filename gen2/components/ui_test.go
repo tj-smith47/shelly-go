@@ -7,16 +7,13 @@ import (
 	"testing"
 
 	"github.com/tj-smith47/shelly-go/rpc"
+	"github.com/tj-smith47/shelly-go/transport"
 )
 
 // extractUIParams is a helper to extract params from the RPC request for testing
-func extractUIParams(params any) map[string]any {
-	req, ok := params.(*rpc.Request)
-	if !ok {
-		return nil
-	}
+func extractUIParams(params json.RawMessage) map[string]any {
 	var result map[string]any
-	if err := json.Unmarshal(req.Params, &result); err != nil {
+	if err := json.Unmarshal(params, &result); err != nil {
 		return nil
 	}
 	return result
@@ -52,7 +49,8 @@ func TestUI_GetConfig(t *testing.T) {
 	}`
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Ui.GetConfig" {
 				t.Errorf("method = %q, want %q", method, "Ui.GetConfig")
 			}
@@ -100,11 +98,12 @@ func TestUI_GetConfig_InvalidJSON(t *testing.T) {
 
 func TestUI_SetConfig(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "Ui.SetConfig" {
 				t.Errorf("method = %q, want %q", method, "Ui.SetConfig")
 			}
-			paramsMap := extractUIParams(params)
+			paramsMap := extractUIParams(req.GetParams())
 			config, ok := paramsMap["config"].(map[string]any)
 			if !ok {
 				t.Fatal("expected config map")
@@ -129,8 +128,9 @@ func TestUI_SetConfig(t *testing.T) {
 
 func TestUI_SetConfig_AllFields(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-			paramsMap := extractUIParams(params)
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					_ = req.GetMethod()
+			paramsMap := extractUIParams(req.GetParams())
 			config, ok := paramsMap["config"].(map[string]any)
 			if !ok {
 				t.Fatalf("config type assertion failed")
@@ -167,8 +167,9 @@ func TestUI_SetConfig_AllFields(t *testing.T) {
 
 func TestUI_SetIdleBrightness(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-			paramsMap := extractUIParams(params)
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					_ = req.GetMethod()
+			paramsMap := extractUIParams(req.GetParams())
 			config, ok := paramsMap["config"].(map[string]any)
 			if !ok {
 				t.Fatalf("config type assertion failed")
@@ -200,8 +201,9 @@ func TestUI_SetLock(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-					paramsMap := extractUIParams(params)
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					_ = req.GetMethod()
+					paramsMap := extractUIParams(req.GetParams())
 					config, ok := paramsMap["config"].(map[string]any)
 					if !ok {
 						t.Fatalf("config type assertion failed")
@@ -229,8 +231,9 @@ func TestUI_SetTempUnits(t *testing.T) {
 	for _, unit := range units {
 		t.Run(unit, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-					paramsMap := extractUIParams(params)
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					_ = req.GetMethod()
+					paramsMap := extractUIParams(req.GetParams())
 					config, ok := paramsMap["config"].(map[string]any)
 					if !ok {
 						t.Fatalf("config type assertion failed")
@@ -319,7 +322,8 @@ func TestPlugsUI_GetConfig(t *testing.T) {
 	}`
 
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "PLUGS_UI.GetConfig" {
 				t.Errorf("method = %q, want %q", method, "PLUGS_UI.GetConfig")
 			}
@@ -370,11 +374,12 @@ func TestPlugsUI_GetConfig_InvalidJSON(t *testing.T) {
 
 func TestPlugsUI_SetConfig(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "PLUGS_UI.SetConfig" {
 				t.Errorf("method = %q, want %q", method, "PLUGS_UI.SetConfig")
 			}
-			paramsMap := extractUIParams(params)
+			paramsMap := extractUIParams(req.GetParams())
 			config, ok := paramsMap["config"].(map[string]any)
 			if !ok {
 				t.Fatal("expected config map")
@@ -405,8 +410,9 @@ func TestPlugsUI_SetConfig(t *testing.T) {
 
 func TestPlugsUI_SetConfig_WithColors(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-			paramsMap := extractUIParams(params)
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					_ = req.GetMethod()
+			paramsMap := extractUIParams(req.GetParams())
 			config, ok := paramsMap["config"].(map[string]any)
 			if !ok {
 				t.Fatalf("config type assertion failed")
@@ -447,8 +453,9 @@ func TestPlugsUI_SetLEDMode(t *testing.T) {
 	for _, mode := range modes {
 		t.Run(mode, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-					paramsMap := extractUIParams(params)
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					_ = req.GetMethod()
+					paramsMap := extractUIParams(req.GetParams())
 					config, ok := paramsMap["config"].(map[string]any)
 					if !ok {
 						t.Fatalf("config type assertion failed")
@@ -476,8 +483,9 @@ func TestPlugsUI_SetLEDMode(t *testing.T) {
 
 func TestPlugsUI_SetLEDBrightness(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-			paramsMap := extractUIParams(params)
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					_ = req.GetMethod()
+			paramsMap := extractUIParams(req.GetParams())
 			config, ok := paramsMap["config"].(map[string]any)
 			if !ok {
 				t.Fatalf("config type assertion failed")

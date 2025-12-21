@@ -6,18 +6,67 @@ import (
 	"errors"
 )
 
+// RPCRequest defines the interface for JSON-RPC 2.0 requests.
+// This interface allows the rpc package to pass Request objects to transports
+// without creating circular imports.
+type RPCRequest interface {
+	// GetID returns the request ID (typically uint64 or nil for notifications).
+	GetID() any
+
+	// GetMethod returns the RPC method name (e.g., "Switch.Set") or REST path (e.g., "/relay/0").
+	GetMethod() string
+
+	// GetParams returns the pre-marshaled JSON parameters.
+	GetParams() json.RawMessage
+
+	// GetAuth returns the authentication data, or nil if not set.
+	// The returned value is typically *rpc.AuthData but returned as any
+	// to avoid circular imports.
+	GetAuth() any
+
+	// GetJSONRPC returns the JSON-RPC version string (typically "2.0").
+	// For REST requests, this returns an empty string.
+	GetJSONRPC() string
+
+	// IsREST returns true if this is a Gen1 REST request (path-based, not RPC).
+	IsREST() bool
+}
+
+// BatchRPCRequest is an optional interface for batch requests.
+// Requests that implement this interface contain multiple RPC requests.
+type BatchRPCRequest interface {
+	RPCRequest
+	// IsBatch returns true if this is a batch request.
+	IsBatch() bool
+}
+
+// SimpleRequest is a basic request for Gen1 REST API calls.
+// It implements RPCRequest interface for backward compatibility.
+type SimpleRequest struct {
+	Path string
+}
+
+// NewSimpleRequest creates a new Gen1 REST request.
+func NewSimpleRequest(path string) *SimpleRequest {
+	return &SimpleRequest{Path: path}
+}
+
+func (r *SimpleRequest) GetID() any            { return nil }
+func (r *SimpleRequest) GetMethod() string     { return r.Path }
+func (r *SimpleRequest) GetParams() json.RawMessage { return nil }
+func (r *SimpleRequest) GetAuth() any          { return nil }
+func (r *SimpleRequest) GetJSONRPC() string    { return "" }
+func (r *SimpleRequest) IsREST() bool          { return true }
+
 // Transport defines the interface for communicating with Shelly devices.
 // Implementations handle different protocols (HTTP, WebSocket, MQTT, CoAP).
 //
 // Transport implementations must be safe for concurrent use.
 type Transport interface {
-	// Call executes a method call with the given parameters and returns the response.
-	// For Gen2+ RPC: method is the RPC method name (e.g., "Switch.Set")
-	// For Gen1 REST: method is the HTTP path (e.g., "/relay/0")
-	//
-	// The params can be nil, a struct, or a map[string]any.
+	// Call executes an RPC request and returns the response.
+	// The request contains all necessary information (method, params, auth, id).
 	// Returns the raw JSON response or an error.
-	Call(ctx context.Context, method string, params any) (json.RawMessage, error)
+	Call(ctx context.Context, req RPCRequest) (json.RawMessage, error)
 
 	// Close closes the transport connection and releases resources.
 	// After Close is called, the transport cannot be used again.

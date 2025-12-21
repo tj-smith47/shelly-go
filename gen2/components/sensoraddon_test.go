@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/tj-smith47/shelly-go/rpc"
+	"github.com/tj-smith47/shelly-go/transport"
 )
 
 func TestNewSensorAddon(t *testing.T) {
@@ -76,7 +77,8 @@ func TestSensorAddon_AddPeripheral(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "SensorAddon.AddPeripheral" {
 						t.Errorf("method = %q, want %q", method, "SensorAddon.AddPeripheral")
 					}
@@ -154,7 +156,8 @@ func TestSensorAddon_GetPeripherals(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "SensorAddon.GetPeripherals" {
 						t.Errorf("method = %q, want %q", method, "SensorAddon.GetPeripherals")
 					}
@@ -210,7 +213,8 @@ func TestSensorAddon_RemovePeripheral(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "SensorAddon.RemovePeripheral" {
 						t.Errorf("method = %q, want %q", method, "SensorAddon.RemovePeripheral")
 					}
@@ -254,7 +258,8 @@ func TestSensorAddon_UpdatePeripheral(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "SensorAddon.UpdatePeripheral" {
 						t.Errorf("method = %q, want %q", method, "SensorAddon.UpdatePeripheral")
 					}
@@ -306,7 +311,8 @@ func TestSensorAddon_OneWireScan(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "SensorAddon.OneWireScan" {
 						t.Errorf("method = %q, want %q", method, "SensorAddon.OneWireScan")
 					}
@@ -422,8 +428,9 @@ func TestPeripheralType_Constants(t *testing.T) {
 
 func TestSensorAddon_ContextCancellation(t *testing.T) {
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-			select {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					_ = req.GetMethod()
+					select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			default:

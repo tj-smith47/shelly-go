@@ -87,7 +87,7 @@ type EMeterData struct {
 // GetStatus retrieves the current energy meter readings.
 func (e *EMeter) GetStatus(ctx context.Context) (*EMeterStatus, error) {
 	path := fmt.Sprintf("/emeter/%d", e.id)
-	resp, err := e.transport.Call(ctx, path, nil)
+	resp, err := restCall(ctx, e.transport, path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get emeter status: %w", err)
 	}
@@ -188,7 +188,7 @@ func (e *EMeter) GetNetEnergy(ctx context.Context) (float64, error) {
 // certain firmware versions.
 func (e *EMeter) ResetCounters(ctx context.Context) error {
 	path := fmt.Sprintf("/emeter/%d?reset_totals=true", e.id)
-	_, err := e.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, e.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to reset counters: %w", err)
 	}
@@ -198,7 +198,7 @@ func (e *EMeter) ResetCounters(ctx context.Context) error {
 // GetConfig retrieves the energy meter configuration.
 func (e *EMeter) GetConfig(ctx context.Context) (*EMeterConfig, error) {
 	path := fmt.Sprintf("/settings/emeter/%d", e.id)
-	resp, err := e.transport.Call(ctx, path, nil)
+	resp, err := restCall(ctx, e.transport, path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get emeter config: %w", err)
 	}
@@ -217,7 +217,7 @@ func (e *EMeter) GetConfig(ctx context.Context) (*EMeterConfig, error) {
 //   - ctType: CT type (0 = 50A, 1 = 120A, etc.)
 func (e *EMeter) SetCTType(ctx context.Context, ctType int) error {
 	path := fmt.Sprintf("/settings/emeter/%d?cttype=%d", e.id, ctType)
-	_, err := e.transport.Call(ctx, path, nil)
+	_, err := restCall(ctx, e.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set CT type: %w", err)
 	}
@@ -230,7 +230,7 @@ func (e *EMeter) SetCTType(ctx context.Context, ctType int) error {
 // depending on the device firmware version.
 func (e *EMeter) GetData(ctx context.Context) ([]EMeterData, error) {
 	path := fmt.Sprintf("/emeter/%d/em_data", e.id)
-	resp, err := e.transport.Call(ctx, path, nil)
+	resp, err := restCall(ctx, e.transport, path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get emeter data: %w", err)
 	}

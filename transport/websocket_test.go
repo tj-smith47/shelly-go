@@ -44,7 +44,7 @@ func TestNewWebSocket(t *testing.T) {
 
 func TestWebSocket_Call(t *testing.T) {
 	ws := NewWebSocket("ws://192.168.1.100/rpc")
-	_, err := ws.Call(context.Background(), "Switch.Set", nil)
+	_, err := ws.Call(context.Background(), NewSimpleRequest("Switch.Set"))
 	if err == nil {
 		t.Error("Call() error = nil, want not implemented error")
 	}
@@ -130,7 +130,7 @@ func TestWebSocket_ClosedCall(t *testing.T) {
 	ws := NewWebSocket("ws://192.168.1.100/rpc")
 	ws.Close()
 
-	_, err := ws.Call(context.Background(), "Switch.Set", nil)
+	_, err := ws.Call(context.Background(), NewSimpleRequest("Switch.Set"))
 	if err == nil {
 		t.Error("Call() on closed WebSocket error = nil, want error")
 	}

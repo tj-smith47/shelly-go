@@ -32,7 +32,7 @@ func (d *Device) SetWiFiStation(ctx context.Context, enabled bool, ssid, passwor
 	}
 
 	endpoint := "/settings?" + params.Encode()
-	_, err := d.transport.Call(ctx, endpoint, nil)
+	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set WiFi station: %w", err)
 	}
@@ -62,7 +62,7 @@ func (d *Device) SetWiFiStationStatic(ctx context.Context, ssid, password, ip, g
 	}
 
 	endpoint := "/settings?" + params.Encode()
-	_, err := d.transport.Call(ctx, endpoint, nil)
+	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set WiFi station static: %w", err)
 	}
@@ -86,7 +86,7 @@ func (d *Device) SetWiFiAP(ctx context.Context, enabled bool, ssid, password str
 	}
 
 	endpoint := "/settings?" + params.Encode()
-	_, err := d.transport.Call(ctx, endpoint, nil)
+	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set WiFi AP: %w", err)
 	}
@@ -116,7 +116,7 @@ func (d *Device) SetMQTT(ctx context.Context, enabled bool, server, user, passwo
 	}
 
 	endpoint := "/settings?" + params.Encode()
-	_, err := d.transport.Call(ctx, endpoint, nil)
+	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set MQTT: %w", err)
 	}
@@ -175,7 +175,7 @@ func (d *Device) SetMQTTConfig(ctx context.Context, config *MQTTConfig) error {
 	}
 
 	endpoint := "/settings?" + params.Encode()
-	_, err := d.transport.Call(ctx, endpoint, nil)
+	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set MQTT config: %w", err)
 	}
@@ -201,7 +201,7 @@ func (d *Device) SetCoIoT(ctx context.Context, enabled bool, updatePeriod int, p
 	}
 
 	endpoint := "/settings?" + params.Encode()
-	_, err := d.transport.Call(ctx, endpoint, nil)
+	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set CoIoT: %w", err)
 	}
@@ -213,7 +213,7 @@ func (d *Device) SetCoIoT(ctx context.Context, enabled bool, updatePeriod int, p
 // SetCloud enables or disables Shelly cloud connection.
 func (d *Device) SetCloud(ctx context.Context, enabled bool) error {
 	endpoint := fmt.Sprintf("/settings/cloud?enabled=%s", boolToString(enabled))
-	_, err := d.transport.Call(ctx, endpoint, nil)
+	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set cloud: %w", err)
 	}
@@ -239,7 +239,7 @@ func (d *Device) SetAuth(ctx context.Context, enabled bool, username, password s
 	}
 
 	endpoint := "/settings/login?" + params.Encode()
-	_, err := d.transport.Call(ctx, endpoint, nil)
+	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set auth: %w", err)
 	}
@@ -251,7 +251,7 @@ func (d *Device) SetAuth(ctx context.Context, enabled bool, username, password s
 // SetTimeServer sets the NTP server for time synchronization.
 func (d *Device) SetTimeServer(ctx context.Context, server string) error {
 	endpoint := fmt.Sprintf("/settings?sntp_server=%s", url.QueryEscape(server))
-	_, err := d.transport.Call(ctx, endpoint, nil)
+	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set time server: %w", err)
 	}
@@ -338,7 +338,7 @@ type ActionSettings struct {
 
 // GetActions retrieves all configured action URLs.
 func (d *Device) GetActions(ctx context.Context) (*ActionSettings, error) {
-	resp, err := d.transport.Call(ctx, "/settings/actions", nil)
+	resp, err := d.restCall(ctx, "/settings/actions")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get actions: %w", err)
 	}
@@ -373,7 +373,7 @@ func (d *Device) SetAction(ctx context.Context, index int, event ActionEvent, ur
 	}
 
 	endpoint := "/settings/actions?" + params.Encode()
-	_, err := d.transport.Call(ctx, endpoint, nil)
+	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set action: %w", err)
 	}
@@ -429,7 +429,7 @@ func (d *Device) SetRelayConfig(ctx context.Context, id int, config *RelayConfig
 	params.Set("schedule", boolToString(config.Schedule))
 
 	endpoint := fmt.Sprintf("/settings/relay/%d?%s", id, params.Encode())
-	_, err := d.transport.Call(ctx, endpoint, nil)
+	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set relay config: %w", err)
 	}
@@ -438,7 +438,7 @@ func (d *Device) SetRelayConfig(ctx context.Context, id int, config *RelayConfig
 
 // GetRelaySettings gets settings for a specific relay.
 func (d *Device) GetRelaySettings(ctx context.Context, id int) (*RelaySettings, error) {
-	resp, err := d.transport.Call(ctx, fmt.Sprintf("/settings/relay/%d", id), nil)
+	resp, err := d.restCall(ctx, fmt.Sprintf("/settings/relay/%d", id))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get relay settings: %w", err)
 	}
@@ -514,7 +514,7 @@ func (d *Device) SetRollerConfig(ctx context.Context, id int, config *RollerConf
 	params.Set("positioning", boolToString(config.Positioning))
 
 	endpoint := fmt.Sprintf("/settings/roller/%d?%s", id, params.Encode())
-	_, err := d.transport.Call(ctx, endpoint, nil)
+	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set roller config: %w", err)
 	}
@@ -523,7 +523,7 @@ func (d *Device) SetRollerConfig(ctx context.Context, id int, config *RollerConf
 
 // GetRollerSettings gets settings for a specific roller.
 func (d *Device) GetRollerSettings(ctx context.Context, id int) (*RollerSettings, error) {
-	resp, err := d.transport.Call(ctx, fmt.Sprintf("/settings/roller/%d", id), nil)
+	resp, err := d.restCall(ctx, fmt.Sprintf("/settings/roller/%d", id))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get roller settings: %w", err)
 	}
@@ -571,7 +571,7 @@ func (d *Device) SetLightConfig(ctx context.Context, id int, config LightConfig)
 	params.Set("schedule", boolToString(config.Schedule))
 
 	endpoint := fmt.Sprintf("/settings/light/%d?%s", id, params.Encode())
-	_, err := d.transport.Call(ctx, endpoint, nil)
+	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set light config: %w", err)
 	}
@@ -580,7 +580,7 @@ func (d *Device) SetLightConfig(ctx context.Context, id int, config LightConfig)
 
 // GetLightSettings gets settings for a specific light.
 func (d *Device) GetLightSettings(ctx context.Context, id int) (*LightSettings, error) {
-	resp, err := d.transport.Call(ctx, fmt.Sprintf("/settings/light/%d", id), nil)
+	resp, err := d.restCall(ctx, fmt.Sprintf("/settings/light/%d", id))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get light settings: %w", err)
 	}
@@ -622,7 +622,7 @@ type HTTPCoIoTSensor struct {
 // This returns the device's CoIoT protocol capabilities including
 // blocks (component groups) and sensors (data points).
 func (d *Device) GetCoIoTDescription(ctx context.Context) (*HTTPCoIoTDescription, error) {
-	resp, err := d.transport.Call(ctx, "/cit/d", nil)
+	resp, err := d.restCall(ctx, "/cit/d")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get CoIoT description: %w", err)
 	}
@@ -645,7 +645,7 @@ type HTTPCoIoTStatusValues struct {
 // This returns the current values of all CoIoT sensors.
 // Each value is a triplet: [channel, sensor_id, value].
 func (d *Device) GetCoIoTStatusValues(ctx context.Context) (*HTTPCoIoTStatusValues, error) {
-	resp, err := d.transport.Call(ctx, "/cit/s", nil)
+	resp, err := d.restCall(ctx, "/cit/s")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get CoIoT status: %w", err)
 	}
@@ -671,7 +671,7 @@ type TemperatureStatus struct {
 //
 // This calls the /temperature endpoint available on sensor devices.
 func (d *Device) GetTemperature(ctx context.Context) (*TemperatureStatus, error) {
-	resp, err := d.transport.Call(ctx, "/temperature", nil)
+	resp, err := d.restCall(ctx, "/temperature")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get temperature: %w", err)
 	}
@@ -694,7 +694,7 @@ type HumidityStatus struct {
 //
 // This calls the /humidity endpoint available on H&T devices.
 func (d *Device) GetHumidity(ctx context.Context) (*HumidityStatus, error) {
-	resp, err := d.transport.Call(ctx, "/humidity", nil)
+	resp, err := d.restCall(ctx, "/humidity")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get humidity: %w", err)
 	}
@@ -719,7 +719,7 @@ type ExternalSensorStatus struct {
 //
 // This calls the /sensor/temperature endpoint for external sensors.
 func (d *Device) GetExternalSensor(ctx context.Context) (*ExternalSensorStatus, error) {
-	resp, err := d.transport.Call(ctx, "/sensor/temperature", nil)
+	resp, err := d.restCall(ctx, "/sensor/temperature")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get external sensor: %w", err)
 	}
@@ -746,7 +746,7 @@ func (d *Device) GetExternalSensor(ctx context.Context) (*ExternalSensorStatus, 
 //   - "2200-1F-0-off" - Turn relay 0 off at 22:00 Mon-Fri
 func (d *Device) AddScheduleRule(ctx context.Context, relayID int, rule string) error {
 	endpoint := fmt.Sprintf("/settings/relay/%d?schedule_rules[]=%s", relayID, url.QueryEscape(rule))
-	_, err := d.transport.Call(ctx, endpoint, nil)
+	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to add schedule rule: %w", err)
 	}
@@ -761,7 +761,7 @@ func (d *Device) SetScheduleRules(ctx context.Context, relayID int, rules []stri
 	}
 
 	endpoint := fmt.Sprintf("/settings/relay/%d?%s", relayID, params.Encode())
-	_, err := d.transport.Call(ctx, endpoint, nil)
+	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set schedule rules: %w", err)
 	}
@@ -771,7 +771,7 @@ func (d *Device) SetScheduleRules(ctx context.Context, relayID int, rules []stri
 // EnableSchedule enables or disables the schedule for a relay.
 func (d *Device) EnableSchedule(ctx context.Context, relayID int, enabled bool) error {
 	endpoint := fmt.Sprintf("/settings/relay/%d?schedule=%s", relayID, boolToString(enabled))
-	_, err := d.transport.Call(ctx, endpoint, nil)
+	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set schedule enabled: %w", err)
 	}
@@ -789,7 +789,7 @@ func (d *Device) EnableSchedule(ctx context.Context, relayID int, enabled bool) 
 //   - "white" - White mode (for RGBW devices)
 func (d *Device) SetMode(ctx context.Context, mode string) error {
 	endpoint := fmt.Sprintf("/settings?mode=%s", url.QueryEscape(mode))
-	_, err := d.transport.Call(ctx, endpoint, nil)
+	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set mode: %w", err)
 	}
@@ -799,7 +799,7 @@ func (d *Device) SetMode(ctx context.Context, mode string) error {
 // SetDiscoverable sets whether the device is discoverable.
 func (d *Device) SetDiscoverable(ctx context.Context, discoverable bool) error {
 	endpoint := fmt.Sprintf("/settings?discoverable=%s", boolToString(discoverable))
-	_, err := d.transport.Call(ctx, endpoint, nil)
+	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set discoverable: %w", err)
 	}
@@ -809,7 +809,7 @@ func (d *Device) SetDiscoverable(ctx context.Context, discoverable bool) error {
 // SetMaxPower sets the maximum power limit for the device.
 func (d *Device) SetMaxPower(ctx context.Context, maxPower int) error {
 	endpoint := fmt.Sprintf("/settings?max_power=%d", maxPower)
-	_, err := d.transport.Call(ctx, endpoint, nil)
+	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set max power: %w", err)
 	}
@@ -829,7 +829,7 @@ type WiFiNetwork struct {
 
 // ScanWiFi scans for available WiFi networks.
 func (d *Device) ScanWiFi(ctx context.Context) ([]WiFiNetwork, error) {
-	resp, err := d.transport.Call(ctx, "/wifiscan", nil)
+	resp, err := d.restCall(ctx, "/wifiscan")
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan WiFi: %w", err)
 	}

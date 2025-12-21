@@ -3,8 +3,9 @@ package transport
 import (
 	"bytes"
 	"context"
-	"crypto/md5" //nolint:gosec // MD5 required by RFC 2617 HTTP Digest Authentication
+	"crypto/md5"  //nolint:gosec // MD5 required by RFC 2617 HTTP Digest Authentication
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -68,14 +69,11 @@ func NewHTTP(baseURL string, opts ...Option) *HTTP {
 	}
 }
 
-// Call executes a method call via HTTP.
+// Call executes an RPC or REST request via HTTP.
 //
-// For Gen2+ RPC: method is the RPC method (e.g., "Switch.Set")
-// and params is marshaled to JSON for the RPC request body.
-//
-// For Gen1 REST: method is the URL path (e.g., "/relay/0?turn=on")
-// and params can be nil or additional query parameters.
-func (h *HTTP) Call(ctx context.Context, method string, params any) (json.RawMessage, error) {
+// For Gen2+ RPC: req contains the RPC method, params, and optional auth.
+// For Gen1 REST: req is a SimpleRequest with the URL path.
+func (h *HTTP) Call(ctx context.Context, req RPCRequest) (json.RawMessage, error) {
 	var lastErr error
 	retries := h.opts.maxRetries
 	delay := h.opts.retryDelay
@@ -91,7 +89,7 @@ func (h *HTTP) Call(ctx context.Context, method string, params any) (json.RawMes
 			}
 		}
 
-		result, err := h.doCall(ctx, method, params)
+		result, err := h.doCall(ctx, req)
 		if err == nil {
 			return result, nil
 		}
@@ -108,19 +106,15 @@ func (h *HTTP) Call(ctx context.Context, method string, params any) (json.RawMes
 }
 
 // doCall performs a single HTTP call attempt.
-func (h *HTTP) doCall(ctx context.Context, method string, params any) (json.RawMessage, error) {
-	// Determine if this is an RPC call or REST call
-	// RPC methods contain a dot (e.g., "Shelly.GetStatus")
-	// REST paths start with "/" (e.g., "/relay/0")
-	isRPC := strings.Contains(method, ".")
-
+func (h *HTTP) doCall(ctx context.Context, rpcReq RPCRequest) (json.RawMessage, error) {
 	var req *http.Request
 	var err error
 
-	if isRPC {
-		req, err = h.buildRPCRequest(ctx, method, params)
+	// Determine if this is a REST (Gen1) or RPC (Gen2+) call
+	if rpcReq.IsREST() {
+		req, err = h.buildRESTRequest(ctx, rpcReq.GetMethod())
 	} else {
-		req, err = h.buildRESTRequest(ctx, method, params)
+		req, err = h.buildRPCRequest(ctx, rpcReq)
 	}
 
 	if err != nil {
@@ -163,17 +157,29 @@ func (h *HTTP) doCall(ctx context.Context, method string, params any) (json.RawM
 }
 
 // buildRPCRequest builds an RPC request (Gen2+).
-func (h *HTTP) buildRPCRequest(ctx context.Context, method string, params any) (*http.Request, error) {
-	rpcReq := map[string]any{
-		"id":     1,
-		"method": method,
+func (h *HTTP) buildRPCRequest(ctx context.Context, rpcReq RPCRequest) (*http.Request, error) {
+	// Build the JSON-RPC 2.0 request body
+	reqBody := map[string]any{
+		"id":      rpcReq.GetID(),
+		"jsonrpc": rpcReq.GetJSONRPC(),
+		"method":  rpcReq.GetMethod(),
 	}
 
-	if params != nil {
-		rpcReq["params"] = params
+	// Unmarshal params from json.RawMessage and add to request
+	if params := rpcReq.GetParams(); len(params) > 0 {
+		var p any
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal params: %w", err)
+		}
+		reqBody["params"] = p
 	}
 
-	body, err := json.Marshal(rpcReq)
+	// Add RPC-level authentication if provided
+	if auth := rpcReq.GetAuth(); auth != nil {
+		reqBody["auth"] = auth
+	}
+
+	body, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal RPC request: %w", err)
 	}
@@ -188,15 +194,8 @@ func (h *HTTP) buildRPCRequest(ctx context.Context, method string, params any) (
 }
 
 // buildRESTRequest builds a REST request (Gen1).
-func (h *HTTP) buildRESTRequest(ctx context.Context, path string, params any) (*http.Request, error) {
+func (h *HTTP) buildRESTRequest(ctx context.Context, path string) (*http.Request, error) {
 	url := h.baseURL + path
-
-	// Add query parameters if provided
-	// params can be a map[string]string or map[string]any
-	// Convert to query string
-	// For now, assume params is already encoded in the path
-	// This can be enhanced later if needed
-	_ = params
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, http.NoBody)
 	if err != nil {
@@ -273,6 +272,12 @@ func (h *HTTP) applyDigestAuth(req *http.Request) error {
 	realm := challenge["realm"]
 	nonce := challenge["nonce"]
 	qop := challenge["qop"]
+	algorithm := challenge["algorithm"]
+
+	// Normalize algorithm - default to MD5 if not specified
+	if algorithm == "" {
+		algorithm = "MD5"
+	}
 
 	if realm == "" || nonce == "" {
 		return fmt.Errorf("invalid digest challenge: missing realm or nonce")
@@ -287,7 +292,7 @@ func (h *HTTP) applyDigestAuth(req *http.Request) error {
 	response := calculateDigestResponse(
 		h.opts.username, h.opts.password,
 		realm, nonce, nc, cnonce, qop,
-		req.Method, uri,
+		req.Method, uri, algorithm,
 	)
 
 	// Build Authorization header
@@ -297,6 +302,10 @@ func (h *HTTP) applyDigestAuth(req *http.Request) error {
 	)
 	if qop != "" {
 		authValue += fmt.Sprintf(`, qop=%s, nc=%s, cnonce=%q`, qop, nc, cnonce)
+	}
+	// Include algorithm in response if not MD5 (some servers require this)
+	if algorithm != "" && algorithm != "MD5" {
+		authValue += fmt.Sprintf(`, algorithm=%s`, algorithm)
 	}
 
 	req.Header.Set("Authorization", authValue)
@@ -341,29 +350,36 @@ func generateCNonce() string {
 }
 
 // calculateDigestResponse calculates the digest authentication response hash.
+// Supports MD5 (RFC 2617) and SHA-256 (RFC 7616) algorithms.
 //
 //nolint:gosec // MD5 is required by HTTP Digest Auth spec (RFC 2617)
 func calculateDigestResponse(
-	username, password, realm, nonce, nc, cnonce, qop, method, uri string,
+	username, password, realm, nonce, nc, cnonce, qop, method, uri, algorithm string,
 ) string {
-	// HA1 = MD5(username:realm:password)
-	ha1Input := fmt.Sprintf("%s:%s:%s", username, realm, password)
-	ha1 := md5Hash(ha1Input)
+	// Select hash function based on algorithm
+	hashFunc := md5Hash
+	if algorithm == "SHA-256" || algorithm == "SHA-256-sess" {
+		hashFunc = sha256Hash
+	}
 
-	// HA2 = MD5(method:uri)
+	// HA1 = HASH(username:realm:password)
+	ha1Input := fmt.Sprintf("%s:%s:%s", username, realm, password)
+	ha1 := hashFunc(ha1Input)
+
+	// HA2 = HASH(method:uri)
 	ha2Input := fmt.Sprintf("%s:%s", method, uri)
-	ha2 := md5Hash(ha2Input)
+	ha2 := hashFunc(ha2Input)
 
 	// Response calculation depends on qop
 	var response string
 	if qop == "auth" || qop == "auth-int" {
-		// response = MD5(HA1:nonce:nc:cnonce:qop:HA2)
+		// response = HASH(HA1:nonce:nc:cnonce:qop:HA2)
 		responseInput := fmt.Sprintf("%s:%s:%s:%s:%s:%s", ha1, nonce, nc, cnonce, qop, ha2)
-		response = md5Hash(responseInput)
+		response = hashFunc(responseInput)
 	} else {
-		// response = MD5(HA1:nonce:HA2)
+		// response = HASH(HA1:nonce:HA2)
 		responseInput := fmt.Sprintf("%s:%s:%s", ha1, nonce, ha2)
-		response = md5Hash(responseInput)
+		response = hashFunc(responseInput)
 	}
 
 	return response
@@ -374,6 +390,12 @@ func calculateDigestResponse(
 //nolint:gosec // MD5 is required by HTTP Digest Auth spec (RFC 2617)
 func md5Hash(input string) string {
 	hash := md5.Sum([]byte(input))
+	return hex.EncodeToString(hash[:])
+}
+
+// sha256Hash returns the hex-encoded SHA-256 hash of the input string.
+func sha256Hash(input string) string {
+	hash := sha256.Sum256([]byte(input))
 	return hex.EncodeToString(hash[:])
 }
 

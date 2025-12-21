@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/tj-smith47/shelly-go/rpc"
+	"github.com/tj-smith47/shelly-go/transport"
 )
 
 func TestNewEM1Data(t *testing.T) {
@@ -69,7 +70,8 @@ func TestEM1Data_GetConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "EM1Data.GetConfig" {
 						t.Errorf("unexpected method call: %s", method)
 					}
@@ -154,7 +156,8 @@ func TestEM1Data_SetConfig(t *testing.T) {
 
 	methodCalled := false
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "EM1Data.SetConfig" {
 				t.Errorf("unexpected method call: %s", method)
 			}
@@ -232,7 +235,8 @@ func TestEM1Data_GetStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "EM1Data.GetStatus" {
 						t.Errorf("unexpected method call: %s", method)
 					}
@@ -367,7 +371,8 @@ func TestEM1Data_GetRecords(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "EM1Data.GetRecords" {
 						t.Errorf("unexpected method call: %s", method)
 					}
@@ -507,7 +512,8 @@ func TestEM1Data_GetData(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tr := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 					if method != "EM1Data.GetData" {
 						t.Errorf("unexpected method call: %s", method)
 					}
@@ -580,7 +586,8 @@ func TestEM1Data_GetData_InvalidJSON(t *testing.T) {
 func TestEM1Data_DeleteAllData(t *testing.T) {
 	methodCalled := false
 	tr := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+					method := req.GetMethod()
 			if method != "EM1Data.DeleteAllData" {
 				t.Errorf("unexpected method call: %s", method)
 			}

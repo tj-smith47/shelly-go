@@ -10,18 +10,19 @@ import (
 	"time"
 
 	"github.com/tj-smith47/shelly-go/rpc"
+	"github.com/tj-smith47/shelly-go/transport"
 	"github.com/tj-smith47/shelly-go/types"
 )
 
-// mockTransport implements rpc.Transport for testing.
+// mockTransport implements transport.Transport for testing.
 type mockTransport struct {
-	callFunc  func(ctx context.Context, method string, params any) (json.RawMessage, error)
+	callFunc  func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error)
 	closeFunc func() error
 }
 
-func (m *mockTransport) Call(ctx context.Context, method string, params any) (json.RawMessage, error) {
+func (m *mockTransport) Call(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
 	if m.callFunc != nil {
-		return m.callFunc(ctx, method, params)
+		return m.callFunc(ctx, req)
 	}
 	return nil, nil
 }
@@ -80,7 +81,8 @@ func TestZigbee_GetConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			transport := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				method := req.GetMethod()
 					if method != "Zigbee.GetConfig" {
 						t.Errorf("unexpected method: %s", method)
 					}
@@ -105,7 +107,8 @@ func TestZigbee_GetConfig(t *testing.T) {
 
 func TestZigbee_GetConfig_Error(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -121,7 +124,8 @@ func TestZigbee_GetConfig_Error(t *testing.T) {
 
 func TestZigbee_GetConfig_InvalidJSON(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				_ = req.GetMethod()
 			return jsonrpcResponse(`{invalid json}`)
 		},
 	}
@@ -147,7 +151,8 @@ func TestZigbee_SetConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			transport := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				method := req.GetMethod()
 					if method != "Zigbee.SetConfig" {
 						t.Errorf("unexpected method: %s", method)
 					}
@@ -169,7 +174,8 @@ func TestZigbee_SetConfig(t *testing.T) {
 
 func TestZigbee_SetConfig_Error(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -230,7 +236,8 @@ func TestZigbee_GetStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			transport := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				method := req.GetMethod()
 					if method != "Zigbee.GetStatus" {
 						t.Errorf("unexpected method: %s", method)
 					}
@@ -268,7 +275,8 @@ func TestZigbee_GetStatus(t *testing.T) {
 
 func TestZigbee_GetStatus_Error(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -284,7 +292,8 @@ func TestZigbee_GetStatus_Error(t *testing.T) {
 
 func TestZigbee_GetStatus_InvalidJSON(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				_ = req.GetMethod()
 			return jsonrpcResponse(`{invalid json}`)
 		},
 	}
@@ -300,7 +309,8 @@ func TestZigbee_GetStatus_InvalidJSON(t *testing.T) {
 
 func TestZigbee_StartNetworkSteering(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				method := req.GetMethod()
 			if method != "Zigbee.StartNetworkSteering" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -319,7 +329,8 @@ func TestZigbee_StartNetworkSteering(t *testing.T) {
 
 func TestZigbee_StartNetworkSteering_Error(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -335,7 +346,8 @@ func TestZigbee_StartNetworkSteering_Error(t *testing.T) {
 
 func TestZigbee_Enable(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				method := req.GetMethod()
 			if method != "Zigbee.SetConfig" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -354,7 +366,8 @@ func TestZigbee_Enable(t *testing.T) {
 
 func TestZigbee_Disable(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				method := req.GetMethod()
 			if method != "Zigbee.SetConfig" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -384,7 +397,8 @@ func TestZigbee_IsEnabled(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			transport := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				_ = req.GetMethod()
 					return jsonrpcResponse(tt.result)
 				},
 			}
@@ -406,7 +420,8 @@ func TestZigbee_IsEnabled(t *testing.T) {
 
 func TestZigbee_IsEnabled_Error(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -435,7 +450,8 @@ func TestZigbee_IsJoined(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			transport := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				_ = req.GetMethod()
 					return jsonrpcResponse(tt.result)
 				},
 			}
@@ -457,7 +473,8 @@ func TestZigbee_IsJoined(t *testing.T) {
 
 func TestZigbee_IsJoined_Error(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -486,7 +503,8 @@ func TestZigbee_GetNetworkState(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			transport := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				_ = req.GetMethod()
 					return jsonrpcResponse(tt.result)
 				},
 			}
@@ -508,7 +526,8 @@ func TestZigbee_GetNetworkState(t *testing.T) {
 
 func TestZigbee_GetNetworkState_Error(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -524,7 +543,8 @@ func TestZigbee_GetNetworkState_Error(t *testing.T) {
 
 func TestZigbee_GetEUI64(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				_ = req.GetMethod()
 			return jsonrpcResponse(`{"network_state":"ready","eui64":"0x00124B001234ABCD"}`)
 		},
 	}
@@ -544,7 +564,8 @@ func TestZigbee_GetEUI64(t *testing.T) {
 
 func TestZigbee_GetEUI64_Error(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -572,7 +593,8 @@ func TestZigbee_GetChannel(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			transport := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				_ = req.GetMethod()
 					return jsonrpcResponse(tt.result)
 				},
 			}
@@ -594,7 +616,8 @@ func TestZigbee_GetChannel(t *testing.T) {
 
 func TestZigbee_GetChannel_Error(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -622,7 +645,8 @@ func TestZigbee_GetPANID(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			transport := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				_ = req.GetMethod()
 					return jsonrpcResponse(tt.result)
 				},
 			}
@@ -644,7 +668,8 @@ func TestZigbee_GetPANID(t *testing.T) {
 
 func TestZigbee_GetPANID_Error(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -713,7 +738,8 @@ func TestZigbee_GetNetworkInfo(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			transport := &mockTransport{
-				callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				_ = req.GetMethod()
 					return jsonrpcResponse(tt.result)
 				},
 			}
@@ -743,7 +769,8 @@ func TestZigbee_GetNetworkInfo(t *testing.T) {
 
 func TestZigbee_GetNetworkInfo_Error(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -759,7 +786,8 @@ func TestZigbee_GetNetworkInfo_Error(t *testing.T) {
 
 func TestZigbee_LeaveNetwork(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				method := req.GetMethod()
 			if method != "Zigbee.SetConfig" {
 				t.Errorf("unexpected method: %s", method)
 			}
@@ -1185,7 +1213,8 @@ func TestInferCapabilitiesFromDeviceType_AllTypes(t *testing.T) {
 func TestPairToNetwork_AlreadyJoined(t *testing.T) {
 	callCount := 0
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				_ = req.GetMethod()
 			callCount++
 			// Return joined status on first call (GetStatus check)
 			return jsonrpcResponse(`{"network_state":"joined","pan_id":12345,"channel":15,"coordinator_eui64":"0x00124B009876FEDC"}`)
@@ -1212,7 +1241,8 @@ func TestPairToNetwork_AlreadyJoined(t *testing.T) {
 
 func TestPairToNetwork_InitialStatusError(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				_ = req.GetMethod()
 			return nil, errTest
 		},
 	}
@@ -1232,7 +1262,8 @@ func TestPairToNetwork_InitialStatusError(t *testing.T) {
 func TestPairToNetwork_Success(t *testing.T) {
 	callCount := 0
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				method := req.GetMethod()
 			callCount++
 			switch method {
 			case "Zigbee.GetStatus":
@@ -1279,7 +1310,8 @@ func TestPairToNetwork_Success(t *testing.T) {
 func TestPairToNetwork_EnableZigbee(t *testing.T) {
 	callCount := 0
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				method := req.GetMethod()
 			callCount++
 			switch method {
 			case "Zigbee.GetStatus":
@@ -1313,7 +1345,8 @@ func TestPairToNetwork_EnableZigbee(t *testing.T) {
 func TestPairToNetwork_EnableFailed(t *testing.T) {
 	callCount := 0
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				method := req.GetMethod()
 			callCount++
 			switch method {
 			case "Zigbee.GetStatus":
@@ -1345,7 +1378,8 @@ func TestPairToNetwork_EnableFailed(t *testing.T) {
 func TestPairToNetwork_SteeringFailed(t *testing.T) {
 	callCount := 0
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				method := req.GetMethod()
 			callCount++
 			switch method {
 			case "Zigbee.GetStatus":
@@ -1377,7 +1411,8 @@ func TestPairToNetwork_SteeringFailed(t *testing.T) {
 func TestPairToNetwork_NetworkFailed(t *testing.T) {
 	callCount := 0
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				method := req.GetMethod()
 			callCount++
 			switch method {
 			case "Zigbee.GetStatus":
@@ -1412,7 +1447,8 @@ func TestPairToNetwork_NetworkFailed(t *testing.T) {
 
 func TestPairToNetwork_Timeout(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				method := req.GetMethod()
 			switch method {
 			case "Zigbee.GetStatus":
 				// Always return steering state
@@ -1443,7 +1479,8 @@ func TestPairToNetwork_Timeout(t *testing.T) {
 
 func TestPairToNetwork_ContextCanceled(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				method := req.GetMethod()
 			switch method {
 			case "Zigbee.GetStatus":
 				return jsonrpcResponse(`{"network_state":"steering"}`)
@@ -1481,7 +1518,8 @@ func TestPairToNetwork_ContextCanceled(t *testing.T) {
 func TestPairToNetwork_GetConfigError(t *testing.T) {
 	callCount := 0
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				method := req.GetMethod()
 			callCount++
 			switch method {
 			case "Zigbee.GetStatus":
@@ -1507,7 +1545,8 @@ func TestPairToNetwork_GetConfigError(t *testing.T) {
 
 func TestPairToNetwork_DefaultTimeouts(t *testing.T) {
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				method := req.GetMethod()
 			switch method {
 			case "Zigbee.GetStatus":
 				return jsonrpcResponse(`{"network_state":"joined","pan_id":1,"channel":11}`)
@@ -1759,7 +1798,8 @@ func TestMapShellyModelToDeviceType_AdditionalModels(t *testing.T) {
 func TestPairToNetwork_TransientErrors(t *testing.T) {
 	callCount := 0
 	transport := &mockTransport{
-		callFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				method := req.GetMethod()
 			callCount++
 			switch method {
 			case "Zigbee.GetStatus":

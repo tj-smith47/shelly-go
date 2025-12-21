@@ -7,6 +7,7 @@ import (
 	"testing"
 )
 
+
 func TestNewCoAP(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -44,7 +45,7 @@ func TestNewCoAP(t *testing.T) {
 
 func TestCoAP_Call(t *testing.T) {
 	coap := NewCoAP("192.168.1.100")
-	_, err := coap.Call(context.Background(), "Switch.Set", nil)
+	_, err := coap.Call(context.Background(), NewSimpleRequest("Switch.Set"))
 	if err == nil {
 		t.Error("Call() error = nil, want not implemented error")
 	}
@@ -130,7 +131,7 @@ func TestCoAP_ClosedCall(t *testing.T) {
 	coap := NewCoAP("192.168.1.100")
 	coap.Close()
 
-	_, err := coap.Call(context.Background(), "Switch.Set", nil)
+	_, err := coap.Call(context.Background(), NewSimpleRequest("Switch.Set"))
 	if err == nil {
 		t.Error("Call() on closed CoAP error = nil, want error")
 	}

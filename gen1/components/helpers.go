@@ -1,6 +1,17 @@
 package components
 
-import "fmt"
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+
+	"github.com/tj-smith47/shelly-go/transport"
+)
+
+// restCall is a helper to make Gen1 REST API calls.
+func restCall(ctx context.Context, t transport.Transport, path string) (json.RawMessage, error) {
+	return t.Call(ctx, transport.NewSimpleRequest(path))
+}
 
 // Query parameter constants.
 const (
