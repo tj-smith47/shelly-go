@@ -279,7 +279,8 @@ func TestRelayGetConfig(t *testing.T) {
 // TestRelaySetConfig tests config update.
 func TestRelaySetConfig(t *testing.T) {
 	mt := newMockTransport()
-	mt.SetResponse("/settings/relay/0?name=Test&default_state=off&btn_type=toggle&max_power=500", map[string]bool{"ok": true})
+	// url.Values encodes parameters in alphabetical order
+	mt.SetResponse("/settings/relay/0?btn_type=toggle&default_state=off&max_power=500&name=Test", map[string]bool{"ok": true})
 
 	relay := NewRelay(mt, 0)
 	ctx := context.Background()

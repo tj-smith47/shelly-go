@@ -3,6 +3,7 @@ package components
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/tj-smith47/shelly-go/gen2"
 	"github.com/tj-smith47/shelly-go/rpc"
@@ -138,6 +139,11 @@ type LightToggleResult struct {
 //	    TransitionDuration: ptr(1000), // 1 second fade
 //	})
 func (l *Light) Set(ctx context.Context, params *LightSetParams) (*LightSetResult, error) {
+	// Validate brightness range if provided
+	if params != nil && params.Brightness != nil && (*params.Brightness < 0 || *params.Brightness > 100) {
+		return nil, fmt.Errorf("brightness must be 0-100, got %d", *params.Brightness)
+	}
+
 	params = gen2.EnsureID(l.BaseComponent, params)
 
 	var result LightSetResult
@@ -147,7 +153,7 @@ func (l *Light) Set(ctx context.Context, params *LightSetParams) (*LightSetResul
 	}
 
 	if err := json.Unmarshal(resultJSON, &result); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse Light.Set response: %w", err)
 	}
 
 	return &result, nil
@@ -177,7 +183,7 @@ func (l *Light) Toggle(ctx context.Context) (*LightToggleResult, error) {
 	}
 
 	if err := json.Unmarshal(resultJSON, &result); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse Light.Toggle response: %w", err)
 	}
 
 	return &result, nil
@@ -213,4 +219,26 @@ func (l *Light) SetConfig(ctx context.Context, config *LightConfig) error {
 //	fmt.Printf("Output: %v, Brightness: %d%%\n", status.Output, *status.Brightness)
 func (l *Light) GetStatus(ctx context.Context) (*LightStatus, error) {
 	return gen2.UnmarshalStatus[LightStatus](ctx, l.BaseComponent)
+}
+
+// ResetCounters resets the energy counters.
+//
+// Parameters:
+//   - ctx: Context for cancellation and timeout
+//   - counterTypes: Optional list of counter types to reset (e.g., ["aenergy"])
+//
+// Example:
+//
+//	err := light.ResetCounters(ctx, []string{"aenergy"})
+func (l *Light) ResetCounters(ctx context.Context, counterTypes []string) error {
+	params := map[string]any{
+		"id": l.ID(),
+	}
+
+	if len(counterTypes) > 0 {
+		params["type"] = counterTypes
+	}
+
+	_, err := l.Client().Call(ctx, "Light.ResetCounters", params)
+	return err
 }

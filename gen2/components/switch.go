@@ -3,6 +3,7 @@ package components
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/tj-smith47/shelly-go/gen2"
 	"github.com/tj-smith47/shelly-go/rpc"
@@ -97,10 +98,10 @@ type TemperatureSensor struct {
 
 // SwitchSetParams contains parameters for the Switch.Set method.
 type SwitchSetParams struct {
+	On              *bool      `json:"on,omitempty"`
 	ToggleAfter     *float64   `json:"toggle_after,omitempty"`
 	types.RawFields `json:"-"` // Ignore RawFields during serialization
 	ID              int        `json:"id"`
-	On              bool       `json:"on"`
 }
 
 // SwitchSetResult contains the result of a Switch.Set call.
@@ -150,7 +151,7 @@ func (s *Switch) Set(ctx context.Context, params *SwitchSetParams) (*SwitchSetRe
 	}
 
 	if err := json.Unmarshal(resultJSON, &result); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse Switch.Set response: %w", err)
 	}
 
 	return &result, nil
@@ -180,7 +181,7 @@ func (s *Switch) Toggle(ctx context.Context) (*SwitchToggleResult, error) {
 	}
 
 	if err := json.Unmarshal(resultJSON, &result); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse Switch.Toggle response: %w", err)
 	}
 
 	return &result, nil

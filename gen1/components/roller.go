@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	"github.com/tj-smith47/shelly-go/transport"
 )
@@ -190,75 +192,85 @@ func (r *Roller) GetConfig(ctx context.Context) (*RollerConfig, error) {
 	return &config, nil
 }
 
+// buildRollerTimeParams adds timing parameters to url.Values.
+func buildRollerTimeParams(params url.Values, config *RollerConfig) {
+	if config.MaxTime > 0 {
+		params.Set("maxtime", strconv.FormatFloat(config.MaxTime, 'f', -1, 64))
+	}
+	if config.MaxTimeOpen > 0 {
+		params.Set("maxtime_open", strconv.FormatFloat(config.MaxTimeOpen, 'f', -1, 64))
+	}
+	if config.MaxTimeClose > 0 {
+		params.Set("maxtime_close", strconv.FormatFloat(config.MaxTimeClose, 'f', -1, 64))
+	}
+}
+
+// buildRollerInputParams adds input configuration parameters to url.Values.
+func buildRollerInputParams(params url.Values, config *RollerConfig) {
+	if config.DefaultState != "" {
+		params.Set("default_state", config.DefaultState)
+	}
+	if config.SwapInputs {
+		params.Set("swap_inputs", boolTrue)
+	}
+	if config.Swap {
+		params.Set("swap", boolTrue)
+	}
+	if config.InputMode != "" {
+		params.Set("input_mode", config.InputMode)
+	}
+	if config.BtnType != "" {
+		params.Set("btn_type", config.BtnType)
+	}
+	if config.BtnReverse {
+		params.Set("btn_reverse", boolTrue)
+	}
+}
+
+// buildRollerSafetyParams adds safety/obstacle parameters to url.Values.
+func buildRollerSafetyParams(params url.Values, config *RollerConfig) {
+	if config.ObstacleMode != "" {
+		params.Set("obstacle_mode", config.ObstacleMode)
+	}
+	if config.ObstacleAction != "" {
+		params.Set("obstacle_action", config.ObstacleAction)
+	}
+	if config.ObstaclePower > 0 {
+		params.Set("obstacle_power", strconv.Itoa(config.ObstaclePower))
+	}
+	if config.ObstacleDelay > 0 {
+		params.Set("obstacle_delay", strconv.Itoa(config.ObstacleDelay))
+	}
+	if config.SafetyMode != "" {
+		params.Set("safety_mode", config.SafetyMode)
+	}
+	if config.SafetyAction != "" {
+		params.Set("safety_action", config.SafetyAction)
+	}
+	if config.SafetyAllowedOnTrigger {
+		params.Set("safety_allowed_on_trigger", boolTrue)
+	}
+	if config.Positioning {
+		params.Set("positioning", boolTrue)
+	}
+}
+
 // SetConfig updates roller configuration.
 //
 // Only non-zero values in the config will be applied.
-//
-//nolint:gocyclo,cyclop // Roller SetConfig has many optional parameters per Shelly API
 func (r *Roller) SetConfig(ctx context.Context, config *RollerConfig) error {
-	path := fmt.Sprintf("/settings/roller/%d?", r.id)
+	params := url.Values{}
 
-	params := ""
-	if config.MaxTime > 0 {
-		params += fmt.Sprintf("maxtime=%v&", config.MaxTime)
-	}
-	if config.MaxTimeOpen > 0 {
-		params += fmt.Sprintf("maxtime_open=%v&", config.MaxTimeOpen)
-	}
-	if config.MaxTimeClose > 0 {
-		params += fmt.Sprintf("maxtime_close=%v&", config.MaxTimeClose)
-	}
-	if config.DefaultState != "" {
-		params += fmt.Sprintf("default_state=%s&", config.DefaultState)
-	}
-	if config.SwapInputs {
-		params += "swap_inputs=true&"
-	}
-	if config.Swap {
-		params += "swap=true&"
-	}
-	if config.InputMode != "" {
-		params += fmt.Sprintf("input_mode=%s&", config.InputMode)
-	}
-	if config.BtnType != "" {
-		params += fmt.Sprintf("btn_type=%s&", config.BtnType)
-	}
-	if config.BtnReverse {
-		params += btnReverseParam
-	}
-	if config.ObstacleMode != "" {
-		params += fmt.Sprintf("obstacle_mode=%s&", config.ObstacleMode)
-	}
-	if config.ObstacleAction != "" {
-		params += fmt.Sprintf("obstacle_action=%s&", config.ObstacleAction)
-	}
-	if config.ObstaclePower > 0 {
-		params += fmt.Sprintf("obstacle_power=%d&", config.ObstaclePower)
-	}
-	if config.ObstacleDelay > 0 {
-		params += fmt.Sprintf("obstacle_delay=%d&", config.ObstacleDelay)
-	}
-	if config.SafetyMode != "" {
-		params += fmt.Sprintf("safety_mode=%s&", config.SafetyMode)
-	}
-	if config.SafetyAction != "" {
-		params += fmt.Sprintf("safety_action=%s&", config.SafetyAction)
-	}
-	if config.SafetyAllowedOnTrigger {
-		params += "safety_allowed_on_trigger=true&"
-	}
-	if config.Positioning {
-		params += "positioning=true&"
-	}
+	buildRollerTimeParams(params, config)
+	buildRollerInputParams(params, config)
+	buildRollerSafetyParams(params, config)
 
-	if params == "" {
+	if len(params) == 0 {
 		return nil // Nothing to set
 	}
 
-	// Remove trailing &
-	params = params[:len(params)-1]
-
-	_, err := restCall(ctx, r.transport, path+params)
+	path := fmt.Sprintf("/settings/roller/%d?%s", r.id, params.Encode())
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set roller config: %w", err)
 	}

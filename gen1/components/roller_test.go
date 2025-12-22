@@ -206,7 +206,8 @@ func TestRollerGetConfig(t *testing.T) {
 // TestRollerSetConfig tests config update.
 func TestRollerSetConfig(t *testing.T) {
 	mt := newMockTransport()
-	mt.SetResponse("/settings/roller/0?maxtime=25&default_state=stop&positioning=true", map[string]bool{"ok": true})
+	// url.Values encodes parameters in alphabetical order
+	mt.SetResponse("/settings/roller/0?default_state=stop&maxtime=25&positioning=true", map[string]bool{"ok": true})
 
 	roller := NewRoller(mt, 0)
 	ctx := context.Background()
@@ -452,8 +453,8 @@ func TestRollerGetConfigError(t *testing.T) {
 // TestRollerSetConfigFull tests SetConfig with all fields.
 func TestRollerSetConfigFull(t *testing.T) {
 	mt := newMockTransport()
-	// Build expected URL with all config parameters (order matches code)
-	mt.SetResponse("/settings/roller/0?maxtime=30&maxtime_open=25&maxtime_close=28&default_state=stop&swap_inputs=true&swap=true&input_mode=dual&btn_type=momentary&obstacle_mode=both&obstacle_action=stop&obstacle_power=200&obstacle_delay=2&safety_mode=while_opening&safety_action=pause&positioning=true", map[string]bool{"ok": true})
+	// url.Values encodes parameters in alphabetical order
+	mt.SetResponse("/settings/roller/0?btn_type=momentary&default_state=stop&input_mode=dual&maxtime=30&maxtime_close=28&maxtime_open=25&obstacle_action=stop&obstacle_delay=2&obstacle_mode=both&obstacle_power=200&positioning=true&safety_action=pause&safety_mode=while_opening&swap=true&swap_inputs=true", map[string]bool{"ok": true})
 
 	roller := NewRoller(mt, 0)
 	ctx := context.Background()

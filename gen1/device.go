@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"sync"
 
 	"github.com/tj-smith47/shelly-go/gen1/components"
@@ -290,12 +291,12 @@ func (d *Device) CheckForUpdate(ctx context.Context) (*UpdateInfo, error) {
 
 // Update starts a firmware update.
 //
-// If url is empty, updates to the latest stable firmware.
-// If url is provided, updates to firmware at that URL.
-func (d *Device) Update(ctx context.Context, url string) error {
+// If firmwareURL is empty, updates to the latest stable firmware.
+// If firmwareURL is provided, updates to firmware at that URL.
+func (d *Device) Update(ctx context.Context, firmwareURL string) error {
 	endpoint := "/ota?update=true"
-	if url != "" {
-		endpoint = fmt.Sprintf("/ota?url=%s", url)
+	if firmwareURL != "" {
+		endpoint = "/ota?url=" + url.QueryEscape(firmwareURL)
 	}
 
 	_, err := d.restCall(ctx, endpoint)
@@ -307,7 +308,7 @@ func (d *Device) Update(ctx context.Context, url string) error {
 
 // SetName sets the device name.
 func (d *Device) SetName(ctx context.Context, name string) error {
-	endpoint := fmt.Sprintf("/settings?name=%s", name)
+	endpoint := "/settings?name=" + url.QueryEscape(name)
 	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set name: %w", err)
@@ -317,7 +318,7 @@ func (d *Device) SetName(ctx context.Context, name string) error {
 
 // SetTimezone sets the device timezone.
 func (d *Device) SetTimezone(ctx context.Context, timezone string) error {
-	endpoint := fmt.Sprintf("/settings?timezone=%s", timezone)
+	endpoint := "/settings?timezone=" + url.QueryEscape(timezone)
 	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set timezone: %w", err)

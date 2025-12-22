@@ -141,7 +141,8 @@ func main() {
 
 	// Set switch to specific state (turn off)
 	fmt.Println("\nTurning switch off...")
-	setResult, err := sw.Set(ctx, &components.SwitchSetParams{On: false})
+	off := false
+	setResult, err := sw.Set(ctx, &components.SwitchSetParams{On: &off})
 	if err != nil {
 		log.Printf("Failed to set switch: %v", err)
 		return
@@ -153,8 +154,9 @@ func main() {
 
 	// Turn on with timer (toggle after 5 seconds)
 	fmt.Println("\nTurning switch on with 5-second timer...")
+	on := true
 	toggleAfter := 5.0
-	_, err = sw.Set(ctx, &components.SwitchSetParams{On: true, ToggleAfter: &toggleAfter})
+	_, err = sw.Set(ctx, &components.SwitchSetParams{On: &on, ToggleAfter: &toggleAfter})
 	if err != nil {
 		log.Printf("Failed to set switch with timer: %v", err)
 		return

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 
 	"github.com/tj-smith47/shelly-go/transport"
 )
@@ -250,7 +251,7 @@ func (w *White) SetConfig(ctx context.Context, config *WhiteConfig) error {
 
 // SetName sets the channel name.
 func (w *White) SetName(ctx context.Context, name string) error {
-	path := fmt.Sprintf("/settings/white/%d?name=%s", w.id, name)
+	path := fmt.Sprintf("/settings/white/%d?name=%s", w.id, url.QueryEscape(name))
 	_, err := restCall(ctx, w.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set white name: %w", err)

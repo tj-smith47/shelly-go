@@ -381,7 +381,7 @@ func TestCheckForUpdate(t *testing.T) {
 func TestUpdate(t *testing.T) {
 	mt := newMockTransport()
 	mt.SetResponse("/ota?update=true", map[string]bool{"ok": true})
-	mt.SetResponse("/ota?url=http://example.com/fw.bin", map[string]bool{"ok": true})
+	mt.SetResponse("/ota?url=http%3A%2F%2Fexample.com%2Ffw.bin", map[string]bool{"ok": true})
 
 	device := NewDevice(mt)
 	ctx := context.Background()
@@ -416,7 +416,7 @@ func TestSetName(t *testing.T) {
 // TestSetTimezone tests setting timezone.
 func TestSetTimezone(t *testing.T) {
 	mt := newMockTransport()
-	mt.SetResponse("/settings?timezone=America/New_York", map[string]bool{"ok": true})
+	mt.SetResponse("/settings?timezone=America%2FNew_York", map[string]bool{"ok": true})
 
 	device := NewDevice(mt)
 	ctx := context.Background()

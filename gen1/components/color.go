@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 
 	"github.com/tj-smith47/shelly-go/transport"
 )
@@ -293,7 +294,7 @@ func (c *Color) SetConfig(ctx context.Context, config *ColorConfig) error {
 
 // SetName sets the light name.
 func (c *Color) SetName(ctx context.Context, name string) error {
-	path := fmt.Sprintf("/settings/color/%d?name=%s", c.id, name)
+	path := fmt.Sprintf("/settings/color/%d?name=%s", c.id, url.QueryEscape(name))
 	_, err := restCall(ctx, c.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set color name: %w", err)

@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	"github.com/tj-smith47/shelly-go/transport"
 )
@@ -160,45 +162,42 @@ func (r *Relay) GetConfig(ctx context.Context) (*RelayConfig, error) {
 //
 // Only non-zero values in the config will be applied.
 func (r *Relay) SetConfig(ctx context.Context, config *RelayConfig) error {
-	path := fmt.Sprintf("/settings/relay/%d?", r.id)
+	params := url.Values{}
 
-	params := ""
 	if config.Name != "" {
-		params += fmt.Sprintf("name=%s&", config.Name)
+		params.Set("name", config.Name)
 	}
 	if config.ApplianceType != "" {
-		params += fmt.Sprintf("appliance_type=%s&", config.ApplianceType)
+		params.Set("appliance_type", config.ApplianceType)
 	}
 	if config.DefaultState != "" {
-		params += fmt.Sprintf("default_state=%s&", config.DefaultState)
+		params.Set("default_state", config.DefaultState)
 	}
 	if config.BtnType != "" {
-		params += fmt.Sprintf("btn_type=%s&", config.BtnType)
+		params.Set("btn_type", config.BtnType)
 	}
 	if config.BtnReverse {
-		params += btnReverseParam
+		params.Set("btn_reverse", boolTrue)
 	}
 	if config.AutoOn > 0 {
-		params += fmt.Sprintf("auto_on=%v&", config.AutoOn)
+		params.Set("auto_on", strconv.FormatFloat(config.AutoOn, 'f', -1, 64))
 	}
 	if config.AutoOff > 0 {
-		params += fmt.Sprintf("auto_off=%v&", config.AutoOff)
+		params.Set("auto_off", strconv.FormatFloat(config.AutoOff, 'f', -1, 64))
 	}
 	if config.MaxPower > 0 {
-		params += fmt.Sprintf("max_power=%d&", config.MaxPower)
+		params.Set("max_power", strconv.Itoa(config.MaxPower))
 	}
 	if config.Schedule {
-		params += scheduleParam
+		params.Set("schedule", boolTrue)
 	}
 
-	if params == "" {
+	if len(params) == 0 {
 		return nil // Nothing to set
 	}
 
-	// Remove trailing &
-	params = params[:len(params)-1]
-
-	_, err := restCall(ctx, r.transport, path+params)
+	path := fmt.Sprintf("/settings/relay/%d?%s", r.id, params.Encode())
+	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set relay config: %w", err)
 	}
@@ -208,7 +207,7 @@ func (r *Relay) SetConfig(ctx context.Context, config *RelayConfig) error {
 
 // SetName sets the relay name.
 func (r *Relay) SetName(ctx context.Context, name string) error {
-	path := fmt.Sprintf("/settings/relay/%d?name=%s", r.id, name)
+	path := fmt.Sprintf("/settings/relay/%d?name=%s", r.id, url.QueryEscape(name))
 	_, err := restCall(ctx, r.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set relay name: %w", err)

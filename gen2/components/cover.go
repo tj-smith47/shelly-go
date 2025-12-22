@@ -2,6 +2,7 @@ package components
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/tj-smith47/shelly-go/gen2"
 	"github.com/tj-smith47/shelly-go/rpc"
@@ -123,6 +124,10 @@ type CoverCalibrateParams struct {
 //	// Open for 5 seconds
 //	err := cover.Open(ctx, ptr(5.0))
 func (c *Cover) Open(ctx context.Context, duration *float64) error {
+	if duration != nil && *duration < 0 {
+		return fmt.Errorf("duration must be non-negative, got %v", *duration)
+	}
+
 	params := &CoverOpenParams{
 		ID:       c.ID(),
 		Duration: duration,
@@ -146,6 +151,10 @@ func (c *Cover) Open(ctx context.Context, duration *float64) error {
 //	// Close for 5 seconds
 //	err := cover.Close(ctx, ptr(5.0))
 func (c *Cover) Close(ctx context.Context, duration *float64) error {
+	if duration != nil && *duration < 0 {
+		return fmt.Errorf("duration must be non-negative, got %v", *duration)
+	}
+
 	params := &CoverCloseParams{
 		ID:       c.ID(),
 		Duration: duration,

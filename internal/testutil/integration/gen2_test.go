@@ -8,6 +8,11 @@ import (
 	"github.com/tj-smith47/shelly-go/gen2/components"
 )
 
+// ptr returns a pointer to v (helper for optional params).
+func ptr[T any](v T) *T {
+	return &v
+}
+
 func TestGen2Device_GetDeviceInfo(t *testing.T) {
 	device := RequireGen2Device(t)
 	ctx, cancel := TestContext(t)
@@ -151,7 +156,7 @@ func TestGen2Device_Switch(t *testing.T) {
 	originalState := status.Output
 
 	// Test Set on
-	result, err := sw.Set(ctx, &components.SwitchSetParams{On: true})
+	result, err := sw.Set(ctx, &components.SwitchSetParams{On: ptr(true)})
 	if err != nil {
 		t.Errorf("Switch.Set(true) error = %v", err)
 	} else {
@@ -169,7 +174,7 @@ func TestGen2Device_Switch(t *testing.T) {
 	}
 
 	// Test Set off
-	result, err = sw.Set(ctx, &components.SwitchSetParams{On: false})
+	result, err = sw.Set(ctx, &components.SwitchSetParams{On: ptr(false)})
 	if err != nil {
 		t.Errorf("Switch.Set(false) error = %v", err)
 	} else {
@@ -187,7 +192,7 @@ func TestGen2Device_Switch(t *testing.T) {
 	}
 
 	// Restore original state
-	sw.Set(ctx, &components.SwitchSetParams{On: originalState})
+	sw.Set(ctx, &components.SwitchSetParams{On: ptr(originalState)})
 }
 
 func TestGen2Device_Switch_Toggle(t *testing.T) {

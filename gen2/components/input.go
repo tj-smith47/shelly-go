@@ -3,6 +3,7 @@ package components
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/tj-smith47/shelly-go/gen2"
 	"github.com/tj-smith47/shelly-go/rpc"
@@ -212,6 +213,16 @@ type InputResetCounts struct {
 	Total int `json:"total"`
 }
 
+// Valid event types for Input.Trigger
+var validInputEventTypes = map[string]bool{
+	"btn_down":    true,
+	"btn_up":      true,
+	"single_push": true,
+	"double_push": true,
+	"triple_push": true,
+	"long_push":   true,
+}
+
 // Trigger emits input events on demand without physical input changes.
 //
 // Only available for type="button" on Shelly Plus I4, Plus I4 DC, I4 Gen3, and I4 DC Gen3.
@@ -224,6 +235,11 @@ type InputResetCounts struct {
 //
 //	err := input.Trigger(ctx, "single_push")
 func (i *Input) Trigger(ctx context.Context, eventType string) error {
+	if !validInputEventTypes[eventType] {
+		return fmt.Errorf("invalid event type %q: valid types are btn_down, btn_up, "+
+			"single_push, double_push, triple_push, long_push", eventType)
+	}
+
 	params := map[string]any{
 		"id":         i.ID(),
 		"event_type": eventType,

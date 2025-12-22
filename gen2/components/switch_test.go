@@ -79,7 +79,7 @@ func TestSwitch_Set(t *testing.T) {
 			name: "turn on",
 			params: &SwitchSetParams{
 				ID: 0,
-				On: true,
+				On: ptr(true),
 			},
 			result:    `{"was_on": false}`,
 			wantWasOn: false,
@@ -88,7 +88,7 @@ func TestSwitch_Set(t *testing.T) {
 			name: "turn off",
 			params: &SwitchSetParams{
 				ID: 0,
-				On: false,
+				On: ptr(false),
 			},
 			result:    `{"was_on": true}`,
 			wantWasOn: true,
@@ -97,7 +97,7 @@ func TestSwitch_Set(t *testing.T) {
 			name: "with toggle_after",
 			params: &SwitchSetParams{
 				ID:          0,
-				On:          true,
+				On:          ptr(true),
 				ToggleAfter: ptr(10.0),
 			},
 			result:    `{"was_on": false}`,
@@ -142,7 +142,7 @@ func TestSwitch_Set_Error(t *testing.T) {
 	sw := NewSwitch(client, 0)
 
 	testComponentError(t, "Set", func() error {
-		_, err := sw.Set(context.Background(), &SwitchSetParams{On: true})
+		_, err := sw.Set(context.Background(), &SwitchSetParams{On: ptr(true)})
 		return err
 	})
 }
@@ -152,7 +152,7 @@ func TestSwitch_Set_InvalidJSON(t *testing.T) {
 	sw := NewSwitch(client, 0)
 
 	testComponentInvalidJSON(t, "Set", func() error {
-		_, err := sw.Set(context.Background(), &SwitchSetParams{On: true})
+		_, err := sw.Set(context.Background(), &SwitchSetParams{On: ptr(true)})
 		return err
 	})
 }

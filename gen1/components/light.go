@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 
 	"github.com/tj-smith47/shelly-go/transport"
 )
@@ -258,7 +259,7 @@ func (l *Light) SetConfig(ctx context.Context, config *LightConfig) error {
 
 // SetName sets the light name.
 func (l *Light) SetName(ctx context.Context, name string) error {
-	path := fmt.Sprintf("/settings/light/%d?name=%s", l.id, name)
+	path := fmt.Sprintf("/settings/light/%d?name=%s", l.id, url.QueryEscape(name))
 	_, err := restCall(ctx, l.transport, path)
 	if err != nil {
 		return fmt.Errorf("failed to set light name: %w", err)
