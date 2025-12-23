@@ -6,6 +6,8 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/tj-smith47/shelly-go)](https://goreportcard.com/report/github.com/tj-smith47/shelly-go)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
+<a href="https://www.buymeacoffee.com/tjsmith47" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
+
 A comprehensive, production-ready Go library for controlling Shelly smart home devices across **all generations** (Gen1, Gen2, Gen3, Gen4) and **all communication protocols** (HTTP, WebSocket, MQTT, CoAP/CoIoT).
 
 ## Features
