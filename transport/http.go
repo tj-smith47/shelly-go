@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -401,13 +402,13 @@ func sha256Hash(input string) string {
 
 // shouldRetry determines if an error should be retried.
 func (h *HTTP) shouldRetry(err error) bool {
-	// Don't retry auth errors or not found errors
-	if err == types.ErrAuth || err == types.ErrNotFound {
+	// Don't retry auth errors or not found errors (use errors.Is for wrapped errors)
+	if errors.Is(err, types.ErrAuth) || errors.Is(err, types.ErrNotFound) {
 		return false
 	}
 
-	// Don't retry context errors
-	if err == context.Canceled || err == context.DeadlineExceeded {
+	// Don't retry context errors (use errors.Is for wrapped errors)
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
 
