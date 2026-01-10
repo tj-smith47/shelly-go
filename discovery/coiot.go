@@ -159,15 +159,19 @@ func (c *CoIoTDiscoverer) parseCoAPMessage(data []byte, addr *net.UDPAddr) *Disc
 
 // skipCoAPOptions skips CoAP options and returns the new offset.
 func (c *CoIoTDiscoverer) skipCoAPOptions(data []byte, offset int) int {
-	for offset < len(data) && data[offset] != 0xFF {
-		if data[offset] == 0 {
+	for offset < len(data) {
+		b := data[offset]
+		if b == 0xFF {
+			break
+		}
+		if b == 0 {
 			offset++
 			continue
 		}
 
 		// Option delta and length
-		delta := (data[offset] >> 4) & 0x0F
-		length := data[offset] & 0x0F
+		delta := (b >> 4) & 0x0F
+		length := b & 0x0F
 
 		switch delta {
 		case 13:

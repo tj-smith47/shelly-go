@@ -235,10 +235,19 @@ func (m *MDNSDiscoverer) parseResponse(data []byte) *DiscoveredDevice {
 
 // extractIP extracts an IPv4 address from DNS data.
 func (m *MDNSDiscoverer) extractIP(data []byte) net.IP {
+	// Need at least 16 bytes (12 header + 4 for IP)
+	if len(data) < 16 {
+		return nil
+	}
+
 	// Look for A record data (4 consecutive bytes that look like an IP)
-	for i := 12; i < len(data)-3; i++ {
+	// Upper bound ensures i+3 is always valid (i < len(data)-3 means i+3 < len(data))
+	upperBound := len(data) - 3
+	for i := 12; i < upperBound; i++ {
 		// Check if this looks like a valid IP (not 0.0.0.0, not 255.255.255.255)
-		if data[i] > 0 && data[i] < 255 && data[i+3] > 0 && data[i+3] < 255 {
+		first, last := data[i], data[i+3]
+		if first > 0 && first < 255 && last > 0 && last < 255 {
+			//nolint:gosec // G602: bounds checked by upperBound = len(data)-3
 			ip := net.IPv4(data[i], data[i+1], data[i+2], data[i+3])
 			// Basic sanity check - should be a private IP
 			if ip.IsPrivate() || ip.IsLoopback() {

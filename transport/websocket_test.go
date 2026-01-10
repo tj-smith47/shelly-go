@@ -3,6 +3,7 @@ package transport
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"testing"
 	"time"
 )
@@ -328,9 +329,12 @@ func TestWebSocket_handleDisconnectWithReconnect(t *testing.T) {
 	// Initialize stopPing channel (normally done in Connect)
 	ws.stopPing = make(chan struct{})
 
+	var mu sync.Mutex
 	states := make([]ConnectionState, 0)
 	ws.OnStateChange(func(state ConnectionState) {
+		mu.Lock()
 		states = append(states, state)
+		mu.Unlock()
 	})
 
 	// Simulate disconnect - it will attempt to reconnect but fail
@@ -346,16 +350,22 @@ func TestWebSocket_handleDisconnectWithReconnect(t *testing.T) {
 func TestWebSocket_reconnect(t *testing.T) {
 	ws := NewWebSocket("ws://192.168.1.100/rpc", WithRetry(1, 10*time.Millisecond))
 
+	var mu sync.Mutex
 	states := make([]ConnectionState, 0)
 	ws.OnStateChange(func(state ConnectionState) {
+		mu.Lock()
 		states = append(states, state)
+		mu.Unlock()
 	})
 
 	// Attempt reconnect - it will fail to connect
 	ws.reconnect()
 
 	// Should have attempted reconnection and ended up disconnected
-	if len(states) == 0 {
+	mu.Lock()
+	stateCount := len(states)
+	mu.Unlock()
+	if stateCount == 0 {
 		t.Error("state changes should have occurred")
 	}
 }

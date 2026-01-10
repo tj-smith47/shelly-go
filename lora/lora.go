@@ -607,8 +607,8 @@ func decodeBase64(s string) ([]byte, error) {
 			if c == '=' {
 				continue
 			}
-			if idx, ok := charIndex[c]; ok {
-				n = n<<6 | uint32(idx)
+			if idx, ok := charIndex[c]; ok && idx >= 0 {
+				n = n<<6 | uint32(idx) //nolint:gosec // G115: idx is always 0-63 (base64 index)
 				validChars++
 			} else {
 				return nil, errors.New("invalid base64 character")

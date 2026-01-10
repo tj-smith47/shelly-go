@@ -416,6 +416,18 @@ func (h *HTTP) shouldRetry(err error) bool {
 	return true
 }
 
+// Get makes a simple HTTP GET request to the given path.
+// This is a convenience method for REST-style API calls that works
+// for all device generations.
+//
+// Example:
+//
+//	result, err := transport.Get(ctx, "/status")          // Gen1
+//	result, err := transport.Get(ctx, "/rpc/Shelly.GetStatus")  // Gen2+
+func (h *HTTP) Get(ctx context.Context, path string) (json.RawMessage, error) {
+	return h.Call(ctx, NewSimpleRequest(path))
+}
+
 // Close closes the HTTP transport.
 // This closes idle connections in the HTTP client's connection pool.
 func (h *HTTP) Close() error {

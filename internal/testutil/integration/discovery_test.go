@@ -191,7 +191,8 @@ func TestDiscovery_ScanSubnet(t *testing.T) {
 	for i := 0; i < 16; i++ {
 		ip := make(net.IP, 4)
 		copy(ip, baseIP)
-		ip[3] = baseIP[3] + byte(i)
+		// ip[3] is safe: ip was created with length 4
+		ip[3] = baseIP[3] + byte(i) //nolint:gosec // G602: ip is guaranteed to have 4 elements
 		addresses = append(addresses, ip.String())
 	}
 

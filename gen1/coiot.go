@@ -261,14 +261,16 @@ func (l *CoIoTListener) parseCoAPMessage(data []byte) (*CoIoTStatus, error) {
 
 	// Find payload marker (0xFF)
 	payloadStart := -1
-	for i := 4; i < len(data); i++ {
+	dataLen := len(data)
+	for i := 4; i < dataLen; i++ {
+		//nolint:gosec // G602: i < dataLen is checked in loop condition
 		if data[i] == 0xFF {
 			payloadStart = i + 1
 			break
 		}
 	}
 
-	if payloadStart == -1 || payloadStart >= len(data) {
+	if payloadStart == -1 || payloadStart >= dataLen {
 		return nil, fmt.Errorf("no payload found")
 	}
 

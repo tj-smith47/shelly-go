@@ -433,6 +433,11 @@ func parseBTHomeData(data []byte) *BTHomeData {
 
 // parseBTHomeObject parses a single BTHome object into the result.
 func parseBTHomeObject(result *BTHomeData, objectID uint8, data []byte) {
+	// Safety check: caller should ensure proper slice length
+	if len(data) == 0 {
+		return
+	}
+
 	switch objectID {
 	case 0x00: // Packet ID
 		result.PacketID = data[0]
@@ -440,12 +445,21 @@ func parseBTHomeObject(result *BTHomeData, objectID uint8, data []byte) {
 		val := data[0]
 		result.Battery = &val
 	case 0x02: // Temperature (int16, 0.01°C)
+		if len(data) < 2 {
+			return
+		}
 		temp := float64(int16(data[0])|int16(data[1])<<8) * 0.01
 		result.Temperature = &temp
 	case 0x03: // Humidity (uint16, 0.01%)
+		if len(data) < 2 {
+			return
+		}
 		hum := float64(uint16(data[0])|uint16(data[1])<<8) * 0.01
 		result.Humidity = &hum
 	case 0x05: // Illuminance (uint24, 0.01 lux)
+		if len(data) < 3 {
+			return
+		}
 		lux := uint32(data[0]) | uint32(data[1])<<8 | uint32(data[2])<<16
 		result.Illuminance = &lux
 	case 0x21: // Motion (uint8, 0=clear, 1=detected)
@@ -458,6 +472,9 @@ func parseBTHomeObject(result *BTHomeData, objectID uint8, data []byte) {
 		val := data[0]
 		result.Button = &val
 	case 0x3F: // Rotation (int16, 0.1°)
+		if len(data) < 2 {
+			return
+		}
 		rot := float64(int16(data[0])|int16(data[1])<<8) * 0.1
 		result.Rotation = &rot
 	}

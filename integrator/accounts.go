@@ -14,6 +14,12 @@ import (
 	"github.com/tj-smith47/shelly-go/types"
 )
 
+// Action constants for DeviceCallback.
+const (
+	ActionAdd    = "add"
+	ActionRemove = "remove"
+)
+
 // Account represents a user account that has granted access to the integrator.
 type Account struct {
 	GrantedAt      time.Time  `json:"granted_at"`
@@ -431,12 +437,12 @@ type DeviceCallback struct {
 
 // IsAddAction returns true if this is an add/grant action.
 func (dc *DeviceCallback) IsAddAction() bool {
-	return dc.Action == "add"
+	return dc.Action == ActionAdd
 }
 
 // IsRemoveAction returns true if this is a remove/revoke action.
 func (dc *DeviceCallback) IsRemoveAction() bool {
-	return dc.Action == "remove"
+	return dc.Action == ActionRemove
 }
 
 // ToAccountDevice converts the callback to an AccountDevice.

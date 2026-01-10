@@ -1082,3 +1082,81 @@ func TestHTTP_Call_InternalServerError(t *testing.T) {
 		t.Fatal("Call() error = nil, want error")
 	}
 }
+
+func TestHTTP_Get_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/status" {
+			t.Errorf("path = %v, want /status", r.URL.Path)
+		}
+		if r.Method != "GET" {
+			t.Errorf("method = %v, want GET", r.Method)
+		}
+		_, _ = w.Write([]byte(`{"wifi_sta":{"connected":true}}`))
+	}))
+	defer server.Close()
+
+	transport := NewHTTP(server.URL)
+	result, err := transport.Get(context.Background(), "/status")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+
+	var status struct {
+		WifiSta struct {
+			Connected bool `json:"connected"`
+		} `json:"wifi_sta"`
+	}
+	if err := json.Unmarshal(result, &status); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+
+	if !status.WifiSta.Connected {
+		t.Error("wifi_sta.connected = false, want true")
+	}
+}
+
+func TestHTTP_Get_Gen2RPC(t *testing.T) {
+	// Test that Get works for Gen2+ /rpc/Method style calls
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/rpc/Shelly.GetStatus" {
+			t.Errorf("path = %v, want /rpc/Shelly.GetStatus", r.URL.Path)
+		}
+		if r.Method != "GET" {
+			t.Errorf("method = %v, want GET", r.Method)
+		}
+		_, _ = w.Write([]byte(`{"sys":{"available_updates":{},"mac":"AABBCCDDEEFF"}}`))
+	}))
+	defer server.Close()
+
+	transport := NewHTTP(server.URL)
+	result, err := transport.Get(context.Background(), "/rpc/Shelly.GetStatus")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+
+	var status struct {
+		Sys struct {
+			MAC string `json:"mac"`
+		} `json:"sys"`
+	}
+	if err := json.Unmarshal(result, &status); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+
+	if status.Sys.MAC != "AABBCCDDEEFF" {
+		t.Errorf("sys.mac = %v, want AABBCCDDEEFF", status.Sys.MAC)
+	}
+}
+
+func TestHTTP_Get_Error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	transport := NewHTTP(server.URL)
+	_, err := transport.Get(context.Background(), "/invalid")
+	if err == nil {
+		t.Fatal("Get() error = nil, want error")
+	}
+}

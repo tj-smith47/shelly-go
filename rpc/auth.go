@@ -8,6 +8,12 @@ import (
 	"fmt"
 )
 
+// Hash algorithm constants for digest authentication.
+const (
+	AlgorithmMD5    = "MD5"
+	AlgorithmSHA256 = "SHA-256"
+)
+
 // AuthMethod represents the authentication method to use for RPC requests.
 type AuthMethod int
 
@@ -117,10 +123,10 @@ func calculateDigestResponse(
 // calculateHash calculates a hash using the specified algorithm.
 func calculateHash(data, algorithm string) string {
 	switch algorithm {
-	case "SHA-256":
+	case AlgorithmSHA256:
 		hash := sha256.Sum256([]byte(data))
 		return hex.EncodeToString(hash[:])
-	case "MD5", "":
+	case AlgorithmMD5, "":
 		// MD5 is the default if no algorithm is specified
 		hash := md5.Sum([]byte(data)) //nolint:gosec // G401: MD5 required by HTTP Digest Auth
 		return hex.EncodeToString(hash[:])

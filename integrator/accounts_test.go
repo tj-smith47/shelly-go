@@ -407,7 +407,7 @@ func TestDeviceCallback_IsAddAction(t *testing.T) {
 		t.Error("IsRemoveAction() = true, want false")
 	}
 
-	dc.Action = "remove"
+	dc.Action = ActionRemove
 	if dc.IsAddAction() {
 		t.Error("IsAddAction() = true, want false")
 	}
@@ -449,7 +449,7 @@ func TestAccountManager_ProcessCallback(t *testing.T) {
 		Name:         "Test Device",
 		Host:         "host1",
 		AccessGroups: "01",
-		Action:       "add",
+		Action:       ActionAdd,
 	}
 
 	err := am.ProcessCallback(callback)
@@ -462,7 +462,7 @@ func TestAccountManager_ProcessCallback(t *testing.T) {
 	}
 
 	// Remove callback
-	callback.Action = "remove"
+	callback.Action = ActionRemove
 	err = am.ProcessCallback(callback)
 	if err != nil {
 		t.Fatalf("ProcessCallback(remove) error = %v", err)

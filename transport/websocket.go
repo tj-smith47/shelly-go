@@ -64,11 +64,16 @@ type rpcNotification struct {
 }
 
 // toInt64ID converts an interface ID to int64, returning -1 if not a numeric type.
+// For uint64 values that exceed int64 max, returns -1 to indicate overflow.
 func toInt64ID(id any) int64 {
 	switch v := id.(type) {
 	case int64:
 		return v
 	case uint64:
+		// Check for overflow: max int64 is 9223372036854775807
+		if v > 1<<63-1 {
+			return -1
+		}
 		return int64(v)
 	case int:
 		return int64(v)
