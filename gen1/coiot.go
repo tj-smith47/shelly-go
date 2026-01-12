@@ -1,9 +1,11 @@
 package gen1
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 )
@@ -17,6 +19,13 @@ const (
 
 	// DefaultCoIoTPeriod is the default status update period in seconds.
 	DefaultCoIoTPeriod = 15
+
+	// CoAP option IDs.
+	optionURIPath     = 11   // URI-Path option
+	optionGlobalDevID = 3332 // CoIoT Global Device ID option
+
+	// CoAP codes.
+	codeStatus = 30 // CoIoT STATUS code (0.30)
 )
 
 // CoIoTListener listens for CoIoT (CoAP) status updates from Gen1 devices.
@@ -28,7 +37,8 @@ const (
 //   - Uses CoAP (Constrained Application Protocol) over UDP
 //   - Multicast address: 224.0.1.187:5683
 //   - Devices publish status periodically (default 15s)
-//   - Updates include device ID, type, and current status
+//   - Device ID is in CoAP option 3332 (GlobalDevID) with format: DeviceType#DeviceID#Version
+//   - Payload contains sensor data in JSON format: {"G": [[channel, id, value], ...]}
 //
 // Example:
 //
@@ -56,13 +66,22 @@ type StatusHandler func(deviceID string, status *CoIoTStatus)
 
 // CoIoTStatus contains status data from a CoIoT message.
 type CoIoTStatus struct {
-	Timestamp  time.Time      `json:"ts,omitempty"`
-	Sensors    map[string]any `json:"sensors,omitempty"`
-	Actuators  map[string]any `json:"actuators,omitempty"`
-	DeviceID   string         `json:"id,omitempty"`
-	DeviceType string         `json:"type,omitempty"`
-	Raw        []byte         `json:"-"`
-	Generation int            `json:"gen,omitempty"`
+	Timestamp   time.Time      `json:"ts,omitempty"`
+	Sensors     map[string]any `json:"sensors,omitempty"`
+	Actuators   map[string]any `json:"actuators,omitempty"`
+	SourceAddr  string         `json:"source,omitempty"`
+	DeviceID    string         `json:"id,omitempty"`
+	DeviceType  string         `json:"type,omitempty"`
+	DeviceMAC   string         `json:"mac,omitempty"`
+	URIPath     string         `json:"uri_path,omitempty"`
+	Raw         []byte         `json:"-"`
+	Generation  int            `json:"gen,omitempty"`
+	Version     int            `json:"version,omitempty"`
+	Serial      int            `json:"serial,omitempty"`
+	CoAPCode    int            `json:"coap_code,omitempty"`
+	CoAPType    int            `json:"coap_type,omitempty"`
+	ValidityRaw int            `json:"validity,omitempty"`
+	MessageID   uint16         `json:"message_id,omitempty"`
 }
 
 // CoIoTOption configures the CoIoT listener.
@@ -194,10 +213,12 @@ func (l *CoIoTListener) receiveLoop() {
 			return
 		default:
 			// Set read deadline to allow periodic stop checks
-			//nolint:errcheck // SetReadDeadline errors are non-fatal for listener
-			l.conn.SetReadDeadline(time.Now().Add(1 * time.Second))
+			if err := l.conn.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
+				// Non-fatal, continue
+				continue
+			}
 
-			n, _, err := l.conn.ReadFromUDP(buf)
+			n, srcAddr, err := l.conn.ReadFromUDP(buf)
 			if err != nil {
 				// Timeout is expected, continue
 				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
@@ -214,16 +235,24 @@ func (l *CoIoTListener) receiveLoop() {
 			}
 
 			if n > 0 {
+				// Make a copy of the data for async processing
+				data := make([]byte, n)
+				copy(data, buf[:n])
+
 				// Parse and dispatch message
-				go l.handleMessage(buf[:n])
+				var sourceIP string
+				if srcAddr != nil {
+					sourceIP = srcAddr.IP.String()
+				}
+				go l.handleMessage(data, sourceIP)
 			}
 		}
 	}
 }
 
 // handleMessage parses a CoAP message and dispatches to handlers.
-func (l *CoIoTListener) handleMessage(data []byte) {
-	status, err := l.parseCoAPMessage(data)
+func (l *CoIoTListener) handleMessage(data []byte, sourceAddr string) {
+	status, err := ParseCoAPMessage(data, sourceAddr)
 	if err != nil {
 		// Invalid message, ignore
 		return
@@ -241,89 +270,202 @@ func (l *CoIoTListener) handleMessage(data []byte) {
 	}
 }
 
-// parseCoAPMessage parses a CoAP message.
-//
-// CoIoT uses a simplified CoAP format with JSON or CBOR payload.
-// This is a simplified implementation that handles common cases.
-func (l *CoIoTListener) parseCoAPMessage(data []byte) (*CoIoTStatus, error) {
-	// CoAP header format:
-	// - Version (2 bits), Type (2 bits), Token Length (4 bits)
-	// - Code (8 bits)
-	// - Message ID (16 bits)
-	// - Token (0-8 bytes)
-	// - Options (variable)
-	// - Payload marker (0xFF)
-	// - Payload
-
-	if len(data) < 4 {
-		return nil, fmt.Errorf("message too short")
+// parseExtendedValue parses CoAP extended delta/length encoding.
+// Returns the value and new offset, or error if truncated.
+func parseExtendedValue(nibble int, data []byte, offset int) (value, newOffset int, err error) {
+	switch nibble {
+	case 13:
+		if offset >= len(data) {
+			return 0, offset, fmt.Errorf("truncated extended value")
+		}
+		return int(data[offset]) + 13, offset + 1, nil
+	case 14:
+		if offset+1 >= len(data) {
+			return 0, offset, fmt.Errorf("truncated extended value")
+		}
+		return int(binary.BigEndian.Uint16(data[offset:offset+2])) + 269, offset + 2, nil
+	case 15:
+		return -1, offset, nil // End marker or reserved
+	default:
+		return nibble, offset, nil
 	}
+}
 
-	// Find payload marker (0xFF)
-	payloadStart := -1
-	dataLen := len(data)
-	for i := 4; i < dataLen; i++ {
-		//nolint:gosec // G602: i < dataLen is checked in loop condition
-		if data[i] == 0xFF {
-			payloadStart = i + 1
+// parseCoAPOptions parses CoAP options from the message.
+// Returns URI path parts and updates status with device ID info.
+func parseCoAPOptions(data []byte, offset int, status *CoIoTStatus) (uriParts []string, finalOffset int, err error) {
+	var uriPathParts []string
+	currentOptionNumber := 0
+
+	for offset < len(data) {
+		// Check for payload marker
+		if data[offset] == 0xFF {
+			offset++
 			break
 		}
+
+		optionByte := data[offset]
+		offset++
+
+		deltaNibble := int(optionByte >> 4)
+		lengthNibble := int(optionByte & 0x0F)
+
+		// Parse extended delta
+		delta, nextOffset, parseErr := parseExtendedValue(deltaNibble, data, offset)
+		if parseErr != nil {
+			return uriPathParts, offset, fmt.Errorf("truncated extended delta")
+		}
+		if delta < 0 {
+			break // End of options marker
+		}
+		offset = nextOffset
+
+		// Parse extended length
+		length, nextOffset, parseErr := parseExtendedValue(lengthNibble, data, offset)
+		if parseErr != nil {
+			return uriPathParts, offset, fmt.Errorf("truncated extended length")
+		}
+		if length < 0 {
+			return uriPathParts, offset, fmt.Errorf("invalid option length")
+		}
+		offset = nextOffset
+
+		// Calculate option number
+		currentOptionNumber += delta
+
+		// Extract option value
+		if offset+length > len(data) {
+			return uriPathParts, offset, fmt.Errorf("option value exceeds message length")
+		}
+		optionValue := data[offset : offset+length]
+		offset += length
+
+		// Process known options
+		switch currentOptionNumber {
+		case optionURIPath:
+			uriPathParts = append(uriPathParts, string(optionValue))
+		case optionGlobalDevID:
+			parseGlobalDevID(string(optionValue), status)
+		}
 	}
 
-	if payloadStart == -1 || payloadStart >= dataLen {
-		return nil, fmt.Errorf("no payload found")
+	return uriPathParts, offset, nil
+}
+
+// ParseCoAPMessage parses a CoAP message and extracts CoIoT status.
+//
+// CoAP message format:
+//   - Header: Version (2 bits), Type (2 bits), Token Length (4 bits), Code (8 bits), Message ID (16 bits)
+//   - Token: 0-8 bytes (length from header)
+//   - Options: Variable length, delta-encoded
+//   - Payload marker: 0xFF
+//   - Payload: JSON encoded status data
+//
+// The device ID is extracted from option 3332 (GlobalDevID) in format: DeviceType#DeviceID#Version
+func ParseCoAPMessage(data []byte, sourceAddr string) (*CoIoTStatus, error) {
+	if len(data) < 4 {
+		return nil, fmt.Errorf("message too short: %d bytes", len(data))
 	}
 
-	payload := data[payloadStart:]
-
-	// Try to parse as JSON
 	status := &CoIoTStatus{
-		Timestamp: time.Now(),
-		Raw:       data,
-		Sensors:   make(map[string]any),
-		Actuators: make(map[string]any),
+		Timestamp:  time.Now(),
+		Raw:        data,
+		Sensors:    make(map[string]any),
+		Actuators:  make(map[string]any),
+		Generation: 1,
+		SourceAddr: sourceAddr,
 	}
 
-	// CoIoT status messages typically have a specific structure
-	// Try parsing as JSON first
-	var jsonPayload map[string]any
-	//nolint:nestif // JSON parsing with optional fields requires nested type assertions
-	if err := json.Unmarshal(payload, &jsonPayload); err == nil {
-		// Extract device info from JSON
-		if id, ok := jsonPayload["id"].(string); ok {
-			status.DeviceID = id
-		}
-		if devType, ok := jsonPayload["type"].(string); ok {
-			status.DeviceType = devType
-		}
-		if sensors, ok := jsonPayload["G"].([]any); ok {
-			// Parse sensor groups
-			for _, s := range sensors {
-				if sArr, ok := s.([]any); ok && len(sArr) >= 3 {
-					// Format: [channel, id, value]
-					key := fmt.Sprintf("%v_%v", sArr[0], sArr[1])
-					status.Sensors[key] = sArr[2]
-				}
-			}
-		}
-	} else {
-		// May be CBOR encoded, store raw for now
-		// Full CBOR parsing would require a CBOR library
-		status.DeviceID = "unknown"
+	// Parse CoAP header
+	tokenLen := int(data[0] & 0x0F)
+	status.CoAPType = int((data[0] >> 4) & 0x03)
+	status.CoAPCode = int(data[1])
+	status.MessageID = binary.BigEndian.Uint16(data[2:4])
+
+	if tokenLen > 8 {
+		return nil, fmt.Errorf("invalid token length: %d", tokenLen)
+	}
+
+	offset := 4 + tokenLen
+	if offset > len(data) {
+		return nil, fmt.Errorf("message too short for token")
+	}
+
+	// Parse options
+	uriPathParts, offset, err := parseCoAPOptions(data, offset, status)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build URI path
+	if len(uriPathParts) > 0 {
+		status.URIPath = "/" + strings.Join(uriPathParts, "/")
+	}
+
+	// Parse payload if present
+	if offset < len(data) {
+		parseCoIoTPayload(data[offset:], status)
 	}
 
 	return status, nil
 }
 
-// ParseCoIoTDescription parses a CoIoT device description.
-//
-// Device description is obtained from /cit/d endpoint and describes
-// available sensors and actuators.
+// parseGlobalDevID parses the GlobalDevID option value.
+// Format: DeviceType#DeviceID#Version (e.g., "SHSW-PM#C45BBE6C2D3A#2")
+func parseGlobalDevID(value string, status *CoIoTStatus) {
+	parts := strings.Split(value, "#")
+	if len(parts) >= 1 {
+		status.DeviceType = parts[0]
+	}
+	if len(parts) >= 2 {
+		status.DeviceMAC = parts[1]
+		// Device ID is "devicetype-mac" format for consistency with Shelly naming
+		status.DeviceID = strings.ToLower(status.DeviceType) + "-" + strings.ToLower(parts[1])
+	}
+	if len(parts) >= 3 {
+		var version int
+		if _, err := fmt.Sscanf(parts[2], "%d", &version); err == nil {
+			status.Version = version
+		}
+	}
+}
+
+// parseCoIoTPayload parses the JSON payload from a CoIoT message.
+func parseCoIoTPayload(payload []byte, status *CoIoTStatus) {
+	var jsonPayload map[string]any
+	if err := json.Unmarshal(payload, &jsonPayload); err != nil {
+		// Invalid JSON, keep raw data
+		return
+	}
+
+	// Parse sensor groups: "G": [[channel, id, value], ...]
+	if sensors, ok := jsonPayload["G"].([]any); ok {
+		for _, s := range sensors {
+			if sArr, ok := s.([]any); ok && len(sArr) >= 3 {
+				// Format: [channel, id, value]
+				key := fmt.Sprintf("%v_%v", sArr[0], sArr[1])
+				status.Sensors[key] = sArr[2]
+			}
+		}
+	}
+
+	// Parse validity period if present
+	if validity, ok := jsonPayload["V"].(float64); ok {
+		status.ValidityRaw = int(validity)
+	}
+
+	// Parse serial if present
+	if serial, ok := jsonPayload["S"].(float64); ok {
+		status.Serial = int(serial)
+	}
+}
+
+// CoIoTDescription contains device description from /cit/d endpoint.
 type CoIoTDescription struct {
-	// DeviceID is the device identifier.
+	// DeviceID is the device identifier (e.g., "shellyem-AABBCC").
 	DeviceID string `json:"id"`
 
-	// DeviceType is the device type.
+	// DeviceType is the device type code (e.g., "SHEM").
 	DeviceType string `json:"type"`
 
 	// Blocks contains component blocks.
@@ -331,6 +473,9 @@ type CoIoTDescription struct {
 
 	// Sensors contains sensor definitions.
 	Sensors []CoIoTSensor `json:"sen"`
+
+	// Actuators contains actuator definitions (optional).
+	Actuators []CoIoTActuator `json:"act,omitempty"`
 }
 
 // CoIoTBlock represents a component block in CoIoT description.
@@ -344,6 +489,17 @@ type CoIoTSensor struct {
 	Type        string `json:"T"`
 	Description string `json:"D"`
 	Unit        string `json:"U,omitempty"`
+	Range       string `json:"R,omitempty"`
+	Links       []int  `json:"L,omitempty"`
+	ID          int    `json:"I"`
+	Block       int    `json:"B,omitempty"`
+}
+
+// CoIoTActuator represents an actuator in CoIoT description.
+type CoIoTActuator struct {
+	Type        string `json:"T"`
+	Description string `json:"D"`
+	Range       string `json:"R,omitempty"`
 	Links       []int  `json:"L,omitempty"`
 	ID          int    `json:"I"`
 	Block       int    `json:"B,omitempty"`
@@ -356,4 +512,55 @@ func GetDeviceDescription(deviceAddr string) (*CoIoTDescription, error) {
 	// This would typically be called via HTTP
 	// For now, return an error indicating to use HTTP
 	return nil, fmt.Errorf("use HTTP transport to get device description from /cit/d")
+}
+
+// ParseCoIoTDescription parses a CoIoT device description JSON.
+func ParseCoIoTDescription(data []byte) (*CoIoTDescription, error) {
+	var desc CoIoTDescription
+	if err := json.Unmarshal(data, &desc); err != nil {
+		return nil, fmt.Errorf("failed to parse CoIoT description: %w", err)
+	}
+	return &desc, nil
+}
+
+// SensorIDToDescription maps common sensor IDs to human-readable descriptions.
+var SensorIDToDescription = map[int]string{
+	1101: "Relay State",
+	2101: "Input State",
+	2102: "Input Event",
+	2103: "Input Event Count",
+	3101: "Active Power",
+	3104: "Voltage",
+	3105: "Current",
+	3106: "Power Factor",
+	3107: "Frequency",
+	3108: "Apparent Power",
+	3109: "Reactive Power",
+	3110: "Energy Counter 0",
+	3111: "Energy Counter 1",
+	3112: "Energy Counter 2",
+	3117: "Total Returned Energy",
+	4101: "Power (W)",
+	4102: "Energy (Wmin)",
+	4103: "Energy Counter (Wmin)",
+	4104: "Lamp Life",
+	4105: "Lamp Life (Pct)",
+	5101: "Flood Detected",
+	5102: "Motion Detected",
+	5103: "Vibration Detected",
+	6101: "Overpower",
+	6102: "Over Temperature",
+	6103: "Overload",
+	6104: "Voltage Error",
+	6105: "Under Voltage",
+	6106: "Over Voltage",
+	6107: "Firmware Update Available",
+	6108: "Cloud Status",
+	6109: "Status (Error)",
+	6110: "Errors",
+	9101: "Temperature",
+	9102: "Humidity",
+	9103: "Battery",
+	9104: "External Temperature",
+	9105: "External Humidity",
 }
