@@ -37,11 +37,10 @@ var modelNames = map[string]string{
 	"SHTRV-01":  "Shelly TRV",
 
 	// Gen2 Plus devices (EU variants - most common)
-	"SNSW-001P16EU": "Shelly Plus 1",
-	"SNSW-001X16EU": "Shelly Plus 1 Mini",
-	"SNSW-102P16EU": "Shelly Plus 1PM",
-	"SNSW-102X16EU": "Shelly Plus 1PM Mini",
+	"SNSW-001X16EU": "Shelly Plus 1",
+	"SNSW-001P16EU": "Shelly Plus 1PM",
 	"SNSW-002P16EU": "Shelly Plus 2PM",
+	"SNSW-102P16EU": "Shelly Plus 2PM", // Hardware revision variant
 	"SNPL-00112EU":  "Shelly Plus Plug S",
 	"SNPL-00116US":  "Shelly Plus Plug US",
 	"SNPL-00112US":  "Shelly Plus Plug US",
@@ -50,7 +49,8 @@ var modelNames = map[string]string{
 	"SNDM-00100WW":  "Shelly Plus Wall Dimmer",
 	"SNDM-0013US":   "Shelly Plus Wall Dimmer US",
 	"SNSN-0031Z":    "Shelly Plus Smoke",
-	"SNSW-001P8EU":  "Shelly Plus 1 (8A)",
+	"SNSW-001X8EU":  "Shelly Plus 1 Mini",
+	"SNSW-001P8EU":  "Shelly Plus 1PM Mini",
 	"SNGW-BT01":     "Shelly Plus BT Gateway",
 	"SNSN-0043X":    "Shelly Plus HT Gen3",
 
@@ -73,10 +73,11 @@ var modelNames = map[string]string{
 	"SPSH-002PE16EU":  "Shelly Pro Dual Cover PM",
 
 	// Gen3 devices
-	"S3SW-001P16EU": "Shelly 1 Gen3",
-	"S3SW-001X16EU": "Shelly 1 Mini Gen3",
-	"S3SW-002P16EU": "Shelly 1PM Gen3",
-	"S3SW-002X16EU": "Shelly 1PM Mini Gen3",
+	"S3SW-001X16EU": "Shelly 1 Gen3",
+	"S3SW-001X8EU":  "Shelly 1 Mini Gen3",
+	"S3SW-001P16EU": "Shelly 1PM Gen3",
+	"S3SW-001P8EU":  "Shelly 1PM Mini Gen3",
+	"S3SW-002P16EU": "Shelly 2PM Gen3",
 	"S3PL-00112EU":  "Shelly Plug S Gen3",
 
 	// BLU devices
@@ -97,7 +98,7 @@ var modelNames = map[string]string{
 // Example:
 //
 //	ModelDisplayName("SHSW-PM") returns "Shelly 1PM"
-//	ModelDisplayName("SNSW-102P16EU") returns "Shelly Plus 1PM"
+//	ModelDisplayName("SNSW-102P16EU") returns "Shelly Plus 2PM"
 //	ModelDisplayName("unknown") returns "unknown"
 func ModelDisplayName(model string) string {
 	if name, ok := modelNames[model]; ok {

@@ -15,9 +15,10 @@ func TestModelDisplayName(t *testing.T) {
 		{"SHEM-3", "Shelly 3EM"},
 
 		// Gen2 Plus
-		{"SNSW-001P16EU", "Shelly Plus 1"},
-		{"SNSW-102P16EU", "Shelly Plus 1PM"},
+		{"SNSW-001X16EU", "Shelly Plus 1"},
+		{"SNSW-001P16EU", "Shelly Plus 1PM"},
 		{"SNSW-002P16EU", "Shelly Plus 2PM"},
+		{"SNSW-102P16EU", "Shelly Plus 2PM"}, // Hardware revision variant
 		{"SNPL-00112EU", "Shelly Plus Plug S"},
 
 		// Gen2 Pro
@@ -26,8 +27,9 @@ func TestModelDisplayName(t *testing.T) {
 		{"SPEM-003CEBEU", "Shelly Pro 3EM"},
 
 		// Gen3
-		{"S3SW-001P16EU", "Shelly 1 Gen3"},
-		{"S3SW-002P16EU", "Shelly 1PM Gen3"},
+		{"S3SW-001X16EU", "Shelly 1 Gen3"},
+		{"S3SW-001P16EU", "Shelly 1PM Gen3"},
+		{"S3SW-002P16EU", "Shelly 2PM Gen3"},
 
 		// BLU
 		{"SBBT-002C", "Shelly BLU Button1"},
