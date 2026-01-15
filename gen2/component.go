@@ -134,11 +134,10 @@ func (c *BaseComponent) SetConfig(ctx context.Context, config any) error {
 		}
 	}
 
-	// Add id to config map
-	params := make(map[string]any)
-	params["id"] = c.id
-	for k, v := range configMap {
-		params[k] = v
+	// Build params with id and config nested under "config" key
+	params := map[string]any{
+		"id":     c.id,
+		"config": configMap,
 	}
 
 	_, err := c.client.Call(ctx, method, params)
