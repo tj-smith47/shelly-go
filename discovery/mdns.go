@@ -99,10 +99,21 @@ func (m *MDNSDiscoverer) DiscoverWithContext(ctx context.Context) ([]DiscoveredD
 
 // createMulticastConn creates a UDP connection for mDNS multicast.
 func (m *MDNSDiscoverer) createMulticastConn() (*net.UDPConn, error) {
-	// Try to listen on a random port
-	conn, err := net.ListenUDP("udp4", &net.UDPAddr{Port: 0})
+	// Join the mDNS multicast group to receive responses
+	addr := &net.UDPAddr{
+		IP:   net.ParseIP("224.0.0.251"),
+		Port: 5353,
+	}
+
+	// Listen on all interfaces for multicast
+	conn, err := net.ListenMulticastUDP("udp4", nil, addr)
 	if err != nil {
-		return nil, err
+		// Fallback to regular UDP if multicast fails (e.g., permissions)
+		// Some devices respond unicast to the query source, so this may work
+		conn, err = net.ListenUDP("udp4", &net.UDPAddr{Port: 0})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return conn, nil

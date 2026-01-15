@@ -2,8 +2,72 @@ package cloud
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 )
+
+// APIErrors represents errors from the Shelly Cloud API.
+// The API can return errors in multiple formats:
+//   - Array of strings: ["error1", "error2"]
+//   - Object with message: {"message": "error"}
+//   - Object with code/message: {"code": "auth_error", "message": "Invalid credentials"}
+//
+// This type handles all formats and normalizes them to a slice of error messages.
+type APIErrors []string
+
+// UnmarshalJSON implements json.Unmarshaler to handle multiple error formats.
+func (e *APIErrors) UnmarshalJSON(data []byte) error {
+	// Try array of strings first (most common)
+	var strArray []string
+	if err := json.Unmarshal(data, &strArray); err == nil {
+		*e = strArray
+		return nil
+	}
+
+	// Try object with message field
+	if result := e.tryUnmarshalErrorObject(data); result != nil {
+		*e = result
+		return nil
+	}
+
+	// Try map[string]string for key-value error pairs
+	var errMap map[string]string
+	if err := json.Unmarshal(data, &errMap); err == nil {
+		var errors []string
+		for k, v := range errMap {
+			errors = append(errors, fmt.Sprintf("%s: %s", k, v))
+		}
+		*e = errors
+		return nil
+	}
+
+	// Last resort: try single string
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		*e = []string{str}
+		return nil
+	}
+
+	// If nothing worked, return an opaque error
+	*e = []string{fmt.Sprintf("unknown error format: %s", string(data))}
+	return nil
+}
+
+// tryUnmarshalErrorObject attempts to parse an error object with message/code fields.
+// Returns nil if parsing fails or message is empty.
+func (e *APIErrors) tryUnmarshalErrorObject(data []byte) []string {
+	var errObj struct {
+		Message string `json:"message"`
+		Code    string `json:"code"`
+	}
+	if err := json.Unmarshal(data, &errObj); err != nil || errObj.Message == "" {
+		return nil
+	}
+	if errObj.Code != "" {
+		return []string{fmt.Sprintf("%s: %s", errObj.Code, errObj.Message)}
+	}
+	return []string{errObj.Message}
+}
 
 // ClientID constants for OAuth authentication.
 const (
@@ -95,7 +159,7 @@ type DeviceInfo struct {
 // AllDevicesResponse represents the response from the device/all endpoint.
 type AllDevicesResponse struct {
 	Data   *AllDevicesData `json:"data,omitempty"`
-	Errors []string        `json:"errors,omitempty"`
+	Errors APIErrors       `json:"errors,omitempty"`
 	IsOK   bool            `json:"isok"`
 }
 
@@ -108,7 +172,7 @@ type AllDevicesData struct {
 // DeviceStatusResponse represents the response from the device/status endpoint.
 type DeviceStatusResponse struct {
 	Data   *DeviceStatusData `json:"data,omitempty"`
-	Errors []string          `json:"errors,omitempty"`
+	Errors APIErrors         `json:"errors,omitempty"`
 	IsOK   bool              `json:"isok"`
 }
 
@@ -141,8 +205,8 @@ type ControlRequest struct {
 
 // ControlResponse represents the response from a control request.
 type ControlResponse struct {
-	Errors []string `json:"errors,omitempty"`
-	IsOK   bool     `json:"isok"`
+	Errors APIErrors `json:"errors,omitempty"`
+	IsOK   bool      `json:"isok"`
 }
 
 // GroupControlRequest represents a group control request.
@@ -256,7 +320,7 @@ type LoginRequest struct {
 // LoginResponse represents the response from the login endpoint.
 type LoginResponse struct {
 	Data   *LoginData `json:"data,omitempty"`
-	Errors []string   `json:"errors,omitempty"`
+	Errors APIErrors  `json:"errors,omitempty"`
 	IsOK   bool       `json:"isok"`
 }
 

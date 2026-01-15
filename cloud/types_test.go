@@ -5,6 +5,81 @@ import (
 	"testing"
 )
 
+func TestAPIErrorsUnmarshal(t *testing.T) {
+	tests := []struct {
+		name     string
+		json     string
+		expected []string
+	}{
+		{
+			name:     "array of strings",
+			json:     `["Invalid credentials", "Account locked"]`,
+			expected: []string{"Invalid credentials", "Account locked"},
+		},
+		{
+			name:     "single string",
+			json:     `"Single error message"`,
+			expected: []string{"Single error message"},
+		},
+		{
+			name:     "object with message",
+			json:     `{"message": "Authentication failed"}`,
+			expected: []string{"Authentication failed"},
+		},
+		{
+			name:     "object with code and message",
+			json:     `{"code": "auth_error", "message": "Invalid credentials"}`,
+			expected: []string{"auth_error: Invalid credentials"},
+		},
+		{
+			name:     "map of strings",
+			json:     `{"email": "Invalid email format", "password": "Password too short"}`,
+			expected: []string{"email: Invalid email format", "password: Password too short"},
+		},
+		{
+			name:     "empty array",
+			json:     `[]`,
+			expected: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var errors APIErrors
+			if err := json.Unmarshal([]byte(tt.json), &errors); err != nil {
+				t.Fatalf("Failed to unmarshal: %v", err)
+			}
+
+			if len(errors) != len(tt.expected) {
+				t.Errorf("got %d errors, want %d", len(errors), len(tt.expected))
+				return
+			}
+
+			// For map case, we can't guarantee order, so just check all expected values are present
+			if tt.name == "map of strings" {
+				for _, exp := range tt.expected {
+					found := false
+					for _, got := range errors {
+						if got == exp {
+							found = true
+							break
+						}
+					}
+					if !found {
+						t.Errorf("expected error %q not found in %v", exp, errors)
+					}
+				}
+			} else {
+				for i, exp := range tt.expected {
+					if errors[i] != exp {
+						t.Errorf("errors[%d] = %q, want %q", i, errors[i], exp)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestDeviceStatusJSON(t *testing.T) {
 	data := `{
 		"id": "device123",
