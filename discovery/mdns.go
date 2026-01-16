@@ -157,116 +157,254 @@ func (m *MDNSDiscoverer) buildDNSQuery(name string, qtype uint16) []byte {
 	return msg
 }
 
-// parseResponse parses an mDNS response.
-//
-//nolint:gocyclo,cyclop // DNS response parsing requires checking multiple TXT record fields
+// DNS record types.
+const (
+	dnsTypeA   uint16 = 1
+	dnsTypePTR uint16 = 12
+	dnsTypeTXT uint16 = 16
+	dnsTypeSRV uint16 = 33
+)
+
+// parseResponse parses an mDNS response using proper DNS message format.
 func (m *MDNSDiscoverer) parseResponse(data []byte) *DiscoveredDevice {
 	if len(data) < 12 {
 		return nil
 	}
 
-	// Skip header
 	// Check if it's a response (bit 15 of flags)
 	if data[2]&0x80 == 0 {
 		return nil // Not a response
 	}
 
-	// Parse answers
-	// This is a simplified parser - a full implementation would
-	// need complete DNS message parsing
+	// Parse header
+	ancount := int(data[6])<<8 | int(data[7])
+	arcount := int(data[10])<<8 | int(data[11])
+
+	if ancount == 0 && arcount == 0 {
+		return nil
+	}
+
 	device := &DiscoveredDevice{
-		Protocol: ProtocolMDNS,
-		Port:     80,
-		LastSeen: time.Now(),
+		Protocol:   ProtocolMDNS,
+		Port:       80,
+		Generation: types.Gen2, // Default for mDNS (Gen2+)
+		LastSeen:   time.Now(),
 	}
 
-	// Look for TXT records containing device info
-	// Shelly devices include: id, gen, model, fw, auth, app
-	content := string(data)
+	// Skip header and questions, parse all resource records
+	offset := 12
 
-	// Extract device ID
-	if idx := strings.Index(content, "id="); idx != -1 {
-		end := strings.IndexAny(content[idx+3:], " \x00\n")
-		if end == -1 {
-			end = len(content) - idx - 3
+	// Skip questions section
+	qdcount := int(data[4])<<8 | int(data[5])
+	for i := 0; i < qdcount && offset < len(data); i++ {
+		offset = m.skipName(data, offset)
+		offset += 4 // QTYPE + QCLASS
+	}
+
+	// Parse answers and additional sections
+	totalRecords := ancount + int(data[8])<<8 | int(data[9]) + arcount
+	for i := 0; i < totalRecords && offset < len(data); i++ {
+		newOffset := m.parseResourceRecord(data, offset, device)
+		if newOffset <= offset {
+			break // No progress, avoid infinite loop
 		}
-		device.ID = content[idx+3 : idx+3+end]
+		offset = newOffset
 	}
 
-	// Extract model
-	if idx := strings.Index(content, "model="); idx != -1 {
-		end := strings.IndexAny(content[idx+6:], " \x00\n")
-		if end == -1 {
-			end = len(content) - idx - 6
-		}
-		device.Model = content[idx+6 : idx+6+end]
-	}
-
-	// Extract generation
-	if idx := strings.Index(content, "gen="); idx != -1 {
-		genStr := content[idx+4 : idx+5]
-		switch genStr {
-		case "1":
-			device.Generation = types.Gen1
-		case "2":
-			device.Generation = types.Gen2
-		case "3":
-			device.Generation = types.Gen3
-		default:
-			device.Generation = types.Gen2
-		}
-	}
-
-	// Extract firmware
-	if idx := strings.Index(content, "fw="); idx != -1 {
-		end := strings.IndexAny(content[idx+3:], " \x00\n")
-		if end == -1 {
-			end = len(content) - idx - 3
-		}
-		device.Firmware = content[idx+3 : idx+3+end]
-	}
-
-	// Extract auth
-	if idx := strings.Index(content, "auth="); idx != -1 {
-		device.AuthRequired = content[idx+5] == '1'
-	}
-
-	// Extract IP from source address in A record
-	// This simplified parser looks for IPv4 addresses in the data
-	device.Address = m.extractIP(data)
-
+	// Validate we have required fields
 	if device.ID == "" || device.Address == nil {
 		return nil
 	}
 
 	device.MACAddress = device.ID
-
 	return device
 }
 
-// extractIP extracts an IPv4 address from DNS data.
-func (m *MDNSDiscoverer) extractIP(data []byte) net.IP {
-	// Need at least 16 bytes (12 header + 4 for IP)
-	if len(data) < 16 {
-		return nil
+// parseResourceRecord parses a single DNS resource record and updates the device.
+// Returns the new offset after the record.
+func (m *MDNSDiscoverer) parseResourceRecord(data []byte, offset int, device *DiscoveredDevice) int {
+	name, newOffset := m.parseName(data, offset)
+	offset = newOffset
+
+	if offset+10 > len(data) {
+		return offset
 	}
 
-	// Look for A record data (4 consecutive bytes that look like an IP)
-	// Upper bound ensures i+3 is always valid (i < len(data)-3 means i+3 < len(data))
-	upperBound := len(data) - 3
-	for i := 12; i < upperBound; i++ {
-		// Check if this looks like a valid IP (not 0.0.0.0, not 255.255.255.255)
-		first, last := data[i], data[i+3]
-		if first > 0 && first < 255 && last > 0 && last < 255 {
-			//nolint:gosec // G602: bounds checked by upperBound = len(data)-3
-			ip := net.IPv4(data[i], data[i+1], data[i+2], data[i+3])
-			// Basic sanity check - should be a private IP
+	rtype := uint16(data[offset])<<8 | uint16(data[offset+1])
+	offset += 8 // TYPE + CLASS + TTL
+	rdlength := int(data[offset])<<8 | int(data[offset+1])
+	offset += 2
+
+	if offset+rdlength > len(data) {
+		return offset
+	}
+
+	rdata := data[offset : offset+rdlength]
+	m.processRecord(data, offset, rtype, rdata, name, device)
+
+	return offset + rdlength
+}
+
+// processRecord processes a parsed DNS record and updates the device accordingly.
+func (m *MDNSDiscoverer) processRecord(
+	data []byte, rdataOffset int, rtype uint16, rdata []byte, name string, device *DiscoveredDevice,
+) {
+	switch rtype {
+	case dnsTypePTR:
+		// PTR record contains instance name like "ShellyPlus1-A8032ABCA8D8._shelly._tcp.local."
+		instanceName, _ := m.parseName(data, rdataOffset)
+		if device.ID == "" {
+			device.ID = m.extractDeviceID(instanceName)
+		}
+
+	case dnsTypeTXT:
+		// TXT records contain key=value pairs with length prefixes
+		m.parseTXTRecord(rdata, device)
+
+	case dnsTypeA:
+		// A record contains IPv4 address (4 bytes)
+		if len(rdata) == 4 {
+			ip := net.IPv4(rdata[0], rdata[1], rdata[2], rdata[3])
 			if ip.IsPrivate() || ip.IsLoopback() {
-				return ip
+				device.Address = ip
+				// Extract device ID from A record name if not yet found
+				if device.ID == "" {
+					device.ID = m.extractDeviceID(name)
+				}
+			}
+		}
+
+	case dnsTypeSRV:
+		// SRV record contains port and target
+		if len(rdata) >= 6 {
+			device.Port = int(rdata[4])<<8 | int(rdata[5])
+		}
+	}
+}
+
+// extractDeviceID extracts the device ID from an mDNS instance name.
+// Example: "ShellyPlus1-A8032ABCA8D8._shelly._tcp.local." -> "ShellyPlus1-A8032ABCA8D8"
+func (m *MDNSDiscoverer) extractDeviceID(name string) string {
+	// Remove trailing dot
+	name = strings.TrimSuffix(name, ".")
+
+	// Find the service part and extract everything before it
+	if idx := strings.Index(name, "._shelly._tcp"); idx > 0 {
+		return name[:idx]
+	}
+	if idx := strings.Index(name, "._http._tcp"); idx > 0 {
+		return name[:idx]
+	}
+
+	// For A records, the name might be "ShellyPlus1-A8032ABCA8D8.local"
+	if idx := strings.Index(name, ".local"); idx > 0 {
+		return name[:idx]
+	}
+
+	return ""
+}
+
+// parseTXTRecord parses a DNS TXT record with length-prefixed strings.
+func (m *MDNSDiscoverer) parseTXTRecord(rdata []byte, device *DiscoveredDevice) {
+	offset := 0
+	for offset < len(rdata) {
+		length := int(rdata[offset])
+		offset++
+		if offset+length > len(rdata) {
+			break
+		}
+
+		kv := string(rdata[offset : offset+length])
+		offset += length
+
+		// Parse key=value
+		if eqIdx := strings.Index(kv, "="); eqIdx > 0 {
+			key := kv[:eqIdx]
+			value := kv[eqIdx+1:]
+
+			switch key {
+			case "gen":
+				switch value {
+				case "1":
+					device.Generation = types.Gen1
+				case "2":
+					device.Generation = types.Gen2
+				case "3":
+					device.Generation = types.Gen3
+				}
+			case "app", "model":
+				if device.Model == "" {
+					device.Model = value
+				}
+			case "ver", "fw":
+				if device.Firmware == "" {
+					device.Firmware = value
+				}
+			case "auth":
+				device.AuthRequired = value == "1"
 			}
 		}
 	}
-	return nil
+}
+
+// parseName parses a DNS name from the message, handling compression pointers.
+func (m *MDNSDiscoverer) parseName(data []byte, offset int) (name string, nextOffset int) {
+	var sb strings.Builder
+	jumped := false
+	originalOffset := offset
+
+	for offset < len(data) {
+		length := int(data[offset])
+
+		if length == 0 {
+			if !jumped {
+				originalOffset = offset + 1
+			}
+			break
+		}
+
+		// Check for compression pointer (top 2 bits set)
+		if length&0xC0 == 0xC0 {
+			if offset+1 >= len(data) {
+				break
+			}
+			pointer := (length&0x3F)<<8 | int(data[offset+1])
+			if !jumped {
+				originalOffset = offset + 2
+				jumped = true
+			}
+			offset = pointer
+			continue
+		}
+
+		offset++
+		if offset+length > len(data) {
+			break
+		}
+
+		if sb.Len() > 0 {
+			sb.WriteByte('.')
+		}
+		sb.Write(data[offset : offset+length])
+		offset += length
+	}
+
+	return sb.String(), originalOffset
+}
+
+// skipName skips over a DNS name in the message.
+func (m *MDNSDiscoverer) skipName(data []byte, offset int) int {
+	for offset < len(data) {
+		length := int(data[offset])
+		if length == 0 {
+			return offset + 1
+		}
+		if length&0xC0 == 0xC0 {
+			return offset + 2 // Compression pointer
+		}
+		offset += 1 + length
+	}
+	return offset
 }
 
 // StartDiscovery begins continuous discovery.

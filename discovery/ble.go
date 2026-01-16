@@ -108,6 +108,11 @@ func newTinyGoBLEScanner() (*tinyGoBLEScanner, error) {
 	}, nil
 }
 
+// scanStartTimeout is the maximum time to wait for the BLE scan to start.
+// This is separate from the discovery timeout - it detects if the scan itself
+// is failing to initialize (e.g., due to system issues).
+const scanStartTimeout = 5 * time.Second
+
 // Start begins BLE scanning. Found devices are sent to the callback.
 func (s *tinyGoBLEScanner) Start(ctx context.Context, callback func(*BLEAdvertisement)) error {
 	s.mu.Lock()
@@ -120,37 +125,91 @@ func (s *tinyGoBLEScanner) Start(ctx context.Context, callback func(*BLEAdvertis
 	s.running = true
 	s.mu.Unlock()
 
-	// Run scan in goroutine
+	// Channel to signal that scanning has actually started
+	scanStarted := make(chan struct{}, 1)
 	errCh := make(chan error, 1)
-	go func() {
-		err := s.adapter.Scan(func(adapter *bluetooth.Adapter, device bluetooth.ScanResult) {
-			s.mu.Lock()
-			cb := s.callback
-			s.mu.Unlock()
 
-			if cb == nil {
-				return
-			}
+	// Run scan in goroutine
+	go s.runScan(scanStarted, errCh)
 
-			// Convert to our advertisement format
-			adv := s.convertAdvertisement(device)
-			cb(adv)
-		})
-		errCh <- err
-	}()
+	// Wait for scan to start
+	if err := s.waitForScanStart(ctx, scanStarted, errCh); err != nil {
+		return err
+	}
 
-	// Wait for context cancellation or stop signal
+	// Scan started, now wait for completion
+	return s.waitForCompletion(ctx, errCh)
+}
+
+// runScan runs the BLE scan in a goroutine.
+func (s *tinyGoBLEScanner) runScan(scanStarted chan<- struct{}, errCh chan<- error) {
+	// Signal that we're about to call Scan
 	select {
+	case scanStarted <- struct{}{}:
+	default:
+	}
+
+	err := s.adapter.Scan(func(adapter *bluetooth.Adapter, device bluetooth.ScanResult) {
+		// Signal that scan is working (we got a callback)
+		select {
+		case scanStarted <- struct{}{}:
+		default:
+		}
+
+		s.mu.Lock()
+		cb := s.callback
+		s.mu.Unlock()
+
+		if cb == nil {
+			return
+		}
+
+		adv := s.convertAdvertisement(device)
+		cb(adv)
+	})
+	errCh <- err
+}
+
+// waitForScanStart waits for the scan to start or returns an error.
+func (s *tinyGoBLEScanner) waitForScanStart(
+	ctx context.Context, scanStarted <-chan struct{}, errCh <-chan error,
+) error {
+	startTimer := time.NewTimer(scanStartTimeout)
+	defer startTimer.Stop()
+
+	select {
+	case <-scanStarted:
+		return nil // Scan started successfully
+	case <-startTimer.C:
+		s.Stop() //nolint:errcheck // Best effort
+		return &BLEError{Message: "BLE scan failed to start - Bluetooth may be busy or unavailable"}
 	case <-ctx.Done():
 		s.Stop() //nolint:errcheck // Best effort
 		return ctx.Err()
+	case err := <-errCh:
+		s.mu.Lock()
+		s.running = false
+		s.mu.Unlock()
+		return err
+	}
+}
+
+// waitForCompletion waits for the scan to complete via context or stop signal.
+func (s *tinyGoBLEScanner) waitForCompletion(ctx context.Context, errCh <-chan error) error {
+	select {
+	case <-ctx.Done():
+		s.Stop() //nolint:errcheck // Best effort
+		return nil
 	case <-s.stopCh:
 		return nil
 	case err := <-errCh:
 		s.mu.Lock()
 		s.running = false
 		s.mu.Unlock()
-		return err
+		if err != nil {
+			return &BLEError{Message: "BLE scan stopped unexpectedly", Err: err}
+		}
+		return nil
 	}
 }
 

@@ -3,11 +3,95 @@ package discovery
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/tj-smith47/shelly-go/types"
 )
+
+// buildMDNSResponse constructs a proper mDNS response message for testing.
+// This creates a realistic DNS response with PTR, TXT, and A records.
+func buildMDNSResponse(instanceName string, txtRecords map[string]string, ip [4]byte) []byte {
+	msg := make([]byte, 0, 512)
+
+	// Header (12 bytes)
+	// ID=0, Flags=0x8400 (response, authoritative), QDCOUNT=0, ANCOUNT=1, NSCOUNT=0, ARCOUNT=2
+	msg = append(msg, 0, 0, 0x84, 0x00, 0, 0, 0, 1, 0, 0, 0, 2)
+
+	// Answer section: PTR record pointing to instance name
+	// Name: _shelly._tcp.local (encoded)
+	msg = append(msg, 7, '_', 's', 'h', 'e', 'l', 'l', 'y')
+	msg = append(msg, 4, '_', 't', 'c', 'p')
+	msg = append(msg, 5, 'l', 'o', 'c', 'a', 'l')
+	msg = append(msg, 0) // null terminator
+
+	// Type: PTR (12), Class: IN (1), TTL: 4500
+	msg = append(msg, 0, 12, 0, 1, 0, 0, 0x11, 0x94)
+
+	// RDLENGTH and RDATA (instance name)
+	instanceParts := strings.Split(instanceName, ".")
+	rdataStart := len(msg)
+	msg = append(msg, 0, 0) // placeholder for RDLENGTH
+
+	for _, part := range instanceParts {
+		if part == "" {
+			continue
+		}
+		msg = append(msg, byte(len(part)))
+		msg = append(msg, []byte(part)...)
+	}
+	msg = append(msg, 0) // null terminator
+
+	rdataLen := len(msg) - rdataStart - 2
+	msg[rdataStart] = byte(rdataLen >> 8)
+	msg[rdataStart+1] = byte(rdataLen & 0xFF)
+
+	// Additional section: TXT record
+	// Name: instance name (use compression pointer to save space, or encode again)
+	for _, part := range instanceParts {
+		if part == "" {
+			continue
+		}
+		msg = append(msg, byte(len(part)))
+		msg = append(msg, []byte(part)...)
+	}
+	msg = append(msg, 0)
+
+	// Type: TXT (16), Class: IN (1), TTL: 4500
+	msg = append(msg, 0, 16, 0, 1, 0, 0, 0x11, 0x94)
+
+	// Build TXT RDATA with length-prefixed strings
+	txtRdataStart := len(msg)
+	msg = append(msg, 0, 0) // placeholder for RDLENGTH
+
+	for key, value := range txtRecords {
+		kv := key + "=" + value
+		msg = append(msg, byte(len(kv)))
+		msg = append(msg, []byte(kv)...)
+	}
+
+	txtRdataLen := len(msg) - txtRdataStart - 2
+	msg[txtRdataStart] = byte(txtRdataLen >> 8)
+	msg[txtRdataStart+1] = byte(txtRdataLen & 0xFF)
+
+	// Additional section: A record
+	// Name: hostname.local
+	hostname := strings.Split(instanceName, ".")[0]
+	msg = append(msg, byte(len(hostname)))
+	msg = append(msg, []byte(hostname)...)
+	msg = append(msg, 5, 'l', 'o', 'c', 'a', 'l')
+	msg = append(msg, 0)
+
+	// Type: A (1), Class: IN (1), TTL: 120
+	msg = append(msg, 0, 1, 0, 1, 0, 0, 0, 120)
+
+	// RDLENGTH: 4, RDATA: IP address
+	msg = append(msg, 0, 4)
+	msg = append(msg, ip[0], ip[1], ip[2], ip[3])
+
+	return msg
+}
 
 func TestNewMDNSDiscoverer(t *testing.T) {
 	d := NewMDNSDiscoverer()
@@ -51,13 +135,6 @@ func TestMDNSDiscoverer_BuildDNSQuery(t *testing.T) {
 			t.Errorf("byte %d should be 0", i)
 		}
 	}
-
-	// Verify service name is encoded
-	// Should contain "_shelly", "_tcp", "local"
-	queryStr := string(query[12:])
-	if len(queryStr) == 0 {
-		t.Error("query should contain service name")
-	}
 }
 
 func TestMDNSDiscoverer_ParseResponse_NotResponse(t *testing.T) {
@@ -86,28 +163,25 @@ func TestMDNSDiscoverer_ParseResponse_TooShort(t *testing.T) {
 func TestMDNSDiscoverer_ParseResponse_ValidResponse(t *testing.T) {
 	d := NewMDNSDiscoverer()
 
-	// Construct a mock mDNS response with device info
-	data := make([]byte, 200)
-	// Header - response flag set
-	data[2] = 0x80
-
-	// Add TXT record content
-	txtContent := "id=shellyplus1-abc123\x00gen=2\x00model=SNSW-001P16EU\x00fw=1.0.0\x00auth=0"
-	copy(data[50:], txtContent)
-
-	// Add A record data (IP address 192.168.1.100)
-	data[150] = 192
-	data[151] = 168
-	data[152] = 1
-	data[153] = 100
+	txtRecords := map[string]string{
+		"gen":  "2",
+		"app":  "SNSW-001P16EU",
+		"ver":  "1.0.0",
+		"auth": "0",
+	}
+	data := buildMDNSResponse(
+		"ShellyPlus1-ABC123._shelly._tcp.local",
+		txtRecords,
+		[4]byte{192, 168, 1, 100},
+	)
 
 	device := d.parseResponse(data)
 	if device == nil {
 		t.Fatal("should parse valid response")
 	}
 
-	if device.ID != "shellyplus1-abc123" {
-		t.Errorf("ID = %v, want 'shellyplus1-abc123'", device.ID)
+	if device.ID != "ShellyPlus1-ABC123" {
+		t.Errorf("ID = %v, want 'ShellyPlus1-ABC123'", device.ID)
 	}
 
 	if device.Model != "SNSW-001P16EU" {
@@ -121,21 +195,25 @@ func TestMDNSDiscoverer_ParseResponse_ValidResponse(t *testing.T) {
 	if device.Protocol != ProtocolMDNS {
 		t.Errorf("Protocol = %v, want 'mdns'", device.Protocol)
 	}
+
+	if device.Address.String() != "192.168.1.100" {
+		t.Errorf("Address = %v, want '192.168.1.100'", device.Address)
+	}
 }
 
 func TestMDNSDiscoverer_ParseResponse_Gen3Device(t *testing.T) {
 	d := NewMDNSDiscoverer()
 
-	data := make([]byte, 200)
-	data[2] = 0x80
-
-	txtContent := "id=shelly1gen3-xyz789\x00gen=3\x00model=S3SW-001P16EU\x00auth=1"
-	copy(data[50:], txtContent)
-
-	data[150] = 10
-	data[151] = 0
-	data[152] = 0
-	data[153] = 50
+	txtRecords := map[string]string{
+		"gen":  "3",
+		"app":  "S3SW-001P16EU",
+		"auth": "1",
+	}
+	data := buildMDNSResponse(
+		"Shelly1Gen3-XYZ789._shelly._tcp.local",
+		txtRecords,
+		[4]byte{10, 0, 0, 50},
+	)
 
 	device := d.parseResponse(data)
 	if device == nil {
@@ -154,16 +232,14 @@ func TestMDNSDiscoverer_ParseResponse_Gen3Device(t *testing.T) {
 func TestMDNSDiscoverer_ParseResponse_Gen1Device(t *testing.T) {
 	d := NewMDNSDiscoverer()
 
-	data := make([]byte, 200)
-	data[2] = 0x80
-
-	txtContent := "id=shelly1-abc\x00gen=1\x00"
-	copy(data[50:], txtContent)
-
-	data[150] = 172
-	data[151] = 16
-	data[152] = 0
-	data[153] = 10
+	txtRecords := map[string]string{
+		"gen": "1",
+	}
+	data := buildMDNSResponse(
+		"Shelly1-ABC._shelly._tcp.local",
+		txtRecords,
+		[4]byte{172, 16, 0, 10},
+	)
 
 	device := d.parseResponse(data)
 	if device == nil {
@@ -175,121 +251,156 @@ func TestMDNSDiscoverer_ParseResponse_Gen1Device(t *testing.T) {
 	}
 }
 
-func TestMDNSDiscoverer_ParseResponse_NoID(t *testing.T) {
+func TestMDNSDiscoverer_ParseResponse_NoRecords(t *testing.T) {
 	d := NewMDNSDiscoverer()
 
-	data := make([]byte, 200)
-	data[2] = 0x80
-
-	// No ID field
-	txtContent := "gen=2\x00model=SNSW-001P16EU"
-	copy(data[50:], txtContent)
-
-	data[150] = 192
-	data[151] = 168
-	data[152] = 1
-	data[153] = 100
+	// Response with no answer or additional records
+	data := make([]byte, 12)
+	data[2] = 0x80 // Response flag
 
 	device := d.parseResponse(data)
 	if device != nil {
-		t.Error("should return nil when ID is missing")
+		t.Error("should return nil when no records present")
 	}
 }
 
-func TestMDNSDiscoverer_ExtractIP(t *testing.T) {
+func TestMDNSDiscoverer_ExtractDeviceID(t *testing.T) {
 	d := NewMDNSDiscoverer()
 
 	tests := []struct {
 		name     string
+		input    string
 		expected string
-		data     []byte
 	}{
 		{
-			name: "private IP 192.168.x.x",
-			data: func() []byte {
-				b := make([]byte, 50)
-				b[20] = 192
-				b[21] = 168
-				b[22] = 1
-				b[23] = 100
-				return b
-			}(),
-			expected: "192.168.1.100",
+			name:     "shelly service",
+			input:    "ShellyPlus1-ABC123._shelly._tcp.local.",
+			expected: "ShellyPlus1-ABC123",
 		},
 		{
-			name: "private IP 10.x.x.x",
-			data: func() []byte {
-				b := make([]byte, 50)
-				b[20] = 10
-				b[21] = 0
-				b[22] = 0
-				b[23] = 50
-				return b
-			}(),
-			expected: "10.0.0.50",
+			name:     "http service",
+			input:    "ShellyPlus1-ABC123._http._tcp.local.",
+			expected: "ShellyPlus1-ABC123",
 		},
 		{
-			name: "private IP 172.16.x.x",
-			data: func() []byte {
-				b := make([]byte, 50)
-				b[20] = 172
-				b[21] = 16
-				b[22] = 0
-				b[23] = 10
-				return b
-			}(),
-			expected: "172.16.0.10",
+			name:     "local hostname",
+			input:    "ShellyPlus1-ABC123.local.",
+			expected: "ShellyPlus1-ABC123",
 		},
 		{
-			name: "loopback",
-			data: func() []byte {
-				b := make([]byte, 50)
-				b[20] = 127
-				b[21] = 0
-				b[22] = 0
-				b[23] = 1
-				return b
-			}(),
-			expected: "127.0.0.1",
+			name:     "no trailing dot",
+			input:    "ShellyPlus1-ABC123._shelly._tcp.local",
+			expected: "ShellyPlus1-ABC123",
+		},
+		{
+			name:     "unknown format",
+			input:    "randomname",
+			expected: "",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ip := d.extractIP(tt.data)
-			if ip == nil {
-				t.Fatalf("extractIP() returned nil")
-			}
-			if ip.String() != tt.expected {
-				t.Errorf("extractIP() = %v, want %v", ip.String(), tt.expected)
+			result := d.extractDeviceID(tt.input)
+			if result != tt.expected {
+				t.Errorf("extractDeviceID(%q) = %q, want %q", tt.input, result, tt.expected)
 			}
 		})
 	}
 }
 
-func TestMDNSDiscoverer_ExtractIP_NoValidIP(t *testing.T) {
+func TestMDNSDiscoverer_ParseTXTRecord(t *testing.T) {
 	d := NewMDNSDiscoverer()
 
-	// Data with only public IPs (not private/loopback)
-	data := make([]byte, 50)
-	data[20] = 8
-	data[21] = 8
-	data[22] = 8
-	data[23] = 8
+	// Build proper TXT record RDATA with length-prefixed strings
+	// Each string is prefixed by its length in bytes
+	rdata := []byte{
+		5, 'g', 'e', 'n', '=', '2', // "gen=2" = 5 chars
+		11, 'a', 'p', 'p', '=', 'P', 'l', 'u', 's', '1', 'P', 'M', // "app=Plus1PM" = 11 chars
+		9, 'v', 'e', 'r', '=', '1', '.', '0', '.', '0', // "ver=1.0.0" = 9 chars
+		6, 'a', 'u', 't', 'h', '=', '1', // "auth=1" = 6 chars
+	}
 
-	ip := d.extractIP(data)
-	if ip != nil {
-		t.Error("should return nil for public IPs")
+	device := &DiscoveredDevice{}
+	d.parseTXTRecord(rdata, device)
+
+	if device.Generation != types.Gen2 {
+		t.Errorf("Generation = %v, want Gen2", device.Generation)
+	}
+
+	if device.Model != "Plus1PM" {
+		t.Errorf("Model = %v, want 'Plus1PM'", device.Model)
+	}
+
+	if device.Firmware != "1.0.0" {
+		t.Errorf("Firmware = %v, want '1.0.0'", device.Firmware)
+	}
+
+	if !device.AuthRequired {
+		t.Error("AuthRequired should be true")
 	}
 }
 
-func TestMDNSDiscoverer_ExtractIP_ShortData(t *testing.T) {
+func TestMDNSDiscoverer_ParseName(t *testing.T) {
 	d := NewMDNSDiscoverer()
 
-	data := make([]byte, 15)
-	ip := d.extractIP(data)
-	if ip != nil {
-		t.Error("should return nil for short data")
+	// Build DNS name: "shelly.local"
+	data := []byte{
+		6, 's', 'h', 'e', 'l', 'l', 'y',
+		5, 'l', 'o', 'c', 'a', 'l',
+		0,
+	}
+
+	name, offset := d.parseName(data, 0)
+	if name != "shelly.local" {
+		t.Errorf("parseName() = %q, want 'shelly.local'", name)
+	}
+	if offset != len(data) {
+		t.Errorf("offset = %d, want %d", offset, len(data))
+	}
+}
+
+func TestMDNSDiscoverer_ParseName_Compression(t *testing.T) {
+	d := NewMDNSDiscoverer()
+
+	// Build data with compression pointer
+	// "local" at offset 0, then compression pointer at offset 7
+	data := []byte{
+		5, 'l', 'o', 'c', 'a', 'l', 0, // offset 0-6
+		6, 's', 'h', 'e', 'l', 'l', 'y', // offset 7-13
+		0xC0, 0x00, // compression pointer to offset 0
+	}
+
+	// Parse starting at "shelly" (offset 7)
+	name, offset := d.parseName(data, 7)
+	if name != "shelly.local" {
+		t.Errorf("parseName() with compression = %q, want 'shelly.local'", name)
+	}
+	if offset != 16 { // Should be after the compression pointer
+		t.Errorf("offset = %d, want 16", offset)
+	}
+}
+
+func TestMDNSDiscoverer_SkipName(t *testing.T) {
+	d := NewMDNSDiscoverer()
+
+	// Regular name
+	data := []byte{
+		6, 's', 'h', 'e', 'l', 'l', 'y',
+		5, 'l', 'o', 'c', 'a', 'l',
+		0,
+	}
+
+	offset := d.skipName(data, 0)
+	if offset != len(data) {
+		t.Errorf("skipName() = %d, want %d", offset, len(data))
+	}
+
+	// Compression pointer
+	data2 := []byte{6, 's', 'h', 'e', 'l', 'l', 'y', 0xC0, 0x00}
+	offset = d.skipName(data2, 0)
+	if offset != 9 { // Stop after compression pointer
+		t.Errorf("skipName() with compression = %d, want 9", offset)
 	}
 }
 
@@ -412,16 +523,14 @@ func TestMDNSService_Constant(t *testing.T) {
 func TestMDNSDiscoverer_ParseResponse_FirmwareExtraction(t *testing.T) {
 	d := NewMDNSDiscoverer()
 
-	data := make([]byte, 200)
-	data[2] = 0x80
-
-	txtContent := "id=test\x00fw=1.2.3-beta\x00"
-	copy(data[50:], txtContent)
-
-	data[150] = 192
-	data[151] = 168
-	data[152] = 1
-	data[153] = 100
+	txtRecords := map[string]string{
+		"ver": "1.2.3-beta",
+	}
+	data := buildMDNSResponse(
+		"ShellyTest._shelly._tcp.local",
+		txtRecords,
+		[4]byte{192, 168, 1, 100},
+	)
 
 	device := d.parseResponse(data)
 	if device == nil {
@@ -436,24 +545,22 @@ func TestMDNSDiscoverer_ParseResponse_FirmwareExtraction(t *testing.T) {
 func TestMDNSDiscoverer_ParseResponse_DefaultGeneration(t *testing.T) {
 	d := NewMDNSDiscoverer()
 
-	data := make([]byte, 200)
-	data[2] = 0x80
-
-	// Unknown generation
-	txtContent := "id=test\x00gen=9\x00"
-	copy(data[50:], txtContent)
-
-	data[150] = 192
-	data[151] = 168
-	data[152] = 1
-	data[153] = 100
+	// No gen field - should default to Gen2
+	txtRecords := map[string]string{
+		"app": "Plus1PM",
+	}
+	data := buildMDNSResponse(
+		"ShellyTest._shelly._tcp.local",
+		txtRecords,
+		[4]byte{192, 168, 1, 100},
+	)
 
 	device := d.parseResponse(data)
 	if device == nil {
 		t.Fatal("should parse valid response")
 	}
 
-	// Should default to Gen2 for unknown generation
+	// Should default to Gen2 for mDNS devices
 	if device.Generation != types.Gen2 {
 		t.Errorf("Generation = %v, want Gen2 (default)", device.Generation)
 	}
