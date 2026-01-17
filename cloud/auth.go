@@ -1,7 +1,7 @@
 package cloud
 
 import (
-	"bytes"
+	"context"
 	"crypto/sha1" //nolint:gosec // G505: SHA1 is required by Shelly Cloud API protocol
 	"encoding/base64"
 	"encoding/hex"
@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -303,27 +304,21 @@ func (ts *credentialTokenSource) Token() (*Token, error) {
 
 // refresh obtains a new token using credentials.
 func (ts *credentialTokenSource) refresh() (*Token, error) {
-	reqBody := LoginRequest{
-		Email:    ts.email,
-		Password: ts.passwordSHA1,
-		ClientID: ts.clientID,
-	}
-
-	body, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encode request: %w", err)
-	}
-
 	tokenURL := ts.tokenURL
 	if tokenURL == "" {
-		tokenURL = OAuthTokenURL
+		tokenURL = AuthLoginURL
 	}
 
-	req, err := http.NewRequest(http.MethodPost, tokenURL, bytes.NewReader(body))
+	// Build form-encoded request body
+	formData := url.Values{}
+	formData.Set("email", ts.email)
+	formData.Set("password", ts.passwordSHA1)
+
+	req, err := http.NewRequest(http.MethodPost, tokenURL, strings.NewReader(formData.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := ts.httpClient.Do(req)
 	if err != nil {
@@ -362,4 +357,185 @@ func (ts *credentialTokenSource) refresh() (*Token, error) {
 	}
 
 	return token, nil
+}
+
+// OAuthCodeResponse is the response from the OAuth code exchange.
+type OAuthCodeResponse struct {
+	AccessToken string `json:"access_token"`
+	TokenType   string `json:"token_type"`
+	Error       string `json:"error,omitempty"`
+}
+
+// ExchangeCode exchanges an OAuth authorization code for an access token.
+// The serverURL should be the user's API server (e.g., shelly-59-eu.shelly.cloud).
+// The code is obtained from the OAuth callback after user authorization.
+func ExchangeCode(ctx context.Context, serverURL, code, clientID string) (*Token, error) {
+	if clientID == "" {
+		clientID = ClientIDDIY
+	}
+
+	// Build form-encoded request
+	formData := url.Values{}
+	formData.Set("client_id", clientID)
+	formData.Set("grant_type", "code")
+	formData.Set("code", code)
+
+	// Normalize server URL
+	if !strings.HasPrefix(serverURL, "http") {
+		serverURL = "https://" + serverURL
+	}
+	serverURL = strings.TrimSuffix(serverURL, "/")
+
+	tokenURL := serverURL + "/oauth/auth"
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, strings.NewReader(formData.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	var codeResp OAuthCodeResponse
+	if unmarshalErr := json.Unmarshal(respBody, &codeResp); unmarshalErr != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", unmarshalErr)
+	}
+
+	if codeResp.Error != "" {
+		return nil, fmt.Errorf("oauth error: %s", codeResp.Error)
+	}
+
+	if codeResp.AccessToken == "" {
+		return nil, errors.New("no access token in response")
+	}
+
+	return ParseToken(codeResp.AccessToken)
+}
+
+// BrowserLoginResult contains the result of a browser-based OAuth login.
+type BrowserLoginResult struct {
+	Token        *Token
+	AuthorizeURL string // URL the user should open in browser
+}
+
+// BrowserLoginOptions configures the browser login flow.
+type BrowserLoginOptions struct {
+	ClientID     string        // OAuth client ID (default: shelly-diy)
+	CallbackPort int           // Port for local callback server (default: auto-select)
+	Timeout      time.Duration // Timeout waiting for callback (default: 5 minutes)
+}
+
+// BrowserLogin initiates an OAuth browser login flow.
+// It starts a local HTTP server to receive the callback, and returns the URL
+// that the user should open in their browser. Once the user completes login,
+// the callback is received and the code is exchanged for a token.
+//
+// The caller is responsible for opening the returned AuthorizeURL in the user's browser.
+// This function blocks until the callback is received or the context is canceled.
+func BrowserLogin(ctx context.Context, opts *BrowserLoginOptions) (*BrowserLoginResult, error) {
+	if opts == nil {
+		opts = &BrowserLoginOptions{}
+	}
+	if opts.ClientID == "" {
+		opts.ClientID = ClientIDDIY
+	}
+	if opts.Timeout == 0 {
+		opts.Timeout = 5 * time.Minute
+	}
+
+	// Start local server to receive callback
+	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", opts.CallbackPort))
+	if err != nil {
+		return nil, fmt.Errorf("failed to start callback server: %w", err)
+	}
+	defer listener.Close() //nolint:errcheck // Best effort close
+
+	tcpAddr := listener.Addr().(*net.TCPAddr) //nolint:errcheck // Type assertion safe for TCP listener
+	port := tcpAddr.Port
+	redirectURI := fmt.Sprintf("http://127.0.0.1:%d/callback", port)
+	authorizeURL := AuthorizeURL(opts.ClientID, redirectURI)
+
+	// Channel to receive the authorization code
+	codeCh := make(chan string, 1)
+	errCh := make(chan error, 1)
+
+	// Create HTTP server for callback
+	mux := http.NewServeMux()
+	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
+		code := r.URL.Query().Get("code")
+		if code == "" {
+			errMsg := r.URL.Query().Get("error")
+			if errMsg == "" {
+				errMsg = "no authorization code received"
+			}
+			http.Error(w, errMsg, http.StatusBadRequest)
+			errCh <- fmt.Errorf("oauth callback error: %s", errMsg)
+			return
+		}
+
+		// Success page
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<!DOCTYPE html><html><body>
+			<h1>Login Successful!</h1>
+			<p>You can close this window and return to the CLI.</p>
+			<script>window.close();</script>
+		</body></html>`)
+
+		codeCh <- code
+	})
+
+	server := &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+
+	// Start server in goroutine
+	go func() {
+		if serveErr := server.Serve(listener); serveErr != nil && serveErr != http.ErrServerClosed {
+			errCh <- serveErr
+		}
+	}()
+
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(ctx, opts.Timeout)
+	defer cancel()
+
+	// Return the result with the authorize URL
+	// The caller should open this URL in the browser
+	result := &BrowserLoginResult{
+		AuthorizeURL: authorizeURL,
+	}
+
+	// Wait for callback or timeout
+	select {
+	case code := <-codeCh:
+		server.Shutdown(context.Background()) //nolint:errcheck // Best effort shutdown
+
+		// Exchange code for token - we need to determine the server URL
+		// For now, try the main API server first, then extract from token
+		token, exchangeErr := ExchangeCode(ctx, "api.shelly.cloud", code, opts.ClientID)
+		if exchangeErr != nil {
+			return nil, fmt.Errorf("failed to exchange code: %w", exchangeErr)
+		}
+		result.Token = token
+		return result, nil
+
+	case err := <-errCh:
+		server.Shutdown(context.Background()) //nolint:errcheck // Best effort shutdown
+		return nil, err
+
+	case <-ctx.Done():
+		server.Shutdown(context.Background()) //nolint:errcheck // Best effort shutdown
+		return nil, ctx.Err()
+	}
 }

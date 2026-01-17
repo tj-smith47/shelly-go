@@ -78,12 +78,18 @@ const (
 
 // OAuth endpoints and URLs.
 const (
-	// OAuthAuthorizeURL is the OAuth authorization endpoint.
+	// OAuthAuthorizeURL is the OAuth authorization endpoint for browser-based login.
 	OAuthAuthorizeURL = "https://my.shelly.cloud/oauth_login.html"
 
-	// OAuthTokenURL is the OAuth token exchange endpoint.
+	// AuthLoginURL is the email/password authentication endpoint.
+	// Requires form-encoded POST with email and SHA1-hashed password.
 	//nolint:gosec // G101: False positive - this is a public API URL, not a credential
-	OAuthTokenURL = "https://api.shelly.cloud/oauth/login"
+	AuthLoginURL = "https://api.shelly.cloud/auth/login"
+
+	// OAuthTokenURL is the OAuth token exchange endpoint (for browser flow code exchange).
+	// Note: This is NOT for email/password login - use AuthLoginURL for that.
+	//nolint:gosec // G101: False positive - this is a public API URL, not a credential
+	OAuthTokenURL = "https://api.shelly.cloud/oauth/auth"
 
 	// DefaultWSPort is the default WebSocket port for real-time events.
 	DefaultWSPort = 6113

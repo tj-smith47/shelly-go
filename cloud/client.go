@@ -33,10 +33,15 @@ var (
 )
 
 // Client is a client for the Shelly Cloud Control API.
+// Supports two authentication methods:
+//   - Auth Key: Obtained from Shelly App (User Settings → Authorization cloud key).
+//     Used as query parameter ?auth_key=<KEY>
+//   - Access Token: Obtained via OAuth browser flow. Used as Bearer token header.
 type Client struct {
 	httpClient  *http.Client
 	rateLimiter *rateLimiter
 	accessToken string
+	authKey     string // Auth key from Shelly App (alternative to accessToken)
 	baseURL     string
 	clientID    string
 	mu          sync.RWMutex
@@ -78,6 +83,16 @@ func WithClientID(clientID string) ClientOption {
 	}
 }
 
+// WithAuthKey sets the authorization key from the Shelly App.
+// The auth key can be found in User Settings → Authorization cloud key.
+// When using auth key, you must also set the base URL with WithBaseURL.
+// The server URL is shown alongside the auth key in the app.
+func WithAuthKey(authKey string) ClientOption {
+	return func(c *Client) {
+		c.authKey = authKey
+	}
+}
+
 // WithRateLimit sets the rate limit (requests per second).
 // The default is 1 request per second.
 func WithRateLimit(requestsPerSecond float64) ClientOption {
@@ -115,31 +130,25 @@ func NewClientWithCredentials(ctx context.Context, email, passwordSHA1 string, o
 	return c, nil
 }
 
-// Login authenticates with the Shelly Cloud API and returns a token.
+// Login authenticates with the Shelly Cloud API using email and password.
+// The password must be the SHA1 hash of the user's password (use HashPassword).
 func (c *Client) Login(ctx context.Context, email, passwordSHA1 string) (*Token, error) {
 	// Wait for rate limiter
 	if err := c.rateLimiter.wait(ctx); err != nil {
 		return nil, err
 	}
 
-	// Build request body
-	reqBody := LoginRequest{
-		Email:    email,
-		Password: passwordSHA1,
-		ClientID: c.clientID,
-	}
+	// Build form-encoded request body
+	formData := url.Values{}
+	formData.Set("email", email)
+	formData.Set("password", passwordSHA1)
 
-	body, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encode request: %w", err)
-	}
-
-	// Create request
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, OAuthTokenURL, bytes.NewReader(body))
+	// Create request with form-encoded body
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, AuthLoginURL, strings.NewReader(formData.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	// Execute request
 	resp, err := c.httpClient.Do(req)
@@ -211,20 +220,41 @@ func (c *Client) GetBaseURL() string {
 	return c.baseURL
 }
 
+// SetAuthKey sets the authorization key for API calls.
+// When using auth key, you must also set the base URL.
+func (c *Client) SetAuthKey(authKey, serverURL string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.authKey = authKey
+	c.baseURL = normalizeBaseURL(serverURL)
+}
+
+// GetAuthKey returns the current authorization key.
+func (c *Client) GetAuthKey() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.authKey
+}
+
 // doRequest performs an HTTP request with authentication and rate limiting.
+// Supports both auth key (query param) and access token (Bearer header) authentication.
+//
+//nolint:gocyclo,cyclop // Complexity is inherent to handling multiple auth methods and error cases
 func (c *Client) doRequest(ctx context.Context, method, endpoint string, body any) ([]byte, error) {
 	// Wait for rate limiter
 	if err := c.rateLimiter.wait(ctx); err != nil {
 		return nil, err
 	}
 
-	// Get token and base URL
+	// Get credentials and base URL
 	c.mu.RLock()
 	token := c.accessToken
+	authKey := c.authKey
 	baseURL := c.baseURL
 	c.mu.RUnlock()
 
-	if token == "" {
+	// Must have either token or auth key
+	if token == "" && authKey == "" {
 		return nil, ErrUnauthorized
 	}
 
@@ -232,8 +262,15 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint string, body an
 		return nil, ErrNoUserAPIURL
 	}
 
-	// Build URL
+	// Build URL - append auth_key if using auth key authentication
 	reqURL := baseURL + endpoint
+	if authKey != "" {
+		if strings.Contains(reqURL, "?") {
+			reqURL += "&auth_key=" + url.QueryEscape(authKey)
+		} else {
+			reqURL += "?auth_key=" + url.QueryEscape(authKey)
+		}
+	}
 
 	// Build request body
 	var bodyReader io.Reader
@@ -251,8 +288,10 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint string, body an
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Set headers
-	req.Header.Set("Authorization", "Bearer "+token)
+	// Set headers - only use Bearer token if not using auth key
+	if authKey == "" && token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	req.Header.Set("Content-Type", "application/json")
 
 	// Execute request

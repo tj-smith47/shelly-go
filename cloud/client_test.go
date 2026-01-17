@@ -1217,3 +1217,274 @@ func TestNewClientWithCredentials_LoginError(t *testing.T) {
 		t.Error("Expected error for failed login")
 	}
 }
+
+// Tests for Auth Key authentication support
+
+func TestWithAuthKey(t *testing.T) {
+	authKey := "MTZkZGM3dWlkQTIzNDU2Nzg5"
+	client := NewClient(WithAuthKey(authKey))
+
+	if client.authKey != authKey {
+		t.Errorf("authKey = %v, want %v", client.authKey, authKey)
+	}
+}
+
+func TestSetAuthKey(t *testing.T) {
+	client := NewClient()
+	client.SetAuthKey("test-auth-key", "https://shelly-59-eu.shelly.cloud")
+
+	if client.GetAuthKey() != "test-auth-key" {
+		t.Errorf("GetAuthKey() = %v, want test-auth-key", client.GetAuthKey())
+	}
+	if client.GetBaseURL() != "https://shelly-59-eu.shelly.cloud" {
+		t.Errorf("GetBaseURL() = %v, want https://shelly-59-eu.shelly.cloud", client.GetBaseURL())
+	}
+}
+
+func TestSetAuthKeyNormalizesURL(t *testing.T) {
+	tests := []struct {
+		name      string
+		serverURL string
+		want      string
+	}{
+		{
+			name:      "without protocol",
+			serverURL: "shelly-59-eu.shelly.cloud",
+			want:      "https://shelly-59-eu.shelly.cloud",
+		},
+		{
+			name:      "with trailing slash",
+			serverURL: "https://shelly-59-eu.shelly.cloud/",
+			want:      "https://shelly-59-eu.shelly.cloud",
+		},
+		{
+			name:      "with https",
+			serverURL: "https://shelly-59-eu.shelly.cloud",
+			want:      "https://shelly-59-eu.shelly.cloud",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := NewClient()
+			client.SetAuthKey("key", tt.serverURL)
+			if client.GetBaseURL() != tt.want {
+				t.Errorf("GetBaseURL() = %v, want %v", client.GetBaseURL(), tt.want)
+			}
+		})
+	}
+}
+
+func TestDoRequestWithAuthKey(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify auth_key in query params
+		authKey := r.URL.Query().Get("auth_key")
+		if authKey != "test-auth-key-123" {
+			t.Errorf("auth_key = %v, want test-auth-key-123", authKey)
+		}
+
+		// Verify NO Authorization header when using auth key
+		auth := r.Header.Get("Authorization")
+		if auth != "" {
+			t.Errorf("Authorization header should be empty when using auth key, got %v", auth)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := w.Write([]byte(`{"success": true}`)); err != nil {
+			t.Fatalf("write failed: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(
+		WithAuthKey("test-auth-key-123"),
+		WithBaseURL(server.URL),
+	)
+	client.httpClient = server.Client()
+
+	ctx := context.Background()
+	resp, err := client.doRequest(ctx, http.MethodGet, "/device/all", nil)
+	if err != nil {
+		t.Fatalf("doRequest failed: %v", err)
+	}
+
+	if string(resp) != `{"success": true}` {
+		t.Errorf("Response = %v, want {\"success\": true}", string(resp))
+	}
+}
+
+func TestDoRequestAuthKeyWithExistingQueryParams(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify auth_key is appended correctly with existing query params
+		authKey := r.URL.Query().Get("auth_key")
+		if authKey != "my-key" {
+			t.Errorf("auth_key = %v, want my-key", authKey)
+		}
+
+		// Verify other query params are preserved
+		otherParam := r.URL.Query().Get("other")
+		if otherParam != "value" {
+			t.Errorf("other = %v, want value", otherParam)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := w.Write([]byte(`{"ok": true}`)); err != nil {
+			t.Fatalf("write failed: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(
+		WithAuthKey("my-key"),
+		WithBaseURL(server.URL),
+	)
+	client.httpClient = server.Client()
+
+	ctx := context.Background()
+	// Endpoint already has query params
+	resp, err := client.doRequest(ctx, http.MethodGet, "/endpoint?other=value", nil)
+	if err != nil {
+		t.Fatalf("doRequest failed: %v", err)
+	}
+
+	if string(resp) != `{"ok": true}` {
+		t.Errorf("Response = %v", string(resp))
+	}
+}
+
+func TestDoRequestPrefersAuthKeyOverToken(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// When auth key is set, it should be used instead of Bearer token
+		authKey := r.URL.Query().Get("auth_key")
+		if authKey != "auth-key-value" {
+			t.Errorf("auth_key = %v, want auth-key-value", authKey)
+		}
+
+		// No Authorization header when using auth key
+		auth := r.Header.Get("Authorization")
+		if auth != "" {
+			t.Errorf("Authorization header should be empty, got %v", auth)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if _, err := w.Write([]byte(`{}`)); err != nil {
+			t.Fatalf("write failed: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(
+		WithAccessToken("bearer-token"),
+		WithAuthKey("auth-key-value"),
+		WithBaseURL(server.URL),
+	)
+	client.httpClient = server.Client()
+
+	ctx := context.Background()
+	_, err := client.doRequest(ctx, http.MethodGet, "/test", nil)
+	if err != nil {
+		t.Fatalf("doRequest failed: %v", err)
+	}
+}
+
+func TestDoRequestRequiresAuthKeyOrToken(t *testing.T) {
+	client := NewClient(WithBaseURL("https://example.com"))
+	// No auth key or token set
+
+	ctx := context.Background()
+	_, err := client.doRequest(ctx, http.MethodGet, "/test", nil)
+	if err != ErrUnauthorized {
+		t.Errorf("Expected ErrUnauthorized, got %v", err)
+	}
+}
+
+func TestDoRequestWithAuthKeyRequiresBaseURL(t *testing.T) {
+	client := NewClient(WithAuthKey("test-key"))
+	// No base URL set
+
+	ctx := context.Background()
+	_, err := client.doRequest(ctx, http.MethodGet, "/test", nil)
+	if err != ErrNoUserAPIURL {
+		t.Errorf("Expected ErrNoUserAPIURL, got %v", err)
+	}
+}
+
+func TestAuthKeyConcurrentAccess(t *testing.T) {
+	client := NewClient()
+
+	done := make(chan bool)
+
+	go func() {
+		for i := 0; i < 100; i++ {
+			client.SetAuthKey("key-1", "https://server1.com")
+		}
+		done <- true
+	}()
+
+	go func() {
+		for i := 0; i < 100; i++ {
+			client.SetAuthKey("key-2", "https://server2.com")
+		}
+		done <- true
+	}()
+
+	go func() {
+		for i := 0; i < 100; i++ {
+			_ = client.GetAuthKey()
+			_ = client.GetBaseURL()
+		}
+		done <- true
+	}()
+
+	<-done
+	<-done
+	<-done
+}
+
+func TestLoginUsesFormEncoding(t *testing.T) {
+	// Create a custom round tripper that captures the request
+	var capturedReq *http.Request
+	var capturedBody []byte
+
+	client := NewClient()
+	client.httpClient = &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			capturedReq = req
+			var err error
+			capturedBody, err = io.ReadAll(req.Body)
+			if err != nil {
+				return nil, err
+			}
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(`{"isok":true,"data":{"token":"eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2FwaV91cmwiOiJodHRwczovL3NoZWxseS00OS1ldS5zaGVsbHkuY2xvdWQiLCJleHAiOjIwMDAwMDAwMDB9.sig","user_api_url":""}}`)),
+				Header:     make(http.Header),
+			}, nil
+		}),
+	}
+
+	ctx := context.Background()
+	_, _ = client.Login(ctx, "test@example.com", "hashedpw")
+
+	// Verify form-encoded content type
+	if capturedReq.Header.Get("Content-Type") != "application/x-www-form-urlencoded" {
+		t.Errorf("Content-Type = %v, want application/x-www-form-urlencoded", capturedReq.Header.Get("Content-Type"))
+	}
+
+	// Verify body contains form data
+	bodyStr := string(capturedBody)
+	if !contains(bodyStr, "email=test%40example.com") {
+		t.Errorf("Body should contain email, got: %v", bodyStr)
+	}
+	if !contains(bodyStr, "password=hashedpw") {
+		t.Errorf("Body should contain password, got: %v", bodyStr)
+	}
+}
+
+// roundTripFunc is a helper to create custom RoundTrippers.
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
