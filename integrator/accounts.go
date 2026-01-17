@@ -248,7 +248,13 @@ func (am *AccountManager) ListDevices() []AccountDevice {
 	am.mu.RLock()
 	defer am.mu.RUnlock()
 
-	var devices []AccountDevice
+	// Calculate total device count for preallocation
+	totalDevices := 0
+	for _, account := range am.accounts {
+		totalDevices += len(account.Devices)
+	}
+
+	devices := make([]AccountDevice, 0, totalDevices)
 	for _, account := range am.accounts {
 		devices = append(devices, account.Devices...)
 	}

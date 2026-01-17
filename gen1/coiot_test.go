@@ -314,9 +314,10 @@ func TestParseCoAPMessage_NoPayload(t *testing.T) {
 	optVal := options[optionGlobalDevID]
 
 	// Extended delta for 3332: delta nibble = 14, delta-269 = 3063
-	optBytes := []byte{0xE0 | byte(len(optVal))} // delta=14, length as nibble (12 bytes fits)
 	deltaExt := make([]byte, 2)
 	binary.BigEndian.PutUint16(deltaExt, uint16(optionGlobalDevID-269))
+	optBytes := make([]byte, 0, 1+len(deltaExt)+len(optVal))
+	optBytes = append(optBytes, 0xE0|byte(len(optVal))) // delta=14, length as nibble (12 bytes fits)
 	optBytes = append(optBytes, deltaExt...)
 	optBytes = append(optBytes, optVal...)
 
@@ -345,7 +346,8 @@ func TestParseCoAPMessage_ExtendedDelta13(t *testing.T) {
 	// Actually let's use extended delta properly: delta nibble = 13, extended = 0 means delta = 13
 	// So from option 1, delta 13 gets us to option 14 (Size1)
 	// Let's test that extended delta=13 encoding parses correctly
-	opt2 := []byte{0xD3, 0x00} // delta nibble=13, extended=0 (delta=13), length=3
+	opt2 := make([]byte, 0, 5)      // 2 bytes header + 3 bytes "cit"
+	opt2 = append(opt2, 0xD3, 0x00) // delta nibble=13, extended=0 (delta=13), length=3
 	opt2 = append(opt2, []byte("cit")...)
 
 	// Option 1 + delta 13 = option 14 (Size1), not URI-Path
@@ -379,7 +381,8 @@ func TestParseCoAPMessage_ExtendedLength13(t *testing.T) {
 		longValue[i] = 'a'
 	}
 
-	optBytes := []byte{0xBD, 0x07} // delta=11, length=13+7=20
+	optBytes := make([]byte, 0, 2+len(longValue))
+	optBytes = append(optBytes, 0xBD, 0x07) // delta=11, length=13+7=20
 	optBytes = append(optBytes, longValue...)
 
 	msg := append(header, optBytes...)
@@ -496,11 +499,13 @@ func TestParseCoAPMessage_MultipleURIPath(t *testing.T) {
 	header := []byte{0x50, byte(codeStatus), 0x00, 0x01}
 
 	// First URI-Path option (11): "cit"
-	opt1 := []byte{0xB3} // delta=11, length=3
+	opt1 := make([]byte, 0, 4) // 1 byte header + 3 bytes "cit"
+	opt1 = append(opt1, 0xB3)  // delta=11, length=3
 	opt1 = append(opt1, []byte("cit")...)
 
 	// Second URI-Path option (delta=0): "s"
-	opt2 := []byte{0x01} // delta=0, length=1
+	opt2 := make([]byte, 0, 2) // 1 byte header + 1 byte 's'
+	opt2 = append(opt2, 0x01)  // delta=0, length=1
 	opt2 = append(opt2, 's')
 
 	msg := append(header, opt1...)
