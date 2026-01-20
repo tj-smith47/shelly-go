@@ -77,11 +77,17 @@ type KVSGetManyResponse struct {
 	Items []KVSItem `json:"items"`
 }
 
+// KVSKeyInfo represents metadata for a key in the KVS list response.
+type KVSKeyInfo struct {
+	Etag string `json:"etag"`
+}
+
 // KVSListResponse represents the response from KVS.List.
+// The keys field is a map where keys are the stored key names and values contain etag info.
 type KVSListResponse struct {
 	types.RawFields
-	Keys []string `json:"keys"`
-	Rev  int      `json:"rev"`
+	Keys map[string]KVSKeyInfo `json:"keys"`
+	Rev  int                   `json:"rev"`
 }
 
 // KVSSetResponse represents the response from KVS.Set.
