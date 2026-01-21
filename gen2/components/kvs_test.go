@@ -371,19 +371,19 @@ func TestKVS_List(t *testing.T) {
 	}{
 		{
 			name:      "multiple keys",
-			result:    `{"keys": ["key1", "key2", "key3"], "rev": 5}`,
+			result:    `{"keys": {"key1": {"etag": "abc"}, "key2": {"etag": "def"}, "key3": {"etag": "ghi"}}, "rev": 5}`,
 			wantCount: 3,
 			wantRev:   5,
 		},
 		{
 			name:      "no keys",
-			result:    `{"keys": [], "rev": 0}`,
+			result:    `{"keys": {}, "rev": 0}`,
 			wantCount: 0,
 			wantRev:   0,
 		},
 		{
 			name:      "single key",
-			result:    `{"keys": ["only_key"], "rev": 1}`,
+			result:    `{"keys": {"only_key": {"etag": "xyz"}}, "rev": 1}`,
 			wantCount: 1,
 			wantRev:   1,
 		},
