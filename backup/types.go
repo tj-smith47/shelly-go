@@ -100,9 +100,11 @@ type ExportOptions struct {
 }
 
 // DefaultExportOptions returns the default export options.
+// All options default to true — a backup should capture everything.
+// Security decisions (what to restore) belong at restore time.
 func DefaultExportOptions() *ExportOptions {
 	return &ExportOptions{
-		IncludeWiFi:       false, // Security: don't export WiFi by default
+		IncludeWiFi:       true,
 		IncludeCloud:      true,
 		IncludeAuth:       true,
 		IncludeBLE:        true,

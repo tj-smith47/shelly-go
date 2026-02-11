@@ -559,8 +559,8 @@ func TestManager_ParseBackup_Invalid(t *testing.T) {
 func TestDefaultExportOptions(t *testing.T) {
 	opts := DefaultExportOptions()
 
-	if opts.IncludeWiFi {
-		t.Error("IncludeWiFi should be false by default")
+	if !opts.IncludeWiFi {
+		t.Error("IncludeWiFi should be true by default")
 	}
 	if !opts.IncludeCloud {
 		t.Error("IncludeCloud should be true by default")
