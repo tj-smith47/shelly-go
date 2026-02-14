@@ -6,34 +6,31 @@ import (
 	"bytes"
 	"context"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 )
 
 // platformWiFiScanner implements WiFiScanner for macOS using networksetup and airport.
 type platformWiFiScanner struct {
-	*wifiscanScanner
 	iface string
 }
 
 // newPlatformWiFiScanner creates a platform-specific WiFi scanner for macOS.
 func newPlatformWiFiScanner() WiFiScanner {
 	return &platformWiFiScanner{
-		wifiscanScanner: &wifiscanScanner{},
-		iface:           detectWiFiInterface(),
+		iface: detectWiFiInterface(),
 	}
 }
 
 // detectWiFiInterface finds the primary WiFi interface on macOS.
 func detectWiFiInterface() string {
-	// Use networksetup to find WiFi interface
 	cmd := exec.Command("networksetup", "-listallhardwareports")
 	output, err := cmd.Output()
 	if err != nil {
-		return "en0" // Default fallback
+		return "en0"
 	}
 
-	// Parse output looking for Wi-Fi device
 	lines := strings.Split(string(output), "\n")
 	foundWiFi := false
 	for _, line := range lines {
@@ -46,7 +43,7 @@ func detectWiFiInterface() string {
 		}
 	}
 
-	return "en0" // Default for most Macs
+	return "en0"
 }
 
 // airportPath returns the path to the airport command-line tool.
@@ -54,13 +51,110 @@ func airportPath() string {
 	return "/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport"
 }
 
+// ─── Scan ────────────────────────────────────────────────────────────────────
+
+// Scan scans for available WiFi networks using the macOS airport tool.
+func (s *platformWiFiScanner) Scan(ctx context.Context) ([]WiFiNetwork, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
+	airport := airportPath()
+	cmd := exec.CommandContext(ctx, airport, "-s")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, &WiFiError{Message: "airport scan failed", Err: err}
+	}
+
+	return parseAirportScanOutput(string(output)), nil
+}
+
+// parseAirportScanOutput parses the output of airport -s.
+// Format (fixed-width columns):
+//
+//	SSID                 BSSID             RSSI CHANNEL HT CC SECURITY
+//	HomeNetwork          aa:bb:cc:dd:ee:ff -50  6       Y  -- WPA2(PSK/AES/AES)
+func parseAirportScanOutput(output string) []WiFiNetwork {
+	lines := strings.Split(output, "\n")
+	if len(lines) < 2 {
+		return nil
+	}
+
+	// Find column positions from the header line.
+	header := lines[0]
+	bssidCol := strings.Index(header, "BSSID")
+	rssiCol := strings.Index(header, "RSSI")
+	chanCol := strings.Index(header, "CHANNEL")
+	secCol := strings.Index(header, "SECURITY")
+
+	if bssidCol < 0 || rssiCol < 0 {
+		return nil
+	}
+
+	var networks []WiFiNetwork
+	for _, line := range lines[1:] {
+		if len(line) <= bssidCol {
+			continue
+		}
+
+		ssid := strings.TrimSpace(line[:bssidCol])
+		if ssid == "" {
+			continue
+		}
+
+		network := WiFiNetwork{
+			SSID:     ssid,
+			LastSeen: time.Now(),
+		}
+
+		if len(line) > rssiCol {
+			network.BSSID = strings.TrimSpace(line[bssidCol:rssiCol])
+		}
+
+		if rssiCol > 0 && len(line) > rssiCol {
+			end := chanCol
+			if end <= rssiCol || end > len(line) {
+				end = len(line)
+			}
+			rssiStr := strings.TrimSpace(line[rssiCol:end])
+			if rssi, err := strconv.Atoi(rssiStr); err == nil {
+				network.Signal = rssi
+			}
+		}
+
+		if chanCol > 0 && len(line) > chanCol {
+			end := secCol
+			if end <= chanCol || end > len(line) {
+				end = len(line)
+			}
+			chanStr := strings.TrimSpace(line[chanCol:end])
+			// Channel might be "6" or "6,+1" or "36,-1".
+			if idx := strings.IndexAny(chanStr, ", "); idx > 0 {
+				chanStr = chanStr[:idx]
+			}
+			if ch, err := strconv.Atoi(chanStr); err == nil {
+				network.Channel = ch
+			}
+		}
+
+		if secCol > 0 && len(line) > secCol {
+			network.Security = strings.TrimSpace(line[secCol:])
+		}
+
+		networks = append(networks, network)
+	}
+
+	return networks
+}
+
+// ─── Connect ─────────────────────────────────────────────────────────────────
+
 // Connect connects to a WiFi network on macOS.
-// Note: This may require administrator privileges.
 func (s *platformWiFiScanner) Connect(ctx context.Context, ssid, password string) error {
-	// Use networksetup to connect
 	var cmd *exec.Cmd
 	if password == "" {
-		// Open network (like Shelly AP)
 		cmd = exec.CommandContext(ctx, "networksetup", "-setairportnetwork", s.iface, ssid)
 	} else {
 		cmd = exec.CommandContext(ctx, "networksetup", "-setairportnetwork", s.iface, ssid, password)
@@ -82,23 +176,20 @@ func (s *platformWiFiScanner) Connect(ctx context.Context, ssid, password string
 		return &WiFiError{Message: "networksetup connect failed: " + errMsg, Err: err}
 	}
 
-	// Wait for connection to establish
 	return s.waitForConnection(ctx, ssid, 15*time.Second)
 }
 
+// ─── Disconnect ──────────────────────────────────────────────────────────────
+
 // Disconnect disconnects from the current WiFi network on macOS.
-// This toggles the WiFi off and on to disconnect.
 func (s *platformWiFiScanner) Disconnect(ctx context.Context) error {
-	// Turn WiFi off
 	offCmd := exec.CommandContext(ctx, "networksetup", "-setairportpower", s.iface, "off")
 	if err := offCmd.Run(); err != nil {
 		return &WiFiError{Message: "networksetup power off failed", Err: err}
 	}
 
-	// Brief pause
 	time.Sleep(500 * time.Millisecond)
 
-	// Turn WiFi back on
 	onCmd := exec.CommandContext(ctx, "networksetup", "-setairportpower", s.iface, "on")
 	if err := onCmd.Run(); err != nil {
 		return &WiFiError{Message: "networksetup power on failed", Err: err}
@@ -107,9 +198,10 @@ func (s *platformWiFiScanner) Disconnect(ctx context.Context) error {
 	return nil
 }
 
+// ─── CurrentNetwork ──────────────────────────────────────────────────────────
+
 // CurrentNetwork returns the currently connected WiFi network on macOS.
 func (s *platformWiFiScanner) CurrentNetwork(ctx context.Context) (*WiFiNetwork, error) {
-	// Try airport -I first for detailed info
 	airport := airportPath()
 	cmd := exec.CommandContext(ctx, airport, "-I")
 	output, err := cmd.Output()
@@ -117,23 +209,19 @@ func (s *platformWiFiScanner) CurrentNetwork(ctx context.Context) (*WiFiNetwork,
 		return s.parseAirportInfo(string(output))
 	}
 
-	// Fallback to networksetup
+	// Fallback to networksetup.
 	cmd = exec.CommandContext(ctx, "networksetup", "-getairportnetwork", s.iface)
 	output, err = cmd.Output()
 	if err != nil {
 		return nil, &WiFiError{Message: "networksetup getairportnetwork failed", Err: err}
 	}
 
-	// Parse output like: "Current Wi-Fi Network: NetworkName"
 	outputStr := strings.TrimSpace(string(output))
 	prefix := "Current Wi-Fi Network: "
 	if strings.HasPrefix(outputStr, prefix) {
 		ssid := strings.TrimPrefix(outputStr, prefix)
 		if ssid != "" && ssid != "You are not associated with an AirPort network." {
-			return &WiFiNetwork{
-				SSID:     ssid,
-				LastSeen: time.Now(),
-			}, nil
+			return &WiFiNetwork{SSID: ssid, LastSeen: time.Now()}, nil
 		}
 	}
 
@@ -142,48 +230,29 @@ func (s *platformWiFiScanner) CurrentNetwork(ctx context.Context) (*WiFiNetwork,
 
 // parseAirportInfo parses the output of airport -I.
 func (s *platformWiFiScanner) parseAirportInfo(output string) (*WiFiNetwork, error) {
-	network := &WiFiNetwork{
-		LastSeen: time.Now(),
-	}
+	network := &WiFiNetwork{LastSeen: time.Now()}
 
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
+	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "SSID:") {
+		switch {
+		case strings.HasPrefix(line, "SSID:"):
 			network.SSID = strings.TrimSpace(strings.TrimPrefix(line, "SSID:"))
-		} else if strings.HasPrefix(line, "BSSID:") {
+		case strings.HasPrefix(line, "BSSID:"):
 			network.BSSID = strings.TrimSpace(strings.TrimPrefix(line, "BSSID:"))
-		} else if strings.HasPrefix(line, "channel:") {
-			channelStr := strings.TrimSpace(strings.TrimPrefix(line, "channel:"))
-			// Channel might be like "6" or "6,+1"
-			if idx := strings.Index(channelStr, ","); idx != -1 {
-				channelStr = channelStr[:idx]
+		case strings.HasPrefix(line, "channel:"):
+			chanStr := strings.TrimSpace(strings.TrimPrefix(line, "channel:"))
+			if idx := strings.Index(chanStr, ","); idx != -1 {
+				chanStr = chanStr[:idx]
 			}
-			var channel int
-			for _, c := range channelStr {
-				if c >= '0' && c <= '9' {
-					channel = channel*10 + int(c-'0')
-				} else {
-					break
-				}
+			if ch, err := strconv.Atoi(chanStr); err == nil {
+				network.Channel = ch
 			}
-			network.Channel = channel
-		} else if strings.HasPrefix(line, "agrCtlRSSI:") {
+		case strings.HasPrefix(line, "agrCtlRSSI:"):
 			rssiStr := strings.TrimSpace(strings.TrimPrefix(line, "agrCtlRSSI:"))
-			var rssi int
-			negative := false
-			for _, c := range rssiStr {
-				if c == '-' {
-					negative = true
-				} else if c >= '0' && c <= '9' {
-					rssi = rssi*10 + int(c-'0')
-				}
+			if rssi, err := strconv.Atoi(rssiStr); err == nil {
+				network.Signal = rssi
 			}
-			if negative {
-				rssi = -rssi
-			}
-			network.Signal = rssi
-		} else if strings.HasPrefix(line, "link auth:") {
+		case strings.HasPrefix(line, "link auth:"):
 			network.Security = strings.TrimSpace(strings.TrimPrefix(line, "link auth:"))
 		}
 	}
@@ -194,6 +263,8 @@ func (s *platformWiFiScanner) parseAirportInfo(output string) (*WiFiNetwork, err
 
 	return network, nil
 }
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 // waitForConnection waits for the WiFi connection to be established.
 func (s *platformWiFiScanner) waitForConnection(ctx context.Context, ssid string, timeout time.Duration) error {

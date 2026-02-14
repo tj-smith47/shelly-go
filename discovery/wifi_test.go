@@ -439,28 +439,6 @@ func TestWiFiNetwork_ToDevice(t *testing.T) {
 	}
 }
 
-func TestWifiscanScanner_NotImplemented(t *testing.T) {
-	s := &wifiscanScanner{}
-
-	// Connect should return not implemented error
-	err := s.Connect(context.Background(), "test", "password")
-	if err == nil {
-		t.Error("Connect should return error")
-	}
-
-	// Disconnect should return not implemented error
-	err = s.Disconnect(context.Background())
-	if err == nil {
-		t.Error("Disconnect should return error")
-	}
-
-	// CurrentNetwork should return not implemented error
-	_, err = s.CurrentNetwork(context.Background())
-	if err == nil {
-		t.Error("CurrentNetwork should return error")
-	}
-}
-
 func TestSentinelErrors(t *testing.T) {
 	// Verify sentinel errors are properly defined
 	errors := []*WiFiError{
@@ -925,17 +903,5 @@ func TestWiFiDiscoverer_ScanNetworks_Error(t *testing.T) {
 	_, err := d.ScanNetworks(context.Background())
 	if err == nil {
 		t.Error("expected error for scan failure")
-	}
-}
-
-func TestWifiscanScanner_ScanContextCanceled(t *testing.T) {
-	s := &wifiscanScanner{}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // Cancel immediately
-
-	_, err := s.Scan(ctx)
-	if err != context.Canceled {
-		t.Errorf("expected context.Canceled, got %v", err)
 	}
 }

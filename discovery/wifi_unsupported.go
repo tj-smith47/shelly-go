@@ -8,16 +8,19 @@ import (
 )
 
 // platformWiFiScanner implements WiFiScanner for unsupported platforms.
-type platformWiFiScanner struct {
-	*wifiscanScanner
-}
+type platformWiFiScanner struct{}
 
 // newPlatformWiFiScanner creates a platform-specific WiFi scanner.
-// On unsupported platforms, this returns a scanner that can still scan
-// (via wifiscan library) but cannot connect/disconnect.
+// On unsupported platforms, all operations return ErrWiFiNotSupported.
 func newPlatformWiFiScanner() WiFiScanner {
-	return &platformWiFiScanner{
-		wifiscanScanner: &wifiscanScanner{},
+	return &platformWiFiScanner{}
+}
+
+// Scan returns an error on unsupported platforms.
+func (s *platformWiFiScanner) Scan(ctx context.Context) ([]WiFiNetwork, error) {
+	return nil, &WiFiError{
+		Message: "WiFi scanning not supported on " + runtime.GOOS + "; " +
+			"supported platforms: linux (NetworkManager/nmcli/iw), darwin (airport), windows (netsh)",
 	}
 }
 

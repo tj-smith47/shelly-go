@@ -6,21 +6,108 @@ import (
 	"bytes"
 	"context"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 )
 
 // platformWiFiScanner implements WiFiScanner for Windows using netsh.
-type platformWiFiScanner struct {
-	*wifiscanScanner
-}
+type platformWiFiScanner struct{}
 
 // newPlatformWiFiScanner creates a platform-specific WiFi scanner for Windows.
 func newPlatformWiFiScanner() WiFiScanner {
-	return &platformWiFiScanner{
-		wifiscanScanner: &wifiscanScanner{},
-	}
+	return &platformWiFiScanner{}
 }
+
+// ─── Scan ────────────────────────────────────────────────────────────────────
+
+// Scan scans for available WiFi networks using netsh on Windows.
+func (s *platformWiFiScanner) Scan(ctx context.Context) ([]WiFiNetwork, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
+	cmd := exec.CommandContext(ctx, "netsh", "wlan", "show", "networks", "mode=bssid")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, &WiFiError{Message: "netsh scan failed", Err: err}
+	}
+
+	return parseNetshScanOutput(string(output)), nil
+}
+
+// parseNetshScanOutput parses the output of netsh wlan show networks mode=bssid.
+// Output format:
+//
+//	SSID 1 : NetworkName
+//	    Network type            : Infrastructure
+//	    Authentication          : WPA2-Personal
+//	    Encryption              : CCMP
+//	    BSSID 1                 : aa:bb:cc:dd:ee:ff
+//	         Signal             : 80%
+//	         Radio type         : 802.11ac
+//	         Channel            : 6
+func parseNetshScanOutput(output string) []WiFiNetwork {
+	var networks []WiFiNetwork
+	var current *WiFiNetwork
+
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		switch {
+		case strings.HasPrefix(key, "SSID") && !strings.HasPrefix(key, "SSID BSSID"):
+			// New network block.
+			if current != nil && current.SSID != "" {
+				networks = append(networks, *current)
+			}
+			current = &WiFiNetwork{
+				SSID:     value,
+				LastSeen: time.Now(),
+			}
+
+		case current == nil:
+			continue
+
+		case strings.HasPrefix(key, "Authentication"):
+			current.Security = value
+
+		case strings.HasPrefix(key, "BSSID"):
+			current.BSSID = value
+
+		case key == "Signal":
+			sigStr := strings.TrimSuffix(value, "%")
+			if sig, err := strconv.Atoi(sigStr); err == nil {
+				current.Signal = sig - 100 // Convert percentage to approximate dBm
+			}
+
+		case key == "Channel":
+			if ch, err := strconv.Atoi(value); err == nil {
+				current.Channel = ch
+			}
+		}
+	}
+
+	if current != nil && current.SSID != "" {
+		networks = append(networks, *current)
+	}
+
+	return networks
+}
+
+// ─── Connect ─────────────────────────────────────────────────────────────────
 
 // Connect connects to a WiFi network on Windows using netsh.
 // For open networks (like Shelly AP), this creates a temporary profile.

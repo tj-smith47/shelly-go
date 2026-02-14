@@ -11,8 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/schollz/wifiscan"
-
 	"github.com/tj-smith47/shelly-go/types"
 )
 
@@ -58,7 +56,10 @@ type WiFiDiscoveredDevice struct {
 }
 
 // WiFiScanner is the interface for platform-specific WiFi scanning.
-// The default implementation uses github.com/schollz/wifiscan.
+// Each platform provides its own implementation:
+//   - Linux: NetworkManager D-Bus (primary), nmcli/iw (fallback)
+//   - macOS: airport/networksetup
+//   - Windows: netsh wlan
 type WiFiScanner interface {
 	// Scan scans for available WiFi networks.
 	Scan(ctx context.Context) ([]WiFiNetwork, error)
@@ -73,62 +74,10 @@ type WiFiScanner interface {
 	CurrentNetwork(ctx context.Context) (*WiFiNetwork, error)
 }
 
-// wifiscanScanner implements WiFiScanner using github.com/schollz/wifiscan.
-// This is the default scanner used by WiFiDiscoverer.
-// Note: Connect/Disconnect are not implemented - they require platform-specific code.
-// Platform-specific scanners (platformWiFiScanner) embed this type and add connect support.
-type wifiscanScanner struct{}
-
 // newDefaultWiFiScanner creates the default WiFi scanner with platform-specific
-// connect/disconnect support. Falls back to scan-only on unsupported platforms.
+// connect/disconnect support.
 func newDefaultWiFiScanner() WiFiScanner {
 	return newPlatformWiFiScanner()
-}
-
-// Scan scans for available WiFi networks.
-func (s *wifiscanScanner) Scan(ctx context.Context) ([]WiFiNetwork, error) {
-	// Check for cancellation first
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	default:
-	}
-
-	// Perform the scan
-	networks, err := wifiscan.Scan()
-	if err != nil {
-		return nil, &WiFiError{Message: "wifi scan failed", Err: err}
-	}
-
-	// Convert to our format
-	result := make([]WiFiNetwork, 0, len(networks))
-	for _, net := range networks {
-		result = append(result, WiFiNetwork{
-			SSID:   net.SSID,
-			Signal: net.RSSI,
-			// wifiscan only provides SSID and RSSI
-		})
-	}
-
-	return result, nil
-}
-
-// Connect connects to a WiFi network.
-// Note: Not implemented - requires platform-specific tools (nmcli, netsh, etc.).
-func (s *wifiscanScanner) Connect(ctx context.Context, ssid, password string) error {
-	return &WiFiError{Message: "Connect not implemented - use platform-specific tools (nmcli, netsh, etc.)"}
-}
-
-// Disconnect disconnects from the current WiFi network.
-// Note: Not implemented - requires platform-specific tools.
-func (s *wifiscanScanner) Disconnect(ctx context.Context) error {
-	return &WiFiError{Message: "Disconnect not implemented - use platform-specific tools"}
-}
-
-// CurrentNetwork returns the currently connected network.
-// Note: Not implemented - requires platform-specific tools.
-func (s *wifiscanScanner) CurrentNetwork(ctx context.Context) (*WiFiNetwork, error) {
-	return nil, &WiFiError{Message: "CurrentNetwork not implemented - use platform-specific tools"}
 }
 
 // WiFi error sentinels.
