@@ -5,6 +5,7 @@ package discovery
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,11 +14,13 @@ import (
 	"time"
 
 	gnm "github.com/Wifx/gonetworkmanager/v2"
+	"github.com/mdlayher/wifi"
 )
 
 // platformWiFiScanner implements WiFiScanner for Linux.
-// Primary: NetworkManager D-Bus API via gonetworkmanager (no binary dependencies).
-// Fallback: nmcli, wpa_cli, iwconfig CLI tools.
+// Primary: nl80211 netlink (pure Go, zero external dependencies).
+// Fallback 1: NetworkManager D-Bus API.
+// Fallback 2: nmcli, iw CLI tools.
 type platformWiFiScanner struct {
 	iface string
 }
@@ -50,7 +53,104 @@ func detectWiFiInterface() string {
 	return "wlan0"
 }
 
-// ─── NetworkManager helpers ──────────────────────────────────────────────────
+// ─── nl80211 netlink scanner (primary — zero external dependencies) ──────────
+
+// scanViaNl80211 scans using the kernel's nl80211 netlink interface directly.
+// This requires no external services or binaries — just a WiFi-capable kernel.
+func (s *platformWiFiScanner) scanViaNl80211(ctx context.Context) ([]WiFiNetwork, error) {
+	client, err := wifi.New()
+	if err != nil {
+		return nil, fmt.Errorf("nl80211 client: %w", err)
+	}
+	defer client.Close()
+
+	// Find our WiFi interface.
+	ifaces, err := client.Interfaces()
+	if err != nil {
+		return nil, fmt.Errorf("nl80211 interfaces: %w", err)
+	}
+
+	var ifi *wifi.Interface
+	for _, i := range ifaces {
+		if i.Name == s.iface {
+			ifi = i
+			break
+		}
+	}
+	if ifi == nil {
+		// Try any station-mode interface.
+		for _, i := range ifaces {
+			if i.Type == wifi.InterfaceTypeStation {
+				ifi = i
+				break
+			}
+		}
+	}
+	if ifi == nil {
+		return nil, fmt.Errorf("nl80211: no WiFi interface %q found", s.iface)
+	}
+
+	// Trigger a fresh scan. This requires CAP_NET_ADMIN.
+	if err := client.Scan(ctx, ifi); err != nil {
+		// If scan fails (permissions, busy, etc.), still try to get cached results.
+		// GetAllAccessPoints returns whatever the kernel already knows.
+		aps, apErr := client.AccessPoints(ifi)
+		if apErr != nil || len(aps) == 0 {
+			return nil, fmt.Errorf("nl80211 scan: %w", err)
+		}
+		// We got cached results despite scan failure — use them.
+		return bssListToNetworks(aps), nil
+	}
+
+	// Get scan results.
+	aps, err := client.AccessPoints(ifi)
+	if err != nil {
+		return nil, fmt.Errorf("nl80211 access points: %w", err)
+	}
+
+	return bssListToNetworks(aps), nil
+}
+
+// bssListToNetworks converts nl80211 BSS results to WiFiNetwork structs.
+func bssListToNetworks(bssList []*wifi.BSS) []WiFiNetwork {
+	networks := make([]WiFiNetwork, 0, len(bssList))
+	for _, bss := range bssList {
+		if bss.SSID == "" {
+			continue
+		}
+		network := WiFiNetwork{
+			SSID:     bss.SSID,
+			BSSID:    bss.BSSID.String(),
+			Signal:   int(bss.Signal / 100), // mBm to dBm
+			Channel:  frequencyToChannel(bss.Frequency),
+			LastSeen: time.Now(),
+		}
+
+		// Determine security from RSN info.
+		if len(bss.RSN.AKMs) > 0 {
+			network.Security = rsnToSecurity(bss.RSN)
+		}
+
+		networks = append(networks, network)
+	}
+	return networks
+}
+
+// rsnToSecurity converts RSN info to a human-readable security string.
+func rsnToSecurity(rsn wifi.RSNInfo) string {
+	for _, akm := range rsn.AKMs {
+		switch akm {
+		case wifi.RSNAkmSAE, wifi.RSNAkmFTSAE:
+			return "WPA3"
+		}
+	}
+	if rsn.Version >= 1 {
+		return "WPA2"
+	}
+	return "WPA"
+}
+
+// ─── NetworkManager D-Bus helpers ────────────────────────────────────────────
 
 // nmWirelessDevice returns the first WiFi device from NetworkManager.
 func nmWirelessDevice() (gnm.DeviceWireless, error) {
@@ -159,7 +259,8 @@ func nmFlagsToSecurity(flags, wpaFlags, rsnFlags uint32) string {
 // ─── Scan ────────────────────────────────────────────────────────────────────
 
 // Scan scans for available WiFi networks.
-// Tries NetworkManager D-Bus first, then falls back to CLI tools.
+// Tries nl80211 netlink first (zero dependencies), then NetworkManager D-Bus,
+// then falls back to CLI tools.
 func (s *platformWiFiScanner) Scan(ctx context.Context) ([]WiFiNetwork, error) {
 	select {
 	case <-ctx.Done():
@@ -167,26 +268,43 @@ func (s *platformWiFiScanner) Scan(ctx context.Context) ([]WiFiNetwork, error) {
 	default:
 	}
 
-	// Primary: NetworkManager D-Bus (no binary dependency).
-	if networks, err := s.scanViaNM(ctx); err == nil {
+	var errors []string
+
+	// Primary: nl80211 netlink (pure Go, no external dependencies).
+	if networks, err := s.scanViaNl80211(ctx); err == nil {
 		return networks, nil
+	} else {
+		errors = append(errors, "nl80211: "+err.Error())
 	}
 
-	// Fallback: nmcli CLI.
+	// Fallback 1: NetworkManager D-Bus.
+	if networks, err := s.scanViaNM(ctx); err == nil {
+		return networks, nil
+	} else {
+		errors = append(errors, "NetworkManager D-Bus: "+err.Error())
+	}
+
+	// Fallback 2: nmcli CLI.
 	if hasCommand("nmcli") {
 		if networks, err := s.scanViaNmcli(ctx); err == nil {
 			return networks, nil
+		} else {
+			errors = append(errors, "nmcli: "+err.Error())
 		}
 	}
 
-	// Fallback: iw CLI.
+	// Fallback 3: iw CLI.
 	if hasCommand("iw") {
-		return s.scanViaIw(ctx)
+		networks, err := s.scanViaIw(ctx)
+		if err == nil {
+			return networks, nil
+		}
+		errors = append(errors, "iw: "+err.Error())
 	}
 
 	return nil, &WiFiError{
-		Message: "WiFi scan failed: no scanning method available; " +
-			"ensure NetworkManager is running, or install nmcli or iw",
+		Message: "WiFi scan failed, all methods tried: " +
+			strings.Join(errors, "; "),
 	}
 }
 
@@ -388,12 +506,17 @@ func parseIwField(n *WiFiNetwork, line string) {
 
 // Connect connects to a WiFi network on Linux.
 func (s *platformWiFiScanner) Connect(ctx context.Context, ssid, password string) error {
-	// Primary: NetworkManager D-Bus.
+	// Primary: nl80211 netlink (pure Go).
+	if err := s.connectViaNl80211(ctx, ssid, password); err == nil {
+		return nil
+	}
+
+	// Fallback 1: NetworkManager D-Bus.
 	if err := s.connectViaNM(ctx, ssid, password); err == nil {
 		return nil
 	}
 
-	// Fallback: nmcli CLI.
+	// Fallback 2: nmcli CLI.
 	if hasCommand("nmcli") {
 		if err := s.connectNmcli(ctx, ssid, password); err == nil {
 			return nil
@@ -402,7 +525,7 @@ func (s *platformWiFiScanner) Connect(ctx context.Context, ssid, password string
 		}
 	}
 
-	// Fallback: wpa_cli.
+	// Fallback 3: wpa_cli.
 	if hasCommand("wpa_cli") {
 		if err := s.connectWpaCli(ctx, ssid, password); err == nil {
 			return nil
@@ -411,12 +534,51 @@ func (s *platformWiFiScanner) Connect(ctx context.Context, ssid, password string
 		}
 	}
 
-	// Fallback: iwconfig (deprecated).
+	// Fallback 4: iwconfig (deprecated).
 	if hasCommand("iwconfig") {
 		return s.connectIwconfig(ctx, ssid, password)
 	}
 
 	return ErrToolNotFound
+}
+
+// connectViaNl80211 connects using the nl80211 netlink interface.
+func (s *platformWiFiScanner) connectViaNl80211(ctx context.Context, ssid, password string) error {
+	client, err := wifi.New()
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	ifi, err := s.findNl80211Interface(client)
+	if err != nil {
+		return err
+	}
+
+	if password == "" {
+		return client.Connect(ifi, ssid)
+	}
+	return client.ConnectWPAPSK(ifi, ssid, password)
+}
+
+// findNl80211Interface finds the WiFi interface for nl80211 operations.
+func (s *platformWiFiScanner) findNl80211Interface(client *wifi.Client) (*wifi.Interface, error) {
+	ifaces, err := client.Interfaces()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, i := range ifaces {
+		if i.Name == s.iface {
+			return i, nil
+		}
+	}
+	for _, i := range ifaces {
+		if i.Type == wifi.InterfaceTypeStation {
+			return i, nil
+		}
+	}
+	return nil, fmt.Errorf("no WiFi interface found for nl80211")
 }
 
 // connectViaNM connects using the NetworkManager D-Bus API.
@@ -581,7 +743,17 @@ func (s *platformWiFiScanner) connectIwconfig(ctx context.Context, ssid, passwor
 //
 //nolint:gosec // G204: Interface name is auto-detected, not user input
 func (s *platformWiFiScanner) Disconnect(ctx context.Context) error {
-	// Primary: NM D-Bus.
+	// Primary: nl80211 netlink.
+	if client, err := wifi.New(); err == nil {
+		defer client.Close()
+		if ifi, err := s.findNl80211Interface(client); err == nil {
+			if err := client.Disconnect(ifi); err == nil {
+				return nil
+			}
+		}
+	}
+
+	// Fallback 1: NM D-Bus.
 	if wireless, err := nmWirelessDevice(); err == nil {
 		if err := wireless.Disconnect(); err == nil {
 			return nil
@@ -616,7 +788,20 @@ func (s *platformWiFiScanner) Disconnect(ctx context.Context) error {
 
 // CurrentNetwork returns the currently connected WiFi network.
 func (s *platformWiFiScanner) CurrentNetwork(ctx context.Context) (*WiFiNetwork, error) {
-	// Primary: NM D-Bus.
+	// Primary: nl80211 netlink.
+	if client, err := wifi.New(); err == nil {
+		defer client.Close()
+		if ifi, err := s.findNl80211Interface(client); err == nil {
+			if bss, err := client.BSS(ifi); err == nil && bss != nil && bss.SSID != "" {
+				networks := bssListToNetworks([]*wifi.BSS{bss})
+				if len(networks) > 0 {
+					return &networks[0], nil
+				}
+			}
+		}
+	}
+
+	// Fallback 1: NM D-Bus.
 	if wireless, err := nmWirelessDevice(); err == nil {
 		if ap, err := wireless.GetPropertyActiveAccessPoint(); err == nil && ap != nil {
 			if n := apToNetwork(ap); n != nil {
