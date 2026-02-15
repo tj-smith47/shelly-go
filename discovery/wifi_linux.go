@@ -17,6 +17,14 @@ import (
 	"github.com/mdlayher/wifi"
 )
 
+// WiFi security protocol names.
+const (
+	securityWPA  = "WPA"
+	securityWPA2 = "WPA2"
+	securityWPA3 = "WPA3"
+	securityWEP  = "WEP"
+)
+
 // platformWiFiScanner implements WiFiScanner for Linux.
 // Primary: nl80211 netlink (pure Go, zero external dependencies).
 // Fallback 1: NetworkManager D-Bus API.
@@ -91,12 +99,12 @@ func (s *platformWiFiScanner) scanViaNl80211(ctx context.Context) ([]WiFiNetwork
 	}
 
 	// Trigger a fresh scan. This requires CAP_NET_ADMIN.
-	if err := client.Scan(ctx, ifi); err != nil {
+	if scanErr := client.Scan(ctx, ifi); scanErr != nil {
 		// If scan fails (permissions, busy, etc.), still try to get cached results.
 		// GetAllAccessPoints returns whatever the kernel already knows.
 		aps, apErr := client.AccessPoints(ifi)
 		if apErr != nil || len(aps) == 0 {
-			return nil, fmt.Errorf("nl80211 scan: %w", err)
+			return nil, fmt.Errorf("nl80211 scan: %w", scanErr)
 		}
 		// We got cached results despite scan failure — use them.
 		return bssListToNetworks(aps), nil
@@ -141,13 +149,13 @@ func rsnToSecurity(rsn wifi.RSNInfo) string {
 	for _, akm := range rsn.AKMs {
 		switch akm {
 		case wifi.RSNAkmSAE, wifi.RSNAkmFTSAE:
-			return "WPA3"
+			return securityWPA3
 		}
 	}
 	if rsn.Version >= 1 {
-		return "WPA2"
+		return securityWPA2
 	}
-	return "WPA"
+	return securityWPA
 }
 
 // ─── NetworkManager D-Bus helpers ────────────────────────────────────────────
@@ -243,15 +251,15 @@ func nmFlagsToSecurity(flags, wpaFlags, rsnFlags uint32) string {
 
 	if rsnFlags != 0 {
 		if rsnFlags&0x200 != 0 { // NM_802_11_AP_SEC_KEY_MGMT_SAE (WPA3)
-			return "WPA3"
+			return securityWPA3
 		}
-		return "WPA2"
+		return securityWPA2
 	}
 	if wpaFlags != 0 {
-		return "WPA"
+		return securityWPA
 	}
 	if flags&nmAPFlagPrivacy != 0 {
-		return "WEP"
+		return securityWEP
 	}
 	return ""
 }
@@ -496,9 +504,9 @@ func parseIwField(n *WiFiNetwork, line string) {
 			n.Channel = frequencyToChannel(freq)
 		}
 	case strings.HasPrefix(line, "RSN:") && n.Security == "":
-		n.Security = "WPA2"
+		n.Security = securityWPA2
 	case strings.HasPrefix(line, "WPA:") && n.Security == "":
-		n.Security = "WPA"
+		n.Security = securityWPA
 	}
 }
 
@@ -543,7 +551,7 @@ func (s *platformWiFiScanner) Connect(ctx context.Context, ssid, password string
 }
 
 // connectViaNl80211 connects using the nl80211 netlink interface.
-func (s *platformWiFiScanner) connectViaNl80211(ctx context.Context, ssid, password string) error {
+func (s *platformWiFiScanner) connectViaNl80211(_ context.Context, ssid, password string) error {
 	client, err := wifi.New()
 	if err != nil {
 		return err
@@ -786,19 +794,36 @@ func (s *platformWiFiScanner) Disconnect(ctx context.Context) error {
 
 // ─── CurrentNetwork ──────────────────────────────────────────────────────────
 
+// currentNetworkViaNl80211 tries to get the current network via nl80211 netlink.
+func (s *platformWiFiScanner) currentNetworkViaNl80211() *WiFiNetwork {
+	client, err := wifi.New()
+	if err != nil {
+		return nil
+	}
+	defer client.Close()
+
+	ifi, err := s.findNl80211Interface(client)
+	if err != nil {
+		return nil
+	}
+
+	bss, err := client.BSS(ifi)
+	if err != nil || bss == nil || bss.SSID == "" {
+		return nil
+	}
+
+	networks := bssListToNetworks([]*wifi.BSS{bss})
+	if len(networks) == 0 {
+		return nil
+	}
+	return &networks[0]
+}
+
 // CurrentNetwork returns the currently connected WiFi network.
 func (s *platformWiFiScanner) CurrentNetwork(ctx context.Context) (*WiFiNetwork, error) {
 	// Primary: nl80211 netlink.
-	if client, err := wifi.New(); err == nil {
-		defer client.Close()
-		if ifi, err := s.findNl80211Interface(client); err == nil {
-			if bss, err := client.BSS(ifi); err == nil && bss != nil && bss.SSID != "" {
-				networks := bssListToNetworks([]*wifi.BSS{bss})
-				if len(networks) > 0 {
-					return &networks[0], nil
-				}
-			}
-		}
+	if n := s.currentNetworkViaNl80211(); n != nil {
+		return n, nil
 	}
 
 	// Fallback 1: NM D-Bus.
