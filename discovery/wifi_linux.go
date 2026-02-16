@@ -540,22 +540,28 @@ func parseIwField(n *WiFiNetwork, line string) {
 
 // Connect connects to a WiFi network on Linux.
 func (s *platformWiFiScanner) Connect(ctx context.Context, ssid, password string) error {
+	var errors []string
+
 	// Primary: nl80211 netlink (pure Go).
 	if err := s.connectViaNl80211(ctx, ssid, password); err == nil {
 		return nil
+	} else {
+		errors = append(errors, "nl80211: "+err.Error())
 	}
 
 	// Fallback 1: NetworkManager D-Bus.
 	if err := s.connectViaNM(ctx, ssid, password); err == nil {
 		return nil
+	} else {
+		errors = append(errors, "NetworkManager D-Bus: "+err.Error())
 	}
 
 	// Fallback 2: nmcli CLI.
 	if hasCommand("nmcli") {
 		if err := s.connectNmcli(ctx, ssid, password); err == nil {
 			return nil
-		} else if !hasCommand("wpa_cli") && !hasCommand("iwconfig") {
-			return err
+		} else {
+			errors = append(errors, "nmcli: "+err.Error())
 		}
 	}
 
@@ -563,36 +569,65 @@ func (s *platformWiFiScanner) Connect(ctx context.Context, ssid, password string
 	if hasCommand("wpa_cli") {
 		if err := s.connectWpaCli(ctx, ssid, password); err == nil {
 			return nil
-		} else if !hasCommand("iwconfig") {
-			return err
+		} else {
+			errors = append(errors, "wpa_cli: "+err.Error())
 		}
 	}
 
 	// Fallback 4: iwconfig (deprecated).
 	if hasCommand("iwconfig") {
-		return s.connectIwconfig(ctx, ssid, password)
+		if err := s.connectIwconfig(ctx, ssid, password); err == nil {
+			return nil
+		} else {
+			errors = append(errors, "iwconfig: "+err.Error())
+		}
 	}
 
-	return ErrToolNotFound
+	return &WiFiError{
+		Message: "WiFi connect failed, all methods tried: " +
+			strings.Join(errors, "; "),
+	}
 }
 
 // connectViaNl80211 connects using the nl80211 netlink interface.
-func (s *platformWiFiScanner) connectViaNl80211(_ context.Context, ssid, password string) error {
+func (s *platformWiFiScanner) connectViaNl80211(ctx context.Context, ssid, password string) error {
+	// Ensure the interface is up.
+	s.ensureInterfaceUp(ctx)
+
 	client, err := wifi.New()
 	if err != nil {
-		return err
+		return fmt.Errorf("client: %w", err)
 	}
 	defer client.Close()
 
 	ifi, err := s.findNl80211Interface(client)
 	if err != nil {
-		return err
+		return fmt.Errorf("interface: %w", err)
 	}
 
-	if password == "" {
-		return client.Connect(ifi, ssid)
+	// Disconnect from any current network first to avoid state issues.
+	// Errors are expected if not currently connected — ignore them.
+	if disconnectErr := client.Disconnect(ifi); disconnectErr != nil {
+		// Not connected — that's fine, proceed with connect.
+		_ = disconnectErr
 	}
-	return client.ConnectWPAPSK(ifi, ssid, password)
+	time.Sleep(500 * time.Millisecond)
+
+	// Connect to the target network.
+	if password == "" {
+		err = client.Connect(ifi, ssid)
+	} else {
+		err = client.ConnectWPAPSK(ifi, ssid, password)
+	}
+	if err != nil {
+		return fmt.Errorf("connect %q: %w", ssid, err)
+	}
+
+	// Wait for association and DHCP. Shelly APs run a DHCP server
+	// at 192.168.33.1 — the kernel DHCP client needs time to obtain a lease.
+	time.Sleep(3 * time.Second)
+
+	return nil
 }
 
 // findNl80211Interface finds the WiFi interface for nl80211 operations.
@@ -782,6 +817,8 @@ func (s *platformWiFiScanner) Disconnect(ctx context.Context) error {
 		defer client.Close()
 		if ifi, err := s.findNl80211Interface(client); err == nil {
 			if err := client.Disconnect(ifi); err == nil {
+				// Brief pause to let the disassociation complete.
+				time.Sleep(500 * time.Millisecond)
 				return nil
 			}
 		}
