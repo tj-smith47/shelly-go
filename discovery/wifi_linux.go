@@ -605,6 +605,11 @@ func (s *platformWiFiScanner) connectViaNl80211(ctx context.Context, ssid, passw
 		return fmt.Errorf("interface: %w", err)
 	}
 
+	// Remove any lingering Shelly AP static IP from a previous provisioning
+	// session. This prevents stale 192.168.33.x addresses from polluting
+	// subnet detection after reconnecting to the home network.
+	s.removeAPStaticIP(ctx, ifi.Name)
+
 	// Disconnect from any current network first to avoid state issues.
 	// Errors are expected if not currently connected — ignore them.
 	if disconnectErr := client.Disconnect(ifi); disconnectErr != nil {
@@ -632,6 +637,21 @@ func (s *platformWiFiScanner) connectViaNl80211(ctx context.Context, ssid, passw
 	s.obtainIPAddress(ctx, ifi.Name)
 
 	return nil
+}
+
+// removeAPStaticIP removes any lingering Shelly AP static IP (192.168.33.10/24)
+// from the WiFi interface. This is safe to call even if the address was never
+// assigned — the error is silently ignored.
+//
+//nolint:gosec // G204: Interface name is from kernel, not user input
+func (s *platformWiFiScanner) removeAPStaticIP(ctx context.Context, ifaceName string) {
+	staticIP := DefaultAPIP[:len(DefaultAPIP)-1] + "10/24"
+	// Address may not exist — that's expected; only log unexpected errors.
+	if err := exec.CommandContext(ctx, "ip", "addr", "del", staticIP, "dev", ifaceName).Run(); err != nil {
+		// exit code 2 = "RTNETLINK answers: Cannot assign requested address" (addr not found)
+		// This is the normal case when no static IP was previously assigned.
+		_ = err
+	}
 }
 
 // obtainIPAddress attempts to get an IP on the WiFi interface after nl80211 connect.
