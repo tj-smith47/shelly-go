@@ -49,6 +49,8 @@ var modelNames = map[string]string{
 	"SNDM-00100WW":  "Shelly Plus Wall Dimmer",
 	"SNDM-0013US":   "Shelly Plus Wall Dimmer US",
 	"SNSN-0031Z":    "Shelly Plus Smoke",
+	"SNSW-001X15UL": "Shelly Plus 1 UL",
+	"SNSW-001P15UL": "Shelly Plus 1PM UL",
 	"SNSW-001X8EU":  "Shelly Plus 1 Mini",
 	"SNSW-001P8EU":  "Shelly Plus 1PM Mini",
 	"SNGW-BT01":     "Shelly Plus BT Gateway",
