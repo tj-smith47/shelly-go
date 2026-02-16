@@ -47,18 +47,28 @@ func IdentifyWithTimeout(ctx context.Context, address string, timeout time.Durat
 	}
 	address = strings.TrimSuffix(address, "/")
 
-	// Try Gen2+ endpoint first (returns JSON with gen field)
-	info, err := identifyGen2(ctx, client, address)
-	if err == nil {
+	// Single request to /shelly — try parsing as Gen2 first, then Gen1.
+	// Both generations respond to the same endpoint, so one request suffices.
+	body, err := fetchShellyEndpoint(ctx, client, address)
+	if err != nil {
+		return nil, err
+	}
+
+	// Try Gen2+ first (has "gen" field >= 2)
+	if info, parseErr := parseGen2Response(body); parseErr == nil {
 		return info, nil
 	}
 
-	// Fallback to Gen1 endpoint
-	return identifyGen1(ctx, client, address)
+	// Fall back to Gen1 (has "type" field)
+	info, parseErr := parseGen1Response(ctx, client, address, body)
+	if parseErr != nil {
+		return nil, parseErr
+	}
+	return info, nil
 }
 
-// identifyGen2 tries to identify a Gen2+ device.
-func identifyGen2(ctx context.Context, client *http.Client, address string) (*DeviceInfo, error) {
+// fetchShellyEndpoint makes a single HTTP GET to /shelly and returns the body.
+func fetchShellyEndpoint(ctx context.Context, client *http.Client, address string) ([]byte, error) {
 	url := address + "/shelly"
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
@@ -76,17 +86,17 @@ func identifyGen2(ctx context.Context, client *http.Client, address string) (*De
 		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
+	return io.ReadAll(resp.Body)
+}
 
+// parseGen2Response parses a /shelly response body as a Gen2+ device.
+// Returns an error if the response does not have gen >= 2.
+func parseGen2Response(body []byte) (*DeviceInfo, error) {
 	var data gen2ShellyResponse
 	if err := json.Unmarshal(body, &data); err != nil {
 		return nil, err
 	}
 
-	// Check if this is a Gen2+ device
 	if data.Gen < 2 {
 		return nil, fmt.Errorf("not a Gen2+ device")
 	}
@@ -103,7 +113,6 @@ func identifyGen2(ctx context.Context, client *http.Client, address string) (*De
 		Raw:          data,
 	}
 
-	// Set generation
 	switch data.Gen {
 	case 2:
 		info.Generation = types.Gen2
@@ -118,30 +127,9 @@ func identifyGen2(ctx context.Context, client *http.Client, address string) (*De
 	return info, nil
 }
 
-// identifyGen1 tries to identify a Gen1 device.
-func identifyGen1(ctx context.Context, client *http.Client, address string) (*DeviceInfo, error) {
-	url := address + "/shelly"
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status: %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
+// parseGen1Response parses a /shelly response body as a Gen1 device.
+// Also fetches the device name from /settings in a separate request.
+func parseGen1Response(ctx context.Context, client *http.Client, address string, body []byte) (*DeviceInfo, error) {
 	var data gen1ShellyResponse
 	if err := json.Unmarshal(body, &data); err != nil {
 		return nil, err

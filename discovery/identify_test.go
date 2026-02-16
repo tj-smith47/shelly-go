@@ -12,6 +12,15 @@ import (
 	"github.com/tj-smith47/shelly-go/types"
 )
 
+// identifyGen1ViaHTTP is a test helper that fetches /shelly and parses as Gen1.
+func identifyGen1ViaHTTP(ctx context.Context, client *http.Client, address string) (*DeviceInfo, error) {
+	body, err := fetchShellyEndpoint(ctx, client, address)
+	if err != nil {
+		return nil, err
+	}
+	return parseGen1Response(ctx, client, address, body)
+}
+
 func TestIdentify_Gen2Device(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/shelly" {
@@ -130,9 +139,9 @@ func TestIdentify_Gen1Device(t *testing.T) {
 	defer server.Close()
 
 	// First try Gen2, then fall back to Gen1
-	info, err := identifyGen1(context.Background(), http.DefaultClient, server.URL)
+	info, err := identifyGen1ViaHTTP(context.Background(), http.DefaultClient, server.URL)
 	if err != nil {
-		t.Fatalf("identifyGen1() error = %v", err)
+		t.Fatalf("identifyGen1ViaHTTP() error = %v", err)
 	}
 
 	if info.Model != "SHSW-1" {
@@ -502,9 +511,9 @@ func TestGetGen1Name_HTTPError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	info, err := identifyGen1(context.Background(), http.DefaultClient, server.URL)
+	info, err := identifyGen1ViaHTTP(context.Background(), http.DefaultClient, server.URL)
 	if err != nil {
-		t.Fatalf("identifyGen1() error = %v", err)
+		t.Fatalf("identifyGen1ViaHTTP() error = %v", err)
 	}
 
 	// Name should be empty when settings endpoint fails
@@ -523,9 +532,9 @@ func TestGetGen1Name_InvalidJSON(t *testing.T) {
 	}))
 	defer server.Close()
 
-	info, err := identifyGen1(context.Background(), http.DefaultClient, server.URL)
+	info, err := identifyGen1ViaHTTP(context.Background(), http.DefaultClient, server.URL)
 	if err != nil {
-		t.Fatalf("identifyGen1() error = %v", err)
+		t.Fatalf("identifyGen1ViaHTTP() error = %v", err)
 	}
 
 	if info.Name != "" {
@@ -545,9 +554,9 @@ func TestGetGen1Name_MissingDeviceField(t *testing.T) {
 	}))
 	defer server.Close()
 
-	info, err := identifyGen1(context.Background(), http.DefaultClient, server.URL)
+	info, err := identifyGen1ViaHTTP(context.Background(), http.DefaultClient, server.URL)
 	if err != nil {
-		t.Fatalf("identifyGen1() error = %v", err)
+		t.Fatalf("identifyGen1ViaHTTP() error = %v", err)
 	}
 
 	if info.Name != "" {
@@ -571,9 +580,9 @@ func TestGetGen1Name_RootLevelName(t *testing.T) {
 	}))
 	defer server.Close()
 
-	info, err := identifyGen1(context.Background(), http.DefaultClient, server.URL)
+	info, err := identifyGen1ViaHTTP(context.Background(), http.DefaultClient, server.URL)
 	if err != nil {
-		t.Fatalf("identifyGen1() error = %v", err)
+		t.Fatalf("identifyGen1ViaHTTP() error = %v", err)
 	}
 
 	if info.Name != "User Configured Name" {
