@@ -65,6 +65,8 @@ func detectWiFiInterface() string {
 
 // ensureInterfaceUp brings the WiFi interface up if it's currently down.
 // Scanning requires the interface to be in an "up" state.
+// The interface is left up after this call — callers that need WiFi (scan,
+// connect, provision) inherently require an active interface.
 //
 //nolint:gosec // G204: Interface name is auto-detected from /sys/class/net, not user input
 func (s *platformWiFiScanner) ensureInterfaceUp(ctx context.Context) {
