@@ -63,9 +63,33 @@ func detectWiFiInterface() string {
 
 // ─── nl80211 netlink scanner (primary — zero external dependencies) ──────────
 
+// ensureInterfaceUp brings the WiFi interface up if it's currently down.
+// Scanning requires the interface to be in an "up" state.
+//
+//nolint:gosec // G204: Interface name is auto-detected from /sys/class/net, not user input
+func (s *platformWiFiScanner) ensureInterfaceUp(ctx context.Context) {
+	state, err := os.ReadFile("/sys/class/net/" + s.iface + "/operstate")
+	if err != nil {
+		return
+	}
+	if strings.TrimSpace(string(state)) != "down" {
+		return
+	}
+	// Interface is down — try to bring it up.
+	// Failure is non-fatal: scan will fail with a more descriptive error.
+	if err := exec.CommandContext(ctx, "ip", "link", "set", s.iface, "up").Run(); err != nil {
+		return
+	}
+	// Brief pause for the interface to initialize.
+	time.Sleep(500 * time.Millisecond)
+}
+
 // scanViaNl80211 scans using the kernel's nl80211 netlink interface directly.
 // This requires no external services or binaries — just a WiFi-capable kernel.
 func (s *platformWiFiScanner) scanViaNl80211(ctx context.Context) ([]WiFiNetwork, error) {
+	// Ensure the interface is up before scanning.
+	s.ensureInterfaceUp(ctx)
+
 	client, err := wifi.New()
 	if err != nil {
 		return nil, fmt.Errorf("nl80211 client: %w", err)
