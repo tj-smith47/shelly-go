@@ -623,11 +623,47 @@ func (s *platformWiFiScanner) connectViaNl80211(ctx context.Context, ssid, passw
 		return fmt.Errorf("connect %q: %w", ssid, err)
 	}
 
-	// Wait for association and DHCP. Shelly APs run a DHCP server
-	// at 192.168.33.1 — the kernel DHCP client needs time to obtain a lease.
-	time.Sleep(3 * time.Second)
+	// Wait for association to complete.
+	time.Sleep(1 * time.Second)
+
+	// When connecting via nl80211 directly (without NetworkManager),
+	// DHCP does not run automatically. Attempt DHCP client, and if that
+	// fails, assign a static IP for the Shelly AP subnet (192.168.33.0/24).
+	s.obtainIPAddress(ctx, ifi.Name)
 
 	return nil
+}
+
+// obtainIPAddress attempts to get an IP on the WiFi interface after nl80211 connect.
+// Tries dhclient/dhcpcd first; falls back to a static IP for Shelly AP provisioning.
+//
+//nolint:gosec // G204: Interface name is from kernel, not user input
+func (s *platformWiFiScanner) obtainIPAddress(ctx context.Context, ifaceName string) {
+	// Try dhclient (most common DHCP client on Linux).
+	if hasCommand("dhclient") {
+		if err := exec.CommandContext(ctx, "dhclient", "-1", "-q", ifaceName).Run(); err == nil {
+			time.Sleep(1 * time.Second)
+			return
+		}
+	}
+
+	// Try dhcpcd (alternative DHCP client).
+	if hasCommand("dhcpcd") {
+		if err := exec.CommandContext(ctx, "dhcpcd", "-1", "-q", ifaceName).Run(); err == nil {
+			time.Sleep(1 * time.Second)
+			return
+		}
+	}
+
+	// No DHCP client available — assign a static IP for the Shelly AP subnet.
+	// Shelly devices in AP mode use 192.168.33.1 and serve DHCP on 192.168.33.0/24.
+	// Use .10 to avoid conflicts with the device (.1) and typical DHCP range (.100+).
+	staticIP := DefaultAPIP[:len(DefaultAPIP)-1] + "10/24"
+	if err := exec.CommandContext(ctx, "ip", "addr", "add", staticIP, "dev", ifaceName).Run(); err != nil {
+		// May fail if address already assigned — that's fine.
+		return
+	}
+	time.Sleep(500 * time.Millisecond)
 }
 
 // findNl80211Interface finds the WiFi interface for nl80211 operations.
