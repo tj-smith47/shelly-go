@@ -618,6 +618,14 @@ func (s *platformWiFiScanner) connectViaNl80211(ctx context.Context, ssid, passw
 	}
 	time.Sleep(500 * time.Millisecond)
 
+	// Trigger a scan so the kernel has the target BSS in its cache.
+	// Without this, Connect fails with EINVAL if the BSS was evicted
+	// (e.g. after reconnecting to a different network between provisions).
+	if scanErr := client.Scan(ctx, ifi); scanErr != nil {
+		// Non-fatal: cached results may still contain the target.
+		_ = scanErr
+	}
+
 	// Connect to the target network.
 	if password == "" {
 		err = client.Connect(ifi, ssid)
