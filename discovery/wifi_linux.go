@@ -662,30 +662,16 @@ func (s *platformWiFiScanner) removeAPStaticIP(ctx context.Context, ifaceName st
 	}
 }
 
-// obtainIPAddress attempts to get an IP on the WiFi interface after nl80211 connect.
-// Tries dhclient/dhcpcd first; falls back to a static IP for Shelly AP provisioning.
+// obtainIPAddress assigns a static IP for the Shelly AP subnet on the WiFi
+// interface. Shelly devices in AP mode use 192.168.33.1, so we assign .10
+// to avoid conflicts with the device (.1) and typical DHCP range (.100+).
+//
+// We intentionally avoid running dhclient/dhcpcd because DHCP from the Shelly
+// AP overwrites /etc/resolv.conf with nameserver 192.168.33.1, which breaks
+// DNS on the host and is never restored after disconnect.
 //
 //nolint:gosec // G204: Interface name is from kernel, not user input
 func (s *platformWiFiScanner) obtainIPAddress(ctx context.Context, ifaceName string) {
-	// Try dhclient (most common DHCP client on Linux).
-	if hasCommand("dhclient") {
-		if err := exec.CommandContext(ctx, "dhclient", "-1", "-q", ifaceName).Run(); err == nil {
-			time.Sleep(1 * time.Second)
-			return
-		}
-	}
-
-	// Try dhcpcd (alternative DHCP client).
-	if hasCommand("dhcpcd") {
-		if err := exec.CommandContext(ctx, "dhcpcd", "-1", "-q", ifaceName).Run(); err == nil {
-			time.Sleep(1 * time.Second)
-			return
-		}
-	}
-
-	// No DHCP client available — assign a static IP for the Shelly AP subnet.
-	// Shelly devices in AP mode use 192.168.33.1 and serve DHCP on 192.168.33.0/24.
-	// Use .10 to avoid conflicts with the device (.1) and typical DHCP range (.100+).
 	staticIP := DefaultAPIP[:len(DefaultAPIP)-1] + "10/24"
 	if err := exec.CommandContext(ctx, "ip", "addr", "add", staticIP, "dev", ifaceName).Run(); err != nil {
 		// May fail if address already assigned — that's fine.
