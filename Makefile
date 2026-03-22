@@ -1,10 +1,13 @@
 # Shelly Go Library Makefile
 # Provides convenient commands for development and CI
 
-.PHONY: all test test-ci test-local test-integration test-coverage lint build clean help
+.PHONY: all ci test test-ci test-local test-integration test-coverage lint build clean help
 
 # Default target
 all: lint test build
+
+# Run the locally-available CI checks (mirrors the CI workflow)
+ci: build lint test-ci
 
 # =============================================================================
 # Testing
