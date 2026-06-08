@@ -1,0 +1,4 @@
+# Files to copy into new worktrees (see ~/.claude/commands/wt.md)
+# These are typically gitignored but useful per-worktree.
+CLAUDE.local.md
+.claude/settings.local.json

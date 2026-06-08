@@ -129,8 +129,8 @@ func (t *Temperature) SetConfig(ctx context.Context, config *TemperatureConfig) 
 		"id": t.id,
 	}
 	params := map[string]any{
-		"id":     t.id,
-		"config": configMap,
+		"id":        t.id,
+		paramConfig: configMap,
 	}
 
 	if config.Name != nil {

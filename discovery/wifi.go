@@ -26,6 +26,10 @@ const (
 	DefaultAPPort = 80
 )
 
+// msgNotConnected is the WiFiError message used when no active WiFi
+// association can be determined on any platform.
+const msgNotConnected = "not connected to any WiFi network"
+
 // ShellyAPPattern matches Shelly AP SSIDs.
 // Examples: shelly1-AABBCC, shellyplus1pm-123456, ShellyPro4PM-AABBCCDD
 var ShellyAPPattern = regexp.MustCompile(`(?i)^shelly[a-z0-9]*[-_]?[a-f0-9]+$`)
@@ -344,7 +348,7 @@ func (w *WiFiDiscoverer) applyGen2Info(device *WiFiDiscoveredDevice, info map[st
 	if name, ok := info["name"].(string); ok {
 		device.Name = name
 	}
-	if model, ok := info["model"].(string); ok {
+	if model, ok := info[fieldModel].(string); ok {
 		device.Model = model
 	}
 	if mac, ok := info["mac"].(string); ok {
@@ -353,7 +357,7 @@ func (w *WiFiDiscoverer) applyGen2Info(device *WiFiDiscoveredDevice, info map[st
 	if fw, ok := info["fw_id"].(string); ok {
 		device.Firmware = fw
 	}
-	if gen, ok := info["gen"].(float64); ok {
+	if gen, ok := info[fieldGen].(float64); ok {
 		device.Generation = types.Generation(int(gen))
 	}
 	if auth, ok := info["auth_en"].(bool); ok {
@@ -366,7 +370,7 @@ func (w *WiFiDiscoverer) applyGen2Info(device *WiFiDiscoveredDevice, info map[st
 
 // applyGen1Info applies Gen1 device info to a WiFiDiscoveredDevice.
 func (w *WiFiDiscoverer) applyGen1Info(device *WiFiDiscoveredDevice, info map[string]any) {
-	if model, ok := info["type"].(string); ok {
+	if model, ok := info[fieldType].(string); ok {
 		device.Model = model
 	}
 	if mac, ok := info["mac"].(string); ok {

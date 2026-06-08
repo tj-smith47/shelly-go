@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/tj-smith47/shelly-go/types"
 )
@@ -227,7 +228,7 @@ func (c *CoIoTDiscoverer) parsePayload(payload []byte, addr *net.UDPAddr) *Disco
 		}
 	}
 
-	if model, ok := status["type"].(string); ok {
+	if model, ok := status[fieldType].(string); ok {
 		device.Model = model
 	}
 
@@ -289,7 +290,9 @@ func isValidMAC(s string) bool {
 				return false
 			}
 		} else {
-			if !isHexDigit(byte(c)) {
+			// Reject non-ASCII runes outright: truncating them to a byte could
+			// alias a valid hex digit and yield a false-positive MAC match.
+			if c > unicode.MaxASCII || !isHexDigit(byte(c&0xFF)) {
 				return false
 			}
 		}

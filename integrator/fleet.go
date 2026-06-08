@@ -253,9 +253,9 @@ func (fm *FleetManager) SendRelayCommand(ctx context.Context, deviceID string, c
 	if on {
 		turn = turnOn
 	}
-	return fm.SendCommand(ctx, deviceID, "relay", map[string]any{
-		"id":   channel,
-		"turn": turn,
+	return fm.SendCommand(ctx, deviceID, actionRelay, map[string]any{
+		"id":      channel,
+		paramTurn: turn,
 	})
 }
 
@@ -271,20 +271,20 @@ func (fm *FleetManager) SendRollerCommand(ctx context.Context, deviceID string, 
 func (fm *FleetManager) SendRollerPosition(ctx context.Context, deviceID string, channel, position int) error {
 	return fm.SendCommand(ctx, deviceID, "roller", map[string]any{
 		"id":         channel,
-		"go":         "to_pos",
+		"go":         rollerGoToPos,
 		"roller_pos": position,
 	})
 }
 
 // SendLightCommand sends a light on/off command to a device.
 func (fm *FleetManager) SendLightCommand(ctx context.Context, deviceID string, channel int, on bool) error {
-	turn := "off"
+	turn := turnOff
 	if on {
-		turn = "on"
+		turn = turnOn
 	}
 	return fm.SendCommand(ctx, deviceID, "light", map[string]any{
-		"id":   channel,
-		"turn": turn,
+		"id":      channel,
+		paramTurn: turn,
 	})
 }
 
@@ -329,8 +329,8 @@ func (fm *FleetManager) AllRelaysOn(ctx context.Context) []BatchResult {
 		if isRelayDevice(devices[i].DeviceType) {
 			commands = append(commands, BatchCommand{
 				DeviceID: devices[i].DeviceID,
-				Action:   "relay",
-				Params:   map[string]any{"id": 0, "turn": "on"},
+				Action:   actionRelay,
+				Params:   map[string]any{"id": 0, paramTurn: turnOn},
 			})
 		}
 	}
@@ -347,8 +347,8 @@ func (fm *FleetManager) AllRelaysOff(ctx context.Context) []BatchResult {
 		if isRelayDevice(devices[i].DeviceType) {
 			commands = append(commands, BatchCommand{
 				DeviceID: devices[i].DeviceID,
-				Action:   "relay",
-				Params:   map[string]any{"id": 0, "turn": "off"},
+				Action:   actionRelay,
+				Params:   map[string]any{"id": 0, paramTurn: turnOff},
 			})
 		}
 	}
@@ -358,8 +358,8 @@ func (fm *FleetManager) AllRelaysOff(ctx context.Context) []BatchResult {
 
 func isRelayDevice(deviceType string) bool {
 	relayTypes := []string{
-		"SHSW-1", "SHSW-25", "SHSW-PM", "SHSW-44",
-		"SHPLG-S", "SHPLG-1", "SHPLG-U1", "SHPLG2-1",
+		deviceTypeSHSW1, deviceTypeSHSW25, "SHSW-PM", "SHSW-44",
+		deviceTypeSHPLGS, "SHPLG-1", "SHPLG-U1", "SHPLG2-1",
 		"SNSW-001", "SNSW-001P", "SNSW-002",
 		"SPSW-001", "SPSW-001PE", "SPSW-002PE",
 	}
@@ -509,12 +509,12 @@ func (fm *FleetManager) SendGroupCommand(ctx context.Context, groupID, action st
 
 // GroupRelaysOn turns on all relays in a group.
 func (fm *FleetManager) GroupRelaysOn(ctx context.Context, groupID string) []BatchResult {
-	return fm.SendGroupCommand(ctx, groupID, "relay", map[string]any{"id": 0, "turn": "on"})
+	return fm.SendGroupCommand(ctx, groupID, actionRelay, map[string]any{"id": 0, paramTurn: turnOn})
 }
 
 // GroupRelaysOff turns off all relays in a group.
 func (fm *FleetManager) GroupRelaysOff(ctx context.Context, groupID string) []BatchResult {
-	return fm.SendGroupCommand(ctx, groupID, "relay", map[string]any{"id": 0, "turn": "off"})
+	return fm.SendGroupCommand(ctx, groupID, actionRelay, map[string]any{"id": 0, paramTurn: turnOff})
 }
 
 // HealthMonitor tracks device health metrics.

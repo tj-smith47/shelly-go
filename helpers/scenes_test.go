@@ -134,10 +134,8 @@ func TestSceneClear(t *testing.T) {
 // TestSceneResults tests the SceneResults helper methods.
 func TestSceneResults(t *testing.T) {
 	t.Run("AllSuccessful", func(t *testing.T) {
-		results := SceneResults{
-			{Success: true},
-			{Success: true},
-		}
+		results := make(SceneResults, 0, 3)
+		results = append(results, SceneResult{Success: true}, SceneResult{Success: true})
 		if !results.AllSuccessful() {
 			t.Errorf("AllSuccessful() should return true")
 		}

@@ -316,14 +316,14 @@ func (s *platformWiFiScanner) parseNetshInterfaces(output string) (*WiFiNetwork,
 			if len(parts) == 2 {
 				state := strings.TrimSpace(parts[1])
 				if state != "connected" {
-					return nil, &WiFiError{Message: "not connected to any WiFi network"}
+					return nil, &WiFiError{Message: msgNotConnected}
 				}
 			}
 		}
 	}
 
 	if network.SSID == "" {
-		return nil, &WiFiError{Message: "not connected to any WiFi network"}
+		return nil, &WiFiError{Message: msgNotConnected}
 	}
 
 	return network, nil

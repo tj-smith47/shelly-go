@@ -70,6 +70,47 @@ func TestIdentify_Gen2Device(t *testing.T) {
 	}
 }
 
+// TestIdentify_HTTPSSelfSigned verifies that identification over https://
+// skips TLS verification, since Shelly devices ship self-signed certs.
+// httptest.NewTLSServer serves such a cert; without InsecureSkipVerify the
+// probe fails with a certificate verification error.
+func TestIdentify_HTTPSSelfSigned(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/shelly" {
+			http.NotFound(w, r)
+			return
+		}
+
+		response := gen2ShellyResponse{
+			Name:      "Test Device",
+			ID:        "shellyplus1-abc123",
+			MAC:       "AA:BB:CC:DD:EE:FF",
+			Model:     "SNSW-001P16EU",
+			Gen:       2,
+			FWVersion: "1.0.0-beta1",
+			App:       "Plus1",
+			AuthEn:    false,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	info, err := Identify(context.Background(), server.URL)
+	if err != nil {
+		t.Fatalf("Identify() over https error = %v", err)
+	}
+
+	if info.ID != "shellyplus1-abc123" {
+		t.Errorf("ID = %v, want 'shellyplus1-abc123'", info.ID)
+	}
+
+	if info.Generation != types.Gen2 {
+		t.Errorf("Generation = %v, want Gen2", info.Generation)
+	}
+}
+
 func TestIdentify_Gen3Device(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		response := gen2ShellyResponse{

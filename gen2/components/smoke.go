@@ -121,8 +121,8 @@ func (s *Smoke) SetConfig(ctx context.Context, config *SmokeConfig) error {
 		"id": s.id,
 	}
 	params := map[string]any{
-		"id":     s.id,
-		"config": configMap,
+		"id":        s.id,
+		paramConfig: configMap,
 	}
 
 	if config.Name != nil {

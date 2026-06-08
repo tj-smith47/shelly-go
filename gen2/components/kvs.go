@@ -117,8 +117,8 @@ type KVSDeleteResponse struct {
 //	}
 func (k *KVS) Set(ctx context.Context, key string, value any) (*KVSSetResponse, error) {
 	params := map[string]any{
-		"key":   key,
-		"value": value,
+		paramKey:   key,
+		paramValue: value,
 	}
 
 	resultJSON, err := k.client.Call(ctx, "KVS.Set", params)
@@ -153,9 +153,9 @@ func (k *KVS) Set(ctx context.Context, key string, value any) (*KVSSetResponse, 
 //	result, err := kvs.SetWithEtag(ctx, "counter", newValue, current.Etag)
 func (k *KVS) SetWithEtag(ctx context.Context, key string, value any, etag string) (*KVSSetResponse, error) {
 	params := map[string]any{
-		"key":   key,
-		"value": value,
-		"etag":  etag,
+		paramKey:   key,
+		paramValue: value,
+		"etag":     etag,
 	}
 
 	resultJSON, err := k.client.Call(ctx, "KVS.Set", params)
@@ -184,7 +184,7 @@ func (k *KVS) SetWithEtag(ctx context.Context, key string, value any, etag strin
 //	}
 func (k *KVS) Get(ctx context.Context, key string) (*KVSGetResponse, error) {
 	params := map[string]any{
-		"key": key,
+		paramKey: key,
 	}
 
 	resultJSON, err := k.client.Call(ctx, "KVS.Get", params)
@@ -270,7 +270,7 @@ func (k *KVS) List(ctx context.Context) (*KVSListResponse, error) {
 //	}
 func (k *KVS) Delete(ctx context.Context, key string) (*KVSDeleteResponse, error) {
 	params := map[string]any{
-		"key": key,
+		paramKey: key,
 	}
 
 	resultJSON, err := k.client.Call(ctx, "KVS.Delete", params)

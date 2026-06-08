@@ -8,6 +8,12 @@ import (
 	"github.com/tj-smith47/shelly-go/types"
 )
 
+// RPC parameter keys used across Shelly namespace requests.
+const (
+	paramKeyName = "name"
+	paramKeyData = "data"
+)
+
 // Shelly provides access to device-level operations via the Shelly namespace.
 //
 // The Shelly namespace contains methods for device information, system
@@ -333,7 +339,7 @@ func (s *Shelly) ListProfiles(ctx context.Context) ([]string, error) {
 // WARNING: Changing the profile may reset device configuration!
 func (s *Shelly) SetProfile(ctx context.Context, name string) error {
 	params := map[string]any{
-		"name": name,
+		paramKeyName: name,
 	}
 
 	_, err := s.client.Call(ctx, "Shelly.SetProfile", params)
@@ -347,8 +353,8 @@ func (s *Shelly) SetProfile(ctx context.Context, name string) error {
 //   - appendCA: If true, append to existing CAs; if false, replace
 func (s *Shelly) PutUserCA(ctx context.Context, data string, appendCA bool) error {
 	params := map[string]any{
-		"data":   data,
-		"append": appendCA,
+		paramKeyData: data,
+		"append":     appendCA,
 	}
 
 	_, err := s.client.Call(ctx, "Shelly.PutUserCA", params)
@@ -361,7 +367,7 @@ func (s *Shelly) PutUserCA(ctx context.Context, data string, appendCA bool) erro
 //   - data: PEM-encoded client certificate
 func (s *Shelly) PutTLSClientCert(ctx context.Context, data string) error {
 	params := map[string]any{
-		"data": data,
+		paramKeyData: data,
 	}
 
 	_, err := s.client.Call(ctx, "Shelly.PutTLSClientCert", params)
@@ -374,7 +380,7 @@ func (s *Shelly) PutTLSClientCert(ctx context.Context, data string) error {
 //   - data: PEM-encoded private key
 func (s *Shelly) PutTLSClientKey(ctx context.Context, data string) error {
 	params := map[string]any{
-		"data": data,
+		paramKeyData: data,
 	}
 
 	_, err := s.client.Call(ctx, "Shelly.PutTLSClientKey", params)

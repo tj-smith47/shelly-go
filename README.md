@@ -20,7 +20,7 @@ A comprehensive, production-ready Go library for controlling Shelly smart home d
 - **🎨 Extensible Architecture** - Easy to add new devices and components
 - **🧪 Thoroughly Tested** - 90% test coverage with comprehensive unit and integration tests
 - **📚 Well Documented** - Complete godoc documentation with runnable examples
-- **⚡ Modern Go** - Built for Go 1.25.5+ with latest features
+- **⚡ Modern Go** - Built for Go 1.26.4+ with latest features
 
 ## Installation
 
@@ -28,7 +28,7 @@ A comprehensive, production-ready Go library for controlling Shelly smart home d
 go get github.com/tj-smith47/shelly-go
 ```
 
-Requires Go 1.25.5 or later.
+Requires Go 1.26.4 or later.
 
 ## Quick Start
 

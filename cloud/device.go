@@ -17,6 +17,9 @@ const (
 	endpointLightControl      = "/device/light/control"
 	endpointV2DevicesGet      = "/v2/devices/api/get"
 	endpointV2DevicesSetGroup = "/v2/devices/api/set/groups"
+
+	// turnToggle is the relay/switch action that flips the current on/off state.
+	turnToggle = "toggle"
 )
 
 // GetAllDevices returns all devices associated with the account.
@@ -136,7 +139,7 @@ func (c *Client) ToggleSwitch(ctx context.Context, deviceID string, channel int)
 	params := url.Values{}
 	params.Set("id", deviceID)
 	params.Set("channel", fmt.Sprintf("%d", channel))
-	params.Set("turn", "toggle")
+	params.Set("turn", turnToggle)
 
 	_, err := c.doGet(ctx, endpointSwitchControl, params)
 	return err
@@ -224,7 +227,7 @@ func (c *Client) ToggleLight(ctx context.Context, deviceID string, channel int) 
 	params := url.Values{}
 	params.Set("id", deviceID)
 	params.Set("channel", fmt.Sprintf("%d", channel))
-	params.Set("turn", "toggle")
+	params.Set("turn", turnToggle)
 
 	_, err := c.doGet(ctx, endpointLightControl, params)
 	return err
@@ -352,7 +355,7 @@ func (c *Client) SetSwitchGroup(ctx context.Context, deviceChannels []string, on
 func (c *Client) ToggleSwitchGroup(ctx context.Context, deviceChannels []string) error {
 	req := &GroupControlRequest{
 		Switches: []GroupSwitch{
-			{IDs: deviceChannels, Turn: "toggle"},
+			{IDs: deviceChannels, Turn: turnToggle},
 		},
 	}
 
@@ -436,7 +439,7 @@ func (c *Client) SetLightGroup(ctx context.Context, deviceChannels []string, on 
 func (c *Client) ToggleLightGroup(ctx context.Context, deviceChannels []string) error {
 	req := &GroupControlRequest{
 		Lights: []GroupLight{
-			{IDs: deviceChannels, Turn: "toggle"},
+			{IDs: deviceChannels, Turn: turnToggle},
 		},
 	}
 

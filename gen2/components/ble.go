@@ -145,7 +145,7 @@ func (b *BLE) GetConfig(ctx context.Context) (*BLEConfig, error) {
 //	})
 func (b *BLE) SetConfig(ctx context.Context, config *BLEConfig) error {
 	params := map[string]any{
-		"config": config,
+		paramConfig: config,
 	}
 
 	_, err := b.client.Call(ctx, "BLE.SetConfig", params)

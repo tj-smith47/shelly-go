@@ -245,9 +245,9 @@ func (m *MQTT) Call(ctx context.Context, rpcReq RPCRequest) (json.RawMessage, er
 
 	// Build request body from RPCRequest interface
 	reqBody := map[string]any{
-		"id":     rpcReq.GetID(),
-		"src":    m.src,
-		"method": rpcReq.GetMethod(),
+		"id":           rpcReq.GetID(),
+		rpcFieldSrc:    m.src,
+		rpcFieldMethod: rpcReq.GetMethod(),
 	}
 
 	// Unmarshal params from json.RawMessage and add to request

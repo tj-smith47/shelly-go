@@ -167,9 +167,9 @@ func (s *Schedule) List(ctx context.Context) (*ScheduleListResponse, error) {
 //	})
 func (s *Schedule) Create(ctx context.Context, req *ScheduleCreateRequest) (*ScheduleCreateResponse, error) {
 	params := map[string]any{
-		"enable":   req.Enable,
-		"timespec": req.Timespec,
-		"calls":    req.Calls,
+		paramEnable: req.Enable,
+		"timespec":  req.Timespec,
+		"calls":     req.Calls,
 	}
 
 	resultJSON, err := s.client.Call(ctx, "Schedule.Create", params)
@@ -209,7 +209,7 @@ func (s *Schedule) Update(ctx context.Context, req *ScheduleUpdateRequest) (*Sch
 	}
 
 	if req.Enable != nil {
-		params["enable"] = *req.Enable
+		params[paramEnable] = *req.Enable
 	}
 	if req.Timespec != nil {
 		params["timespec"] = *req.Timespec

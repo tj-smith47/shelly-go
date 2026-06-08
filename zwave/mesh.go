@@ -1,5 +1,8 @@
 package zwave
 
+// groupBasicSet is the name of the Z-Wave Basic Set association group.
+const groupBasicSet = "Basic Set"
+
 // NodeInfo contains information about a Z-Wave node in the network.
 type NodeInfo struct {
 	Model       string
@@ -55,7 +58,7 @@ func CommonAssociationGroups() []AssociationGroup {
 		},
 		{
 			ID:       2,
-			Name:     "Basic Set",
+			Name:     groupBasicSet,
 			MaxNodes: 5,
 			Profile:  "Sends Basic Set commands when switch state changes",
 		},

@@ -161,9 +161,9 @@ func (h *HTTP) doCall(ctx context.Context, rpcReq RPCRequest) (json.RawMessage, 
 func (h *HTTP) buildRPCRequest(ctx context.Context, rpcReq RPCRequest) (*http.Request, error) {
 	// Build the JSON-RPC 2.0 request body
 	reqBody := map[string]any{
-		"id":      rpcReq.GetID(),
-		"jsonrpc": rpcReq.GetJSONRPC(),
-		"method":  rpcReq.GetMethod(),
+		"id":           rpcReq.GetID(),
+		"jsonrpc":      rpcReq.GetJSONRPC(),
+		rpcFieldMethod: rpcReq.GetMethod(),
 	}
 
 	// Unmarshal params from json.RawMessage and add to request

@@ -1,0 +1,258 @@
+# Shelly Go Library — task runner (https://taskfile.dev)
+# Run `task` (or `task --list`) to see available tasks.
+version: "3"
+
+vars:
+  GO_VERSION: "1.26.4"
+  COVERAGE_FILE: coverage.out
+  COVERAGE_HTML: coverage.html
+  LINT_TIMEOUT: 5m
+  # Pinned to match CI (.github/workflows/ci.yml). Keep in sync.
+  GOLANGCI_VERSION: v2.12.2
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  all:
+    desc: Lint, test, and build (local quality gate)
+    aliases: [check]
+    cmds:
+      - task: lint
+      - task: test
+      - task: build
+
+  ci:
+    desc: Run the locally-reproducible CI checks (mirrors the CI workflow)
+    cmds:
+      - task: build
+      - task: lint
+      - task: test:ci
+
+  # ===========================================================================
+  # Build
+  # ===========================================================================
+  build:
+    desc: Build all packages
+    aliases: [b]
+    sources:
+      - "**/*.go"
+      - go.mod
+      - go.sum
+    cmds:
+      - go build ./...
+
+  build:examples:
+    desc: Build every example program
+    cmds:
+      - |
+        for dir in examples/basic/* examples/cloud/* examples/advanced/* examples/discovery/*; do
+          if [ -d "$dir" ]; then
+            echo "Building $dir..."
+            go build ./"$dir" || exit 1
+          fi
+        done
+
+  # ===========================================================================
+  # Testing
+  # ===========================================================================
+  test:
+    desc: Run unit tests with the race detector (pass extra args after --, e.g. task test -- -run TestX -v)
+    aliases: [t]
+    cmds:
+      - go test -race {{.CLI_ARGS}} ./...
+
+  test:ci:
+    desc: Run tests in CI mode (SHELLY_CI=1) with atomic coverage
+    env:
+      SHELLY_CI: "1"
+    cmds:
+      - go test -race {{.CLI_ARGS}} -coverprofile={{.COVERAGE_FILE}} -covermode=atomic ./...
+
+  test:local:
+    desc: Run tests locally, optionally against real devices (GEN2=<ip> GEN1=<ip>)
+    env:
+      SHELLY_TEST_GEN2_ADDR: "{{.GEN2}}"
+      SHELLY_TEST_GEN1_ADDR: "{{.GEN1}}"
+    cmds:
+      - go test -race {{.CLI_ARGS}} -coverprofile={{.COVERAGE_FILE}} ./...
+
+  test:integration:
+    desc: Run integration tests against a real device (GEN2=<ip> [GEN1=<ip>] [ACTUATE=1])
+    requires:
+      vars: [GEN2]
+    env:
+      SHELLY_INTEGRATION_TESTS: "1"
+      SHELLY_TEST_GEN2_ADDR: "{{.GEN2}}"
+      SHELLY_TEST_GEN1_ADDR: "{{.GEN1}}"
+      SHELLY_TEST_ACTUATE: "{{.ACTUATE}}"
+    cmds:
+      - go test -tags=integration ./internal/testutil/integration/...
+
+  test:cloud:
+    desc: Run Cloud API integration tests (EMAIL=<email> PASSWORD=<pass>)
+    requires:
+      vars: [EMAIL, PASSWORD]
+    env:
+      SHELLY_INTEGRATION_TESTS: "1"
+      SHELLY_TEST_CLOUD_EMAIL: "{{.EMAIL}}"
+      SHELLY_TEST_CLOUD_PASSWORD: "{{.PASSWORD}}"
+    cmds:
+      - go test -tags=integration ./internal/testutil/integration/cloud_test.go
+
+  test:pkg:
+    desc: Test a single package (PKG=gen2/components)
+    requires:
+      vars: [PKG]
+    cmds:
+      - go test -race -coverprofile={{.COVERAGE_FILE}} ./{{.PKG}}/...
+      - go tool cover -func={{.COVERAGE_FILE}} | grep -E '^total:|{{.PKG}}'
+
+  test:coverage:
+    desc: Run tests and print a per-function coverage report
+    sources:
+      - "**/*.go"
+    generates:
+      - "{{.COVERAGE_FILE}}"
+    method: checksum
+    cmds:
+      - go test -race -coverprofile={{.COVERAGE_FILE}} -covermode=atomic ./...
+      - go tool cover -func={{.COVERAGE_FILE}}
+      - cmd: echo "HTML report -> task test:coverage:html"
+        silent: true
+
+  test:coverage:html:
+    desc: Generate an HTML coverage report
+    deps: [test:coverage]
+    sources:
+      - "{{.COVERAGE_FILE}}"
+    generates:
+      - "{{.COVERAGE_HTML}}"
+    method: checksum
+    cmds:
+      - go tool cover -html={{.COVERAGE_FILE}} -o {{.COVERAGE_HTML}}
+      - cmd: echo "Coverage report generated -> {{.COVERAGE_HTML}}"
+        silent: true
+
+  bench:
+    desc: Run benchmarks (PKG=./... by default, e.g. PKG=./gen2)
+    vars:
+      PKG: '{{.PKG | default "./..."}}'
+    cmds:
+      - go test -run=^$ -bench=. -benchmem {{.PKG}}
+
+  # ===========================================================================
+  # Code Quality
+  # ===========================================================================
+  lint:
+    desc: Run golangci-lint
+    aliases: [l]
+    cmds:
+      - golangci-lint run --timeout={{.LINT_TIMEOUT}}
+
+  lint:fix:
+    desc: Run golangci-lint with auto-fix
+    cmds:
+      - golangci-lint run --fix --timeout={{.LINT_TIMEOUT}}
+
+  fmt:
+    desc: Format code (go fmt + gofumpt)
+    cmds:
+      - go fmt ./...
+      - gofumpt -w .
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  vuln:
+    desc: Scan for known vulnerabilities (govulncheck)
+    cmds:
+      - go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  # ===========================================================================
+  # Dependencies & Tooling
+  # ===========================================================================
+  deps:
+    desc: Download and verify module dependencies
+    sources:
+      - go.mod
+      - go.sum
+    cmds:
+      - go mod download
+      - go mod verify
+
+  deps:tidy:
+    desc: Tidy go.mod / go.sum
+    cmds:
+      - go mod tidy
+
+  deps:outdated:
+    desc: List dependencies with newer versions available
+    cmds:
+      # `go list -u` appends "[newer]" to modules with an available update.
+      - go list -u -m all 2>/dev/null | grep -F '[' || echo "All dependencies up to date"
+
+  tools:install:
+    desc: Install pinned dev tools (golangci-lint, gofumpt, govulncheck)
+    cmds:
+      - go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@{{.GOLANGCI_VERSION}}
+      - go install mvdan.cc/gofumpt@latest
+      - go install golang.org/x/vuln/cmd/govulncheck@latest
+    status:
+      - command -v golangci-lint
+      - command -v gofumpt
+      - command -v govulncheck
+
+  # ===========================================================================
+  # Go toolchain
+  # ===========================================================================
+  go:upgrade:*:
+    desc: Bump the Go version across go.mod, CI workflows, docs & this Taskfile (task go:upgrade:1.27.0)
+    vars:
+      VERSION: "{{index .MATCH 0}}"
+    cmds:
+      - go mod edit -go={{.VERSION}}
+      - |
+        # Pinned go-version in GitHub Actions workflows (handles "x", ["x"], unquoted).
+        for wf in .github/workflows/*.yml; do
+          [ -f "$wf" ] || continue
+          sed -i -E 's/(go-version:[[:space:]]*\[?"?)[0-9]+\.[0-9]+(\.[0-9]+)?/\1{{.VERSION}}/g' "$wf"
+        done
+      - |
+        # "Go x.y.z" requirement references in docs.
+        for f in README.md CONTRIBUTING.md examples/README.md; do
+          [ -f "$f" ] && sed -i -E 's/Go [0-9]+\.[0-9]+\.[0-9]+/Go {{.VERSION}}/g' "$f"
+        done
+      - sed -i -E 's/(GO_VERSION:[[:space:]]*")[0-9]+\.[0-9]+\.[0-9]+/\1{{.VERSION}}/' Taskfile.yml
+      - go mod tidy
+      - cmd: echo "Go -> {{.VERSION}}. Review 'git diff', then run 'task ci'."
+        silent: true
+
+  # ===========================================================================
+  # Documentation & Helpers
+  # ===========================================================================
+  docs:
+    desc: Serve godoc locally at http://localhost:6060
+    cmds:
+      - cmd: echo "godoc -> http://localhost:6060/pkg/github.com/tj-smith47/shelly-go/"
+        silent: true
+      - godoc -http=:6060
+
+  discover:
+    desc: Discover Shelly devices on the local network (requires network access)
+    cmds:
+      - go run examples/discovery/mdns/main.go
+
+  clean:
+    desc: Remove build and coverage artifacts
+    cmds:
+      - go clean
+      - rm -f {{.COVERAGE_FILE}} {{.COVERAGE_HTML}}
+    status:
+      - test ! -f {{.COVERAGE_FILE}}
+      - test ! -f {{.COVERAGE_HTML}}

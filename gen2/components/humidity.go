@@ -128,8 +128,8 @@ func (h *Humidity) SetConfig(ctx context.Context, config *HumidityConfig) error 
 		"id": h.id,
 	}
 	params := map[string]any{
-		"id":     h.id,
-		"config": configMap,
+		"id":        h.id,
+		paramConfig: configMap,
 	}
 
 	if config.Name != nil {

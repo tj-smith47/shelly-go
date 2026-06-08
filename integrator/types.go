@@ -134,6 +134,9 @@ func DefaultConnectOptions() *ConnectOptions {
 	}
 }
 
+// statusUnknown is the string used for unrecognized enum/state values.
+const statusUnknown = "unknown"
+
 // AccessGroup represents the access level granted to the integrator.
 type AccessGroup byte
 
@@ -153,7 +156,7 @@ func (a AccessGroup) String() string {
 	case AccessGroupControl:
 		return "control"
 	default:
-		return "unknown"
+		return statusUnknown
 	}
 }
 
@@ -176,6 +179,20 @@ const (
 	EventOnline EventType = "Shelly:Online"
 )
 
+// Known Shelly cloud server hostnames shared across regions and defaults.
+const (
+	hostShelly13EU = "shelly-13-eu.shelly.cloud"
+	hostShelly14EU = "shelly-14-eu.shelly.cloud"
+	hostShelly13US = "shelly-13-us.shelly.cloud"
+)
+
+// Common Shelly device type identifiers referenced across the package.
+const (
+	deviceTypeSHSW1  = "SHSW-1"
+	deviceTypeSHSW25 = "SHSW-25"
+	deviceTypeSHPLGS = "SHPLG-S"
+)
+
 // CloudServer represents a Shelly cloud server region.
 type CloudServer struct {
 	// Host is the server hostname.
@@ -191,10 +208,10 @@ type CloudServer struct {
 // DefaultCloudServers returns a list of known Shelly cloud servers.
 func DefaultCloudServers() []CloudServer {
 	return []CloudServer{
-		{Host: "shelly-13-eu.shelly.cloud", Region: "eu", WSPort: 6113},
-		{Host: "shelly-14-eu.shelly.cloud", Region: "eu", WSPort: 6113},
+		{Host: hostShelly13EU, Region: "eu", WSPort: 6113},
+		{Host: hostShelly14EU, Region: "eu", WSPort: 6113},
 		{Host: "shelly-15-eu.shelly.cloud", Region: "eu", WSPort: 6113},
-		{Host: "shelly-13-us.shelly.cloud", Region: "us", WSPort: 6113},
+		{Host: hostShelly13US, Region: "us", WSPort: 6113},
 		{Host: "shelly-14-us.shelly.cloud", Region: "us", WSPort: 6113},
 	}
 }

@@ -266,12 +266,12 @@ func (ma *MultiRegionAuth) Regions() []string {
 // SetupDefaultRegions configures the default EU and US regions.
 func (ma *MultiRegionAuth) SetupDefaultRegions() {
 	ma.AddRegion("eu", "https://api.shelly.cloud", []string{
-		"shelly-13-eu.shelly.cloud",
-		"shelly-14-eu.shelly.cloud",
+		hostShelly13EU,
+		hostShelly14EU,
 		"shelly-15-eu.shelly.cloud",
 	})
 	ma.AddRegion("us", "https://api.shelly.cloud", []string{
-		"shelly-13-us.shelly.cloud",
+		hostShelly13US,
 		"shelly-14-us.shelly.cloud",
 	})
 }

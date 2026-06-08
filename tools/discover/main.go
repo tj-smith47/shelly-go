@@ -733,7 +733,12 @@ func buildMDNSQuery(name string) []byte {
 	}
 	qname := make([]byte, 0, qnameLen)
 	for _, part := range parts {
-		qname = append(qname, byte(len(part)))
+		// DNS labels are limited to 63 bytes; skip any over-long label so the
+		// length byte cannot overflow and corrupt the packet.
+		if len(part) > 63 {
+			continue
+		}
+		qname = append(qname, byte(len(part)&0xFF))
 		qname = append(qname, []byte(part)...)
 	}
 	qname = append(qname, 0x00) // Null terminator

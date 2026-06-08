@@ -209,8 +209,8 @@ func (s *Script) GetConfig(ctx context.Context, id int) (*ScriptConfig, error) {
 //	})
 func (s *Script) SetConfig(ctx context.Context, id int, config *ScriptConfig) error {
 	params := map[string]any{
-		"id":     id,
-		"config": config,
+		"id":        id,
+		paramConfig: config,
 	}
 
 	_, err := s.client.Call(ctx, "Script.SetConfig", params)

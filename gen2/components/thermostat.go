@@ -172,7 +172,7 @@ func (t *Thermostat) SetConfig(ctx context.Context, config *ThermostatConfig) er
 	configMap := make(map[string]any)
 
 	if config.Enable != nil {
-		configMap["enable"] = *config.Enable
+		configMap[paramEnable] = *config.Enable
 	}
 	if config.TargetC != nil {
 		configMap["target_C"] = *config.TargetC
@@ -225,8 +225,8 @@ func (t *Thermostat) SetConfig(ctx context.Context, config *ThermostatConfig) er
 	}
 
 	params := map[string]any{
-		"id":     t.id,
-		"config": configMap,
+		"id":        t.id,
+		paramConfig: configMap,
 	}
 
 	_, err := t.client.Call(ctx, "Thermostat.SetConfig", params)

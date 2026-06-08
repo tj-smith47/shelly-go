@@ -269,7 +269,7 @@ func (s *Sys) GetConfig(ctx context.Context) (*SysConfig, error) {
 //	})
 func (s *Sys) SetConfig(ctx context.Context, config *SysConfig) error {
 	params := map[string]any{
-		"config": config,
+		paramConfig: config,
 	}
 
 	_, err := s.client.Call(ctx, "Sys.SetConfig", params)

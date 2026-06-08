@@ -225,7 +225,7 @@ func (s *platformWiFiScanner) CurrentNetwork(ctx context.Context) (*WiFiNetwork,
 		}
 	}
 
-	return nil, &WiFiError{Message: "not connected to any WiFi network"}
+	return nil, &WiFiError{Message: msgNotConnected}
 }
 
 // parseAirportInfo parses the output of airport -I.
@@ -258,7 +258,7 @@ func (s *platformWiFiScanner) parseAirportInfo(output string) (*WiFiNetwork, err
 	}
 
 	if network.SSID == "" {
-		return nil, &WiFiError{Message: "not connected to any WiFi network"}
+		return nil, &WiFiError{Message: msgNotConnected}
 	}
 
 	return network, nil

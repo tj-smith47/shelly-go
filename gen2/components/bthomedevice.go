@@ -138,8 +138,8 @@ type BTHomeDeviceSetConfigRequest struct {
 //	})
 func (d *BTHomeDevice) SetConfig(ctx context.Context, config *BTHomeDeviceSetConfigRequest) error {
 	params := map[string]any{
-		"id":     d.id,
-		"config": config,
+		"id":        d.id,
+		paramConfig: config,
 	}
 
 	_, err := d.client.Call(ctx, "BTHomeDevice.SetConfig", params)

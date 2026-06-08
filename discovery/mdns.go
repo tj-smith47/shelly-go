@@ -13,6 +13,17 @@ import (
 // MDNSService is the mDNS service type for Shelly devices.
 const MDNSService = "_shelly._tcp.local."
 
+// Device field keys shared across mDNS TXT records, Gen1/Gen2 HTTP responses,
+// and CoIoT status payloads.
+const (
+	fieldGen   = "gen"
+	fieldApp   = "app"
+	fieldVer   = "ver"
+	fieldAuth  = "auth"
+	fieldType  = "type"
+	fieldModel = "model"
+)
+
 // MDNSDiscoverer discovers Shelly devices via mDNS/Zeroconf.
 //
 // Gen2+ Shelly devices advertise themselves using mDNS with the
@@ -148,7 +159,7 @@ func (m *MDNSDiscoverer) buildDNSQuery(name string, qtype uint16) []byte {
 	// Question section
 	// Name encoding
 	for _, label := range strings.Split(strings.TrimSuffix(name, "."), ".") {
-		msg = append(msg, byte(len(label)))
+		msg = append(msg, byte(len(label)&0xFF))
 		msg = append(msg, []byte(label)...)
 	}
 	// Null terminator + QTYPE (2 bytes) + QCLASS IN=1 (2 bytes)
@@ -323,7 +334,7 @@ func (m *MDNSDiscoverer) parseTXTRecord(rdata []byte, device *DiscoveredDevice) 
 			value := kv[eqIdx+1:]
 
 			switch key {
-			case "gen":
+			case fieldGen:
 				switch value {
 				case "1":
 					device.Generation = types.Gen1
@@ -332,15 +343,15 @@ func (m *MDNSDiscoverer) parseTXTRecord(rdata []byte, device *DiscoveredDevice) 
 				case "3":
 					device.Generation = types.Gen3
 				}
-			case "app", "model":
+			case fieldApp, fieldModel:
 				if device.Model == "" {
 					device.Model = value
 				}
-			case "ver", "fw":
+			case fieldVer, "fw":
 				if device.Firmware == "" {
 					device.Firmware = value
 				}
-			case "auth":
+			case fieldAuth:
 				device.AuthRequired = value == "1"
 			}
 		}

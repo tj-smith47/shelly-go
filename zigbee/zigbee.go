@@ -515,28 +515,52 @@ const (
 	ClusterShellyWiFiSetup uint16 = 0xFC02
 )
 
+// Zigbee attribute/command data type names, command directions, cluster names,
+// component types, and attribute names used throughout ClusterMapping.
+const (
+	typeBool    = "bool"
+	typeInt16   = "int16"
+	typeUint8   = "uint8"
+	typeUint16  = "uint16"
+	typeEnum8   = "enum8"
+	typeBitmap8 = "bitmap8"
+
+	directionClientToServer = "client_to_server"
+
+	clusterNameOnOff          = "On/Off"
+	clusterNameWindowCovering = "Window Covering"
+	clusterNameThermostat     = "Thermostat"
+
+	componentTypeSwitch = "switch"
+
+	attrNameOnOff            = "OnOff"
+	attrNameMeasuredValue    = "MeasuredValue"
+	attrNameMinMeasuredValue = "MinMeasuredValue"
+	attrNameMaxMeasuredValue = "MaxMeasuredValue"
+)
+
 // ClusterMapping maps Zigbee clusters to Shelly component types.
 // This allows translating between Zigbee cluster capabilities and
 // the corresponding Shelly device components.
 var ClusterMapping = map[uint16]ClusterCapability{
 	ClusterOnOff: {
 		ClusterID:     ClusterOnOff,
-		ClusterName:   "On/Off",
-		ComponentType: "switch",
+		ClusterName:   clusterNameOnOff,
+		ComponentType: componentTypeSwitch,
 		Attributes: []ClusterAttribute{
-			{ID: 0x0000, Name: "OnOff", Type: "bool", Readable: true, Writable: false,
+			{ID: 0x0000, Name: attrNameOnOff, Type: typeBool, Readable: true, Writable: false,
 				Reportable: true},
-			{ID: 0x4000, Name: "GlobalSceneControl", Type: "bool", Readable: true,
+			{ID: 0x4000, Name: "GlobalSceneControl", Type: typeBool, Readable: true,
 				Writable: false, Reportable: false},
-			{ID: 0x4001, Name: "OnTime", Type: "uint16", Readable: true, Writable: true,
+			{ID: 0x4001, Name: "OnTime", Type: typeUint16, Readable: true, Writable: true,
 				Reportable: false},
-			{ID: 0x4002, Name: "OffWaitTime", Type: "uint16", Readable: true, Writable: true,
+			{ID: 0x4002, Name: "OffWaitTime", Type: typeUint16, Readable: true, Writable: true,
 				Reportable: false},
 		},
 		Commands: []ClusterCommand{
-			{ID: 0x00, Name: "Off", Direction: "client_to_server"},
-			{ID: 0x01, Name: "On", Direction: "client_to_server"},
-			{ID: 0x02, Name: "Toggle", Direction: "client_to_server"},
+			{ID: 0x00, Name: "Off", Direction: directionClientToServer},
+			{ID: 0x01, Name: "On", Direction: directionClientToServer},
+			{ID: 0x02, Name: "Toggle", Direction: directionClientToServer},
 		},
 	},
 	ClusterLevelControl: {
@@ -544,21 +568,21 @@ var ClusterMapping = map[uint16]ClusterCapability{
 		ClusterName:   "Level Control",
 		ComponentType: "light",
 		Attributes: []ClusterAttribute{
-			{ID: 0x0000, Name: "CurrentLevel", Type: "uint8", Readable: true, Writable: false,
+			{ID: 0x0000, Name: "CurrentLevel", Type: typeUint8, Readable: true, Writable: false,
 				Reportable: true},
-			{ID: 0x0001, Name: "RemainingTime", Type: "uint16", Readable: true, Writable: false,
+			{ID: 0x0001, Name: "RemainingTime", Type: typeUint16, Readable: true, Writable: false,
 				Reportable: false},
-			{ID: 0x0010, Name: "OnOffTransitionTime", Type: "uint16", Readable: true,
+			{ID: 0x0010, Name: "OnOffTransitionTime", Type: typeUint16, Readable: true,
 				Writable: true, Reportable: false},
-			{ID: 0x0011, Name: "OnLevel", Type: "uint8", Readable: true, Writable: true,
+			{ID: 0x0011, Name: "OnLevel", Type: typeUint8, Readable: true, Writable: true,
 				Reportable: false},
 		},
 		Commands: []ClusterCommand{
-			{ID: 0x00, Name: "MoveToLevel", Direction: "client_to_server"},
-			{ID: 0x01, Name: "Move", Direction: "client_to_server"},
-			{ID: 0x02, Name: "Step", Direction: "client_to_server"},
-			{ID: 0x03, Name: "Stop", Direction: "client_to_server"},
-			{ID: 0x04, Name: "MoveToLevelWithOnOff", Direction: "client_to_server"},
+			{ID: 0x00, Name: "MoveToLevel", Direction: directionClientToServer},
+			{ID: 0x01, Name: "Move", Direction: directionClientToServer},
+			{ID: 0x02, Name: "Step", Direction: directionClientToServer},
+			{ID: 0x03, Name: "Stop", Direction: directionClientToServer},
+			{ID: 0x04, Name: "MoveToLevelWithOnOff", Direction: directionClientToServer},
 		},
 	},
 	ClusterColorControl: {
@@ -566,50 +590,50 @@ var ClusterMapping = map[uint16]ClusterCapability{
 		ClusterName:   "Color Control",
 		ComponentType: "rgb",
 		Attributes: []ClusterAttribute{
-			{ID: 0x0000, Name: "CurrentHue", Type: "uint8", Readable: true, Writable: false,
+			{ID: 0x0000, Name: "CurrentHue", Type: typeUint8, Readable: true, Writable: false,
 				Reportable: true},
-			{ID: 0x0001, Name: "CurrentSaturation", Type: "uint8", Readable: true,
+			{ID: 0x0001, Name: "CurrentSaturation", Type: typeUint8, Readable: true,
 				Writable: false, Reportable: true},
-			{ID: 0x0003, Name: "CurrentX", Type: "uint16", Readable: true, Writable: false,
+			{ID: 0x0003, Name: "CurrentX", Type: typeUint16, Readable: true, Writable: false,
 				Reportable: true},
-			{ID: 0x0004, Name: "CurrentY", Type: "uint16", Readable: true, Writable: false,
+			{ID: 0x0004, Name: "CurrentY", Type: typeUint16, Readable: true, Writable: false,
 				Reportable: true},
-			{ID: 0x0007, Name: "ColorTemperatureMireds", Type: "uint16", Readable: true,
+			{ID: 0x0007, Name: "ColorTemperatureMireds", Type: typeUint16, Readable: true,
 				Writable: false, Reportable: true},
-			{ID: 0x0008, Name: "ColorMode", Type: "enum8", Readable: true, Writable: false,
+			{ID: 0x0008, Name: "ColorMode", Type: typeEnum8, Readable: true, Writable: false,
 				Reportable: false},
 		},
 		Commands: []ClusterCommand{
-			{ID: 0x00, Name: "MoveToHue", Direction: "client_to_server"},
-			{ID: 0x01, Name: "MoveHue", Direction: "client_to_server"},
-			{ID: 0x03, Name: "MoveToSaturation", Direction: "client_to_server"},
-			{ID: 0x06, Name: "MoveToHueAndSaturation", Direction: "client_to_server"},
-			{ID: 0x07, Name: "MoveToColor", Direction: "client_to_server"},
-			{ID: 0x0A, Name: "MoveToColorTemperature", Direction: "client_to_server"},
+			{ID: 0x00, Name: "MoveToHue", Direction: directionClientToServer},
+			{ID: 0x01, Name: "MoveHue", Direction: directionClientToServer},
+			{ID: 0x03, Name: "MoveToSaturation", Direction: directionClientToServer},
+			{ID: 0x06, Name: "MoveToHueAndSaturation", Direction: directionClientToServer},
+			{ID: 0x07, Name: "MoveToColor", Direction: directionClientToServer},
+			{ID: 0x0A, Name: "MoveToColorTemperature", Direction: directionClientToServer},
 		},
 	},
 	//nolint:dupl // Zigbee cluster definitions have similar structure by design
 	ClusterWindowCovering: {
 		ClusterID:     ClusterWindowCovering,
-		ClusterName:   "Window Covering",
+		ClusterName:   clusterNameWindowCovering,
 		ComponentType: "cover",
 		Attributes: []ClusterAttribute{
-			{ID: 0x0000, Name: "Type", Type: "enum8", Readable: true, Writable: false,
+			{ID: 0x0000, Name: "Type", Type: typeEnum8, Readable: true, Writable: false,
 				Reportable: false},
-			{ID: 0x0003, Name: "CurrentPositionLiftPercent100ths", Type: "uint16",
+			{ID: 0x0003, Name: "CurrentPositionLiftPercent100ths", Type: typeUint16,
 				Readable: true, Writable: false, Reportable: true},
-			{ID: 0x0007, Name: "ConfigStatus", Type: "bitmap8", Readable: true, Writable: false,
+			{ID: 0x0007, Name: "ConfigStatus", Type: typeBitmap8, Readable: true, Writable: false,
 				Reportable: false},
-			{ID: 0x0008, Name: "CurrentPositionLiftPercentage", Type: "uint8", Readable: true,
+			{ID: 0x0008, Name: "CurrentPositionLiftPercentage", Type: typeUint8, Readable: true,
 				Writable: false, Reportable: true},
-			{ID: 0x000A, Name: "OperationalStatus", Type: "bitmap8", Readable: true,
+			{ID: 0x000A, Name: "OperationalStatus", Type: typeBitmap8, Readable: true,
 				Writable: false, Reportable: true},
 		},
 		Commands: []ClusterCommand{
-			{ID: 0x00, Name: "UpOrOpen", Direction: "client_to_server"},
-			{ID: 0x01, Name: "DownOrClose", Direction: "client_to_server"},
-			{ID: 0x02, Name: "Stop", Direction: "client_to_server"},
-			{ID: 0x05, Name: "GoToLiftPercentage", Direction: "client_to_server"},
+			{ID: 0x00, Name: "UpOrOpen", Direction: directionClientToServer},
+			{ID: 0x01, Name: "DownOrClose", Direction: directionClientToServer},
+			{ID: 0x02, Name: "Stop", Direction: directionClientToServer},
+			{ID: 0x05, Name: "GoToLiftPercentage", Direction: directionClientToServer},
 		},
 	},
 	ClusterTemperatureMeasurement: {
@@ -617,13 +641,13 @@ var ClusterMapping = map[uint16]ClusterCapability{
 		ClusterName:   "Temperature Measurement",
 		ComponentType: "temperature",
 		Attributes: []ClusterAttribute{
-			{ID: 0x0000, Name: "MeasuredValue", Type: "int16", Readable: true, Writable: false,
+			{ID: 0x0000, Name: attrNameMeasuredValue, Type: typeInt16, Readable: true, Writable: false,
 				Reportable: true},
-			{ID: 0x0001, Name: "MinMeasuredValue", Type: "int16", Readable: true, Writable: false,
+			{ID: 0x0001, Name: attrNameMinMeasuredValue, Type: typeInt16, Readable: true, Writable: false,
 				Reportable: false},
-			{ID: 0x0002, Name: "MaxMeasuredValue", Type: "int16", Readable: true, Writable: false,
+			{ID: 0x0002, Name: attrNameMaxMeasuredValue, Type: typeInt16, Readable: true, Writable: false,
 				Reportable: false},
-			{ID: 0x0003, Name: "Tolerance", Type: "uint16", Readable: true, Writable: false,
+			{ID: 0x0003, Name: "Tolerance", Type: typeUint16, Readable: true, Writable: false,
 				Reportable: false},
 		},
 	},
@@ -632,13 +656,13 @@ var ClusterMapping = map[uint16]ClusterCapability{
 		ClusterName:   "Humidity Measurement",
 		ComponentType: "humidity",
 		Attributes: []ClusterAttribute{
-			{ID: 0x0000, Name: "MeasuredValue", Type: "uint16", Readable: true, Writable: false,
+			{ID: 0x0000, Name: attrNameMeasuredValue, Type: typeUint16, Readable: true, Writable: false,
 				Reportable: true},
-			{ID: 0x0001, Name: "MinMeasuredValue", Type: "uint16", Readable: true, Writable: false,
+			{ID: 0x0001, Name: attrNameMinMeasuredValue, Type: typeUint16, Readable: true, Writable: false,
 				Reportable: false},
-			{ID: 0x0002, Name: "MaxMeasuredValue", Type: "uint16", Readable: true, Writable: false,
+			{ID: 0x0002, Name: attrNameMaxMeasuredValue, Type: typeUint16, Readable: true, Writable: false,
 				Reportable: false},
-			{ID: 0x0003, Name: "Tolerance", Type: "uint16", Readable: true, Writable: false,
+			{ID: 0x0003, Name: "Tolerance", Type: typeUint16, Readable: true, Writable: false,
 				Reportable: false},
 		},
 	},
@@ -647,11 +671,11 @@ var ClusterMapping = map[uint16]ClusterCapability{
 		ClusterName:   "Illuminance Measurement",
 		ComponentType: "illuminance",
 		Attributes: []ClusterAttribute{
-			{ID: 0x0000, Name: "MeasuredValue", Type: "uint16", Readable: true, Writable: false,
+			{ID: 0x0000, Name: attrNameMeasuredValue, Type: typeUint16, Readable: true, Writable: false,
 				Reportable: true},
-			{ID: 0x0001, Name: "MinMeasuredValue", Type: "uint16", Readable: true, Writable: false,
+			{ID: 0x0001, Name: attrNameMinMeasuredValue, Type: typeUint16, Readable: true, Writable: false,
 				Reportable: false},
-			{ID: 0x0002, Name: "MaxMeasuredValue", Type: "uint16", Readable: true, Writable: false,
+			{ID: 0x0002, Name: attrNameMaxMeasuredValue, Type: typeUint16, Readable: true, Writable: false,
 				Reportable: false},
 		},
 	},
@@ -662,15 +686,15 @@ var ClusterMapping = map[uint16]ClusterCapability{
 		Attributes: []ClusterAttribute{
 			{ID: 0x0000, Name: "MeasurementType", Type: "bitmap32", Readable: true, Writable: false,
 				Reportable: false},
-			{ID: 0x0505, Name: "RMSVoltage", Type: "uint16", Readable: true, Writable: false,
+			{ID: 0x0505, Name: "RMSVoltage", Type: typeUint16, Readable: true, Writable: false,
 				Reportable: true},
-			{ID: 0x0508, Name: "RMSCurrent", Type: "uint16", Readable: true, Writable: false,
+			{ID: 0x0508, Name: "RMSCurrent", Type: typeUint16, Readable: true, Writable: false,
 				Reportable: true},
-			{ID: 0x050B, Name: "ActivePower", Type: "int16", Readable: true, Writable: false,
+			{ID: 0x050B, Name: "ActivePower", Type: typeInt16, Readable: true, Writable: false,
 				Reportable: true},
-			{ID: 0x050E, Name: "ReactivePower", Type: "int16", Readable: true, Writable: false,
+			{ID: 0x050E, Name: "ReactivePower", Type: typeInt16, Readable: true, Writable: false,
 				Reportable: true},
-			{ID: 0x050F, Name: "ApparentPower", Type: "uint16", Readable: true, Writable: false,
+			{ID: 0x050F, Name: "ApparentPower", Type: typeUint16, Readable: true, Writable: false,
 				Reportable: true},
 			{ID: 0x0510, Name: "PowerFactor", Type: "int8", Readable: true, Writable: false,
 				Reportable: true},
@@ -692,22 +716,22 @@ var ClusterMapping = map[uint16]ClusterCapability{
 	//nolint:dupl // Zigbee cluster definitions have similar structure by design
 	ClusterThermostat: {
 		ClusterID:     ClusterThermostat,
-		ClusterName:   "Thermostat",
+		ClusterName:   clusterNameThermostat,
 		ComponentType: "thermostat",
 		Attributes: []ClusterAttribute{
-			{ID: 0x0000, Name: "LocalTemperature", Type: "int16", Readable: true, Writable: false,
+			{ID: 0x0000, Name: "LocalTemperature", Type: typeInt16, Readable: true, Writable: false,
 				Reportable: true},
-			{ID: 0x0011, Name: "OccupiedCoolingSetpoint", Type: "int16", Readable: true,
+			{ID: 0x0011, Name: "OccupiedCoolingSetpoint", Type: typeInt16, Readable: true,
 				Writable: true, Reportable: true},
-			{ID: 0x0012, Name: "OccupiedHeatingSetpoint", Type: "int16", Readable: true,
+			{ID: 0x0012, Name: "OccupiedHeatingSetpoint", Type: typeInt16, Readable: true,
 				Writable: true, Reportable: true},
-			{ID: 0x001B, Name: "ControlSequenceOfOperation", Type: "enum8", Readable: true,
+			{ID: 0x001B, Name: "ControlSequenceOfOperation", Type: typeEnum8, Readable: true,
 				Writable: true, Reportable: false},
-			{ID: 0x001C, Name: "SystemMode", Type: "enum8", Readable: true, Writable: true,
+			{ID: 0x001C, Name: "SystemMode", Type: typeEnum8, Readable: true, Writable: true,
 				Reportable: true},
 		},
 		Commands: []ClusterCommand{
-			{ID: 0x00, Name: "SetpointRaiseLower", Direction: "client_to_server"},
+			{ID: 0x00, Name: "SetpointRaiseLower", Direction: directionClientToServer},
 		},
 	},
 	ClusterIASZone: {
@@ -715,7 +739,7 @@ var ClusterMapping = map[uint16]ClusterCapability{
 		ClusterName:   "IAS Zone",
 		ComponentType: "input",
 		Attributes: []ClusterAttribute{
-			{ID: 0x0000, Name: "ZoneState", Type: "enum8", Readable: true, Writable: false,
+			{ID: 0x0000, Name: "ZoneState", Type: typeEnum8, Readable: true, Writable: false,
 				Reportable: false},
 			{ID: 0x0001, Name: "ZoneType", Type: "enum16", Readable: true, Writable: false,
 				Reportable: false},
@@ -728,9 +752,9 @@ var ClusterMapping = map[uint16]ClusterCapability{
 		ClusterName:   "Occupancy Sensing",
 		ComponentType: "input",
 		Attributes: []ClusterAttribute{
-			{ID: 0x0000, Name: "Occupancy", Type: "bitmap8", Readable: true, Writable: false,
+			{ID: 0x0000, Name: "Occupancy", Type: typeBitmap8, Readable: true, Writable: false,
 				Reportable: true},
-			{ID: 0x0001, Name: "OccupancySensorType", Type: "enum8", Readable: true,
+			{ID: 0x0001, Name: "OccupancySensorType", Type: typeEnum8, Readable: true,
 				Writable: false, Reportable: false},
 		},
 	},

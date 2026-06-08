@@ -135,7 +135,7 @@ func (e *Ethernet) GetConfig(ctx context.Context) (*EthernetConfig, error) {
 //	})
 func (e *Ethernet) SetConfig(ctx context.Context, config *EthernetConfig) error {
 	params := map[string]any{
-		"config": config,
+		paramConfig: config,
 	}
 
 	_, err := e.client.Call(ctx, "Eth.SetConfig", params)

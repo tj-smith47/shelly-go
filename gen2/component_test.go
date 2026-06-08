@@ -187,7 +187,7 @@ func TestBaseComponent_CapitalizedType(t *testing.T) {
 		{
 			name: "em1",
 			typ:  "em1",
-			want: "EM1",
+			want: rpcNameEM1,
 		},
 		{
 			name: "pm",
@@ -197,22 +197,22 @@ func TestBaseComponent_CapitalizedType(t *testing.T) {
 		{
 			name: "pm1",
 			typ:  "pm1",
-			want: "PM1",
+			want: rpcNamePM1,
 		},
 		{
 			name: "kvs",
 			typ:  "kvs",
-			want: "KVS",
+			want: rpcNameKVS,
 		},
 		{
 			name: "wifi",
 			typ:  "wifi",
-			want: "WiFi",
+			want: rpcNameWiFi,
 		},
 		{
 			name: "ble",
 			typ:  "ble",
-			want: "BLE",
+			want: rpcNameBLE,
 		},
 		{
 			name: "mqtt",
@@ -227,7 +227,7 @@ func TestBaseComponent_CapitalizedType(t *testing.T) {
 		{
 			name: "sys",
 			typ:  "sys",
-			want: "Sys",
+			want: rpcNameSys,
 		},
 		{
 			name: "ws",
@@ -237,22 +237,22 @@ func TestBaseComponent_CapitalizedType(t *testing.T) {
 		{
 			name: "bthome",
 			typ:  "bthome",
-			want: "BTHome",
+			want: rpcNameBTHome,
 		},
 		{
 			name: "bthomedevice",
 			typ:  "bthomedevice",
-			want: "BTHomeDevice",
+			want: rpcNameBTHomeDevice,
 		},
 		{
 			name: "rgb",
 			typ:  "rgb",
-			want: "RGB",
+			want: rpcNameRGB,
 		},
 		{
 			name: "rgbw",
 			typ:  "rgbw",
-			want: "RGBW",
+			want: rpcNameRGBW,
 		},
 	}
 
@@ -580,7 +580,7 @@ func TestCapitalizedType_EmptyString(t *testing.T) {
 
 func TestCapitalizedType_BTHomeSensor(t *testing.T) {
 	comp := &BaseComponent{typ: "bthomesensor"}
-	if got := comp.capitalizedType(); got != "BTHomeSensor" {
+	if got := comp.capitalizedType(); got != rpcNameBTHomeSensor {
 		t.Errorf("capitalizedType() = %v, want BTHomeSensor", got)
 	}
 }

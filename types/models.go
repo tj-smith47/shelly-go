@@ -1,19 +1,42 @@
 package types
 
+// Model codes that are referenced in more than one place (the modelNames map
+// plus tests); kept as constants so the canonical spelling lives in one spot.
+const (
+	modelSHSW1         = "SHSW-1"
+	modelSHPLGS        = "SHPLG-S"
+	modelSHEM3         = "SHEM-3"
+	modelSNSW102P16EU  = "SNSW-102P16EU"
+	modelSNPL00112EU   = "SNPL-00112EU"
+	modelSPSW004PE16EU = "SPSW-004PE16EU"
+	modelSPEM003CEBEU  = "SPEM-003CEBEU"
+	modelS3SW001P16EU  = "S3SW-001P16EU"
+)
+
+// displayShellyPlus2PM is shared by two hardware-revision model codes.
+const displayShellyPlus2PM = "Shelly Plus 2PM"
+
+// Device category labels returned by GetModelCategory that lack a typed
+// DeviceType/ComponentType constant.
+const (
+	categoryMeter = "meter"
+	categoryBulb  = "bulb"
+)
+
 // modelNames maps Shelly model codes to human-readable product names.
 // Model codes come from DeviceInfo.Model field.
 var modelNames = map[string]string{
 	// Gen1 devices
-	"SHSW-1":    "Shelly 1",
+	modelSHSW1:  "Shelly 1",
 	"SHSW-PM":   "Shelly 1PM",
 	"SHSW-21":   "Shelly 2",
 	"SHSW-25":   "Shelly 2.5",
 	"SHSW-44":   "Shelly 4Pro",
 	"SHPLG-1":   "Shelly Plug",
-	"SHPLG-S":   "Shelly Plug S",
+	modelSHPLGS: "Shelly Plug S",
 	"SHPLG-U1":  "Shelly Plug US",
 	"SHEM":      "Shelly EM",
-	"SHEM-3":    "Shelly 3EM",
+	modelSHEM3:  "Shelly 3EM",
 	"SHRGBW2":   "Shelly RGBW2",
 	"SHDW-1":    "Shelly Door/Window",
 	"SHDW-2":    "Shelly Door/Window 2",
@@ -37,24 +60,24 @@ var modelNames = map[string]string{
 	"SHTRV-01":  "Shelly TRV",
 
 	// Gen2 Plus devices (EU variants - most common)
-	"SNSW-001X16EU": "Shelly Plus 1",
-	"SNSW-001P16EU": "Shelly Plus 1PM",
-	"SNSW-002P16EU": "Shelly Plus 2PM",
-	"SNSW-102P16EU": "Shelly Plus 2PM", // Hardware revision variant
-	"SNPL-00112EU":  "Shelly Plus Plug S",
-	"SNPL-00116US":  "Shelly Plus Plug US",
-	"SNPL-00112US":  "Shelly Plus Plug US",
-	"SNSN-0024X":    "Shelly Plus Add-On",
-	"SNDC-0D4P10WW": "Shelly Plus 0-10V Dimmer",
-	"SNDM-00100WW":  "Shelly Plus Wall Dimmer",
-	"SNDM-0013US":   "Shelly Plus Wall Dimmer US",
-	"SNSN-0031Z":    "Shelly Plus Smoke",
-	"SNSW-001X15UL": "Shelly Plus 1 UL",
-	"SNSW-001P15UL": "Shelly Plus 1PM UL",
-	"SNSW-001X8EU":  "Shelly Plus 1 Mini",
-	"SNSW-001P8EU":  "Shelly Plus 1PM Mini",
-	"SNGW-BT01":     "Shelly Plus BT Gateway",
-	"SNSN-0043X":    "Shelly Plus HT Gen3",
+	"SNSW-001X16EU":   "Shelly Plus 1",
+	"SNSW-001P16EU":   "Shelly Plus 1PM",
+	"SNSW-002P16EU":   displayShellyPlus2PM,
+	modelSNSW102P16EU: displayShellyPlus2PM, // Hardware revision variant
+	modelSNPL00112EU:  "Shelly Plus Plug S",
+	"SNPL-00116US":    "Shelly Plus Plug US",
+	"SNPL-00112US":    "Shelly Plus Plug US",
+	"SNSN-0024X":      "Shelly Plus Add-On",
+	"SNDC-0D4P10WW":   "Shelly Plus 0-10V Dimmer",
+	"SNDM-00100WW":    "Shelly Plus Wall Dimmer",
+	"SNDM-0013US":     "Shelly Plus Wall Dimmer US",
+	"SNSN-0031Z":      "Shelly Plus Smoke",
+	"SNSW-001X15UL":   "Shelly Plus 1 UL",
+	"SNSW-001P15UL":   "Shelly Plus 1PM UL",
+	"SNSW-001X8EU":    "Shelly Plus 1 Mini",
+	"SNSW-001P8EU":    "Shelly Plus 1PM Mini",
+	"SNGW-BT01":       "Shelly Plus BT Gateway",
+	"SNSN-0043X":      "Shelly Plus HT Gen3",
 
 	// Gen2 Plus i4 variants
 	"SNSN-0024XNEU": "Shelly Plus i4",
@@ -62,25 +85,25 @@ var modelNames = map[string]string{
 	"SNSN-0D24X":    "Shelly Plus i4 DC",
 
 	// Gen2 Pro devices
-	"SPSW-001XE16EU":  "Shelly Pro 1",
-	"SPSW-001PE16EU":  "Shelly Pro 1PM",
-	"SPSW-002XE16EU":  "Shelly Pro 2",
-	"SPSW-002PE16EU":  "Shelly Pro 2PM",
-	"SPSW-003XE16EU":  "Shelly Pro 3",
-	"SPSW-004PE16EU":  "Shelly Pro 4PM",
-	"SPEM-003CEBEU":   "Shelly Pro 3EM",
-	"SPEM-002CEBEU50": "Shelly Pro EM-50",
-	"SPDM-001PE01EU":  "Shelly Pro Dimmer 1PM",
-	"SPDM-002PE01EU":  "Shelly Pro Dimmer 2PM",
-	"SPSH-002PE16EU":  "Shelly Pro Dual Cover PM",
+	"SPSW-001XE16EU":   "Shelly Pro 1",
+	"SPSW-001PE16EU":   "Shelly Pro 1PM",
+	"SPSW-002XE16EU":   "Shelly Pro 2",
+	"SPSW-002PE16EU":   "Shelly Pro 2PM",
+	"SPSW-003XE16EU":   "Shelly Pro 3",
+	modelSPSW004PE16EU: "Shelly Pro 4PM",
+	modelSPEM003CEBEU:  "Shelly Pro 3EM",
+	"SPEM-002CEBEU50":  "Shelly Pro EM-50",
+	"SPDM-001PE01EU":   "Shelly Pro Dimmer 1PM",
+	"SPDM-002PE01EU":   "Shelly Pro Dimmer 2PM",
+	"SPSH-002PE16EU":   "Shelly Pro Dual Cover PM",
 
 	// Gen3 devices
-	"S3SW-001X16EU": "Shelly 1 Gen3",
-	"S3SW-001X8EU":  "Shelly 1 Mini Gen3",
-	"S3SW-001P16EU": "Shelly 1PM Gen3",
-	"S3SW-001P8EU":  "Shelly 1PM Mini Gen3",
-	"S3SW-002P16EU": "Shelly 2PM Gen3",
-	"S3PL-00112EU":  "Shelly Plug S Gen3",
+	"S3SW-001X16EU":   "Shelly 1 Gen3",
+	"S3SW-001X8EU":    "Shelly 1 Mini Gen3",
+	modelS3SW001P16EU: "Shelly 1PM Gen3",
+	"S3SW-001P8EU":    "Shelly 1PM Mini Gen3",
+	"S3SW-002P16EU":   "Shelly 2PM Gen3",
+	"S3PL-00112EU":    "Shelly Plug S Gen3",
 
 	// BLU devices
 	"SBBT-002C":  "Shelly BLU Button1",
@@ -121,25 +144,25 @@ func GetModelCategory(model string) string {
 	// Check prefixes for Gen2/Gen3
 	switch {
 	case hasPrefix(model, "SHSW-"), hasPrefix(model, "SNSW-"), hasPrefix(model, "SPSW-"), hasPrefix(model, "S3SW-"):
-		return "switch"
+		return string(DeviceTypeSwitch)
 	case hasPrefix(model, "SHDM-"), hasPrefix(model, "SNDM-"), hasPrefix(model, "SNDC-"), hasPrefix(model, "SPDM-"):
-		return "dimmer"
+		return string(DeviceTypeDimmer)
 	case hasPrefix(model, "SHPLG-"), hasPrefix(model, "SNPL-"), hasPrefix(model, "S3PL-"):
-		return "plug"
+		return string(DeviceTypePlug)
 	case hasPrefix(model, "SHEM"), hasPrefix(model, "SPEM-"):
-		return "meter"
+		return categoryMeter
 	case hasPrefix(model, "SHDW-"), hasPrefix(model, "SHMOS-"), hasPrefix(model, "SHHT-"), hasPrefix(model, "SHFLOOD-"):
-		return "sensor"
+		return string(DeviceTypeSensor)
 	case hasPrefix(model, "SBDW-"), hasPrefix(model, "SBMO-"), hasPrefix(model, "SBHT-"):
-		return "sensor"
+		return string(DeviceTypeSensor)
 	case hasPrefix(model, "SHBLB-"), hasPrefix(model, "SHBDUO-"), hasPrefix(model, "SHVIN-"), hasPrefix(model, "SHCL-"):
-		return "bulb"
+		return categoryBulb
 	case hasPrefix(model, "SHTRV-"), hasPrefix(model, "SBTR-"):
 		return "trv"
 	case hasPrefix(model, "SHRGBW"):
 		return "rgbw"
 	case hasPrefix(model, "SNGW-"), hasPrefix(model, "SBRC-"):
-		return "gateway"
+		return string(DeviceTypeGateway)
 	case hasPrefix(model, "SAWD-"):
 		return "display"
 	default:

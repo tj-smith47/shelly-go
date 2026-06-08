@@ -157,7 +157,7 @@ func (m *MQTT) GetConfig(ctx context.Context) (*MQTTConfig, error) {
 //	})
 func (m *MQTT) SetConfig(ctx context.Context, config *MQTTConfig) error {
 	params := map[string]any{
-		"config": config,
+		paramConfig: config,
 	}
 
 	_, err := m.client.Call(ctx, "MQTT.SetConfig", params)

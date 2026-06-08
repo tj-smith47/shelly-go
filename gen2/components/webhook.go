@@ -150,10 +150,10 @@ func (w *Webhook) List(ctx context.Context) (*WebhookListResponse, error) {
 func (w *Webhook) Create(ctx context.Context, config *WebhookConfig) (*WebhookCreateResponse, error) {
 	// Don't send ID when creating
 	params := map[string]any{
-		"cid":    config.Cid,
-		"enable": config.Enable,
-		"event":  config.Event,
-		"urls":   config.URLs,
+		"cid":       config.Cid,
+		paramEnable: config.Enable,
+		"event":     config.Event,
+		"urls":      config.URLs,
 	}
 
 	if config.Name != nil {
@@ -203,7 +203,7 @@ func (w *Webhook) Update(ctx context.Context, id int, config *WebhookConfig) (*W
 
 	// Only include fields that are set
 	if config.Enable {
-		params["enable"] = config.Enable
+		params[paramEnable] = config.Enable
 	}
 	if config.Event != "" {
 		params["event"] = config.Event

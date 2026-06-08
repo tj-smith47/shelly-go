@@ -1,11 +1,12 @@
 module github.com/tj-smith47/shelly-go
 
-go 1.25.5
+go 1.26.4
 
 require (
 	github.com/Wifx/gonetworkmanager/v2 v2.2.0
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/gorilla/websocket v1.5.3
+	github.com/mdlayher/wifi v0.7.2
 	github.com/testcontainers/testcontainers-go v0.40.0
 	tinygo.org/x/bluetooth v0.13.0
 )
@@ -40,7 +41,6 @@ require (
 	github.com/mdlayher/genetlink v1.3.2 // indirect
 	github.com/mdlayher/netlink v1.8.0 // indirect
 	github.com/mdlayher/socket v0.5.1 // indirect
-	github.com/mdlayher/wifi v0.7.2 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/go-archive v0.1.0 // indirect
 	github.com/moby/patternmatcher v0.6.0 // indirect

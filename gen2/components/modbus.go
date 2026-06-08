@@ -107,8 +107,8 @@ func (m *Modbus) GetConfig(ctx context.Context) (*ModbusConfig, error) {
 //	})
 func (m *Modbus) SetConfig(ctx context.Context, config *ModbusConfig) error {
 	params := map[string]any{
-		"config": map[string]any{
-			"enable": config.Enable,
+		paramConfig: map[string]any{
+			paramEnable: config.Enable,
 		},
 	}
 

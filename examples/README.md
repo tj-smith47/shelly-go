@@ -55,7 +55,7 @@ go run main.go
 
 Most examples require:
 
-1. **Go 1.25.5 or later** installed
+1. **Go 1.26.4 or later** installed
 2. **Shelly device** accessible on your network (for local examples)
 3. **Shelly Cloud account** (for cloud examples)
 

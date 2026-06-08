@@ -140,7 +140,7 @@ func (u *UI) SetConfig(ctx context.Context, config *UIConfig) error {
 	}
 
 	params := map[string]any{
-		"config": configMap,
+		paramConfig: configMap,
 	}
 
 	_, err := u.client.Call(ctx, "Ui.SetConfig", params)
@@ -317,8 +317,8 @@ func (p *PlugsUI) SetConfig(ctx context.Context, config *PlugsUIConfig) error {
 			colors := make([]map[string]any, len(config.LEDs.Colors))
 			for i, c := range config.LEDs.Colors {
 				colors[i] = map[string]any{
-					"power": c.Power,
-					"rgb":   c.RGB,
+					paramPower: c.Power,
+					"rgb":      c.RGB,
 				}
 			}
 			ledsMap["colors"] = colors
@@ -329,7 +329,7 @@ func (p *PlugsUI) SetConfig(ctx context.Context, config *PlugsUIConfig) error {
 	}
 
 	params := map[string]any{
-		"config": configMap,
+		paramConfig: configMap,
 	}
 
 	_, err := p.client.Call(ctx, "PLUGS_UI.SetConfig", params)

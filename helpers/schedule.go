@@ -20,6 +20,15 @@ const (
 	stateToggle = "toggle"
 )
 
+// methodSwitchSet is the RPC method name for setting a switch state.
+const methodSwitchSet = "Switch.Set"
+
+// keyMethod is the map key naming the RPC method in a schedule call.
+const keyMethod = "method"
+
+// keyParams is the map key naming the RPC parameters in a schedule call.
+const keyParams = "params"
+
 // Weekday represents a day of the week for scheduling.
 type Weekday int
 
@@ -93,6 +102,10 @@ func (w Weekdays) Contains(day Weekday) bool {
 func (w Weekdays) ToGen1Format() string {
 	days := make([]byte, 0, 7)
 	for _, day := range w {
+		// Gen1 day digits are 0-6 (Sunday-Saturday); skip any out-of-range value.
+		if day < Sunday || day > Saturday {
+			continue
+		}
 		days = append(days, '0'+byte(day))
 	}
 	return string(days)
@@ -268,15 +281,15 @@ func CreateSchedule(ctx context.Context, dev *factory.Gen2Device, entry *Schedul
 	switch entry.Action.Type {
 	case ActionTypeSet:
 		calls = []map[string]any{
-			{"method": "Switch.Set", "params": map[string]any{"id": 0, "on": entry.Action.On}},
+			{keyMethod: methodSwitchSet, keyParams: map[string]any{"id": 0, "on": entry.Action.On}},
 		}
 	case ActionTypeToggle:
 		calls = []map[string]any{
-			{"method": "Switch.Toggle", "params": map[string]any{"id": 0}},
+			{keyMethod: "Switch.Toggle", keyParams: map[string]any{"id": 0}},
 		}
 	case ActionTypeBrightness:
 		calls = []map[string]any{
-			{"method": "Light.Set", "params": map[string]any{"id": 0, "brightness": entry.Action.Brightness}},
+			{keyMethod: "Light.Set", keyParams: map[string]any{"id": 0, "brightness": entry.Action.Brightness}},
 		}
 	}
 

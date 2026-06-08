@@ -175,9 +175,9 @@ func (w *WebSocket) Call(ctx context.Context, rpcReq RPCRequest) (json.RawMessag
 
 	// Build request body from RPCRequest interface
 	reqBody := map[string]any{
-		"id":     rpcReq.GetID(),
-		"src":    w.src,
-		"method": rpcReq.GetMethod(),
+		"id":           rpcReq.GetID(),
+		rpcFieldSrc:    w.src,
+		rpcFieldMethod: rpcReq.GetMethod(),
 	}
 
 	// Unmarshal params from json.RawMessage and add to request

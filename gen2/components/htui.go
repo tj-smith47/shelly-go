@@ -99,7 +99,7 @@ func (h *HTUI) GetConfig(ctx context.Context) (*HTUIConfig, error) {
 //	})
 func (h *HTUI) SetConfig(ctx context.Context, config *HTUIConfig) error {
 	params := map[string]any{
-		"config": map[string]any{
+		paramConfig: map[string]any{
 			"temperature_unit": config.TemperatureUnit,
 		},
 	}

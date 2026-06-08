@@ -118,7 +118,7 @@ func (w *Ws) GetConfig(ctx context.Context) (*WsConfig, error) {
 //	})
 func (w *Ws) SetConfig(ctx context.Context, config *WsConfig) error {
 	params := map[string]any{
-		"config": config,
+		paramConfig: config,
 	}
 
 	_, err := w.client.Call(ctx, "Ws.SetConfig", params)

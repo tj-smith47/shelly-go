@@ -17,6 +17,9 @@ import (
 	"time"
 )
 
+// tokenTypeBearer is the OAuth 2.0 bearer token scheme used by the Shelly Cloud API.
+const tokenTypeBearer = "Bearer"
+
 // Common authentication errors.
 var (
 	// ErrInvalidToken indicates the token is invalid or malformed.
@@ -78,7 +81,7 @@ func ParseToken(tokenString string) (*Token, error) {
 	// Create the token
 	token := &Token{
 		AccessToken: tokenString,
-		TokenType:   "Bearer",
+		TokenType:   tokenTypeBearer,
 		UserAPIURL:  claims.UserAPIURL,
 	}
 

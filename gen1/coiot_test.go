@@ -310,7 +310,6 @@ func TestParseCoAPMessage_NoPayload(t *testing.T) {
 	}
 
 	// Build message without payload by using buildCoAPMessage and not adding payload
-	header := []byte{0x50, byte(codeStatus), 0x00, 0x01}
 	optVal := options[optionGlobalDevID]
 
 	// Extended delta for 3332: delta nibble = 14, delta-269 = 3063
@@ -321,6 +320,8 @@ func TestParseCoAPMessage_NoPayload(t *testing.T) {
 	optBytes = append(optBytes, deltaExt...)
 	optBytes = append(optBytes, optVal...)
 
+	header := make([]byte, 0, 4+len(optBytes))
+	header = append(header, 0x50, byte(codeStatus), 0x00, 0x01)
 	msg := append(header, optBytes...)
 
 	status, err := ParseCoAPMessage(msg, "")
@@ -337,7 +338,6 @@ func TestParseCoAPMessage_NoPayload(t *testing.T) {
 func TestParseCoAPMessage_ExtendedDelta13(t *testing.T) {
 	// Create two options: first at option 1 (If-Match), second uses delta=13 extended encoding
 	// to reach option 14 (delta nibble=13, extended=0 means delta=13+0=13, so 1+13=14)
-	header := []byte{0x50, byte(codeStatus), 0x00, 0x01}
 
 	// First option: option 1 (delta=1, length=1)
 	opt1 := []byte{0x11, 0xAA} // delta=1, length=1, value=0xAA
@@ -353,6 +353,8 @@ func TestParseCoAPMessage_ExtendedDelta13(t *testing.T) {
 	// Option 1 + delta 13 = option 14 (Size1), not URI-Path
 	// The test verifies extended delta parsing works; we won't have URIPath set
 
+	header := make([]byte, 0, 4+len(opt1)+len(opt2))
+	header = append(header, 0x50, byte(codeStatus), 0x00, 0x01)
 	msg := append(header, opt1...)
 	msg = append(msg, opt2...)
 	msg = append(msg, 0xFF)
@@ -373,7 +375,6 @@ func TestParseCoAPMessage_ExtendedDelta13(t *testing.T) {
 // TestParseCoAPMessage_ExtendedLength13 tests extended length encoding (13).
 func TestParseCoAPMessage_ExtendedLength13(t *testing.T) {
 	// Build message with option value of length 20
-	header := []byte{0x50, byte(codeStatus), 0x00, 0x01}
 
 	// Option 11 (URI-Path) with length 20
 	longValue := make([]byte, 20)
@@ -385,6 +386,8 @@ func TestParseCoAPMessage_ExtendedLength13(t *testing.T) {
 	optBytes = append(optBytes, 0xBD, 0x07) // delta=11, length=13+7=20
 	optBytes = append(optBytes, longValue...)
 
+	header := make([]byte, 0, 4+len(optBytes))
+	header = append(header, 0x50, byte(codeStatus), 0x00, 0x01)
 	msg := append(header, optBytes...)
 	msg = append(msg, 0xFF)
 	msg = append(msg, []byte(`{}`)...)
@@ -496,7 +499,6 @@ func TestParseCoAPMessage_OptionValueExceedsLength(t *testing.T) {
 // TestParseCoAPMessage_MultipleURIPath tests multiple URI-Path options.
 func TestParseCoAPMessage_MultipleURIPath(t *testing.T) {
 	// Build message with multiple URI-Path segments
-	header := []byte{0x50, byte(codeStatus), 0x00, 0x01}
 
 	// First URI-Path option (11): "cit"
 	opt1 := make([]byte, 0, 4) // 1 byte header + 3 bytes "cit"
@@ -508,6 +510,8 @@ func TestParseCoAPMessage_MultipleURIPath(t *testing.T) {
 	opt2 = append(opt2, 0x01)  // delta=0, length=1
 	opt2 = append(opt2, 's')
 
+	header := make([]byte, 0, 4+len(opt1)+len(opt2))
+	header = append(header, 0x50, byte(codeStatus), 0x00, 0x01)
 	msg := append(header, opt1...)
 	msg = append(msg, opt2...)
 	msg = append(msg, 0xFF)

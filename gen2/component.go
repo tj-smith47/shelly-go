@@ -189,31 +189,66 @@ func (c *BaseComponent) call(ctx context.Context, method string, params, result 
 	return err
 }
 
+// Lowercase component type identifiers used as the canonical component "type"
+// (the prefix of a "type:id" key, e.g. "em1:0"). These are shared between the
+// device accessors and the componentTypeNames lookup to keep both in sync.
+const (
+	compTypeEM1          = "em1"
+	compTypePM1          = "pm1"
+	compTypeKVS          = "kvs"
+	compTypeWiFi         = "wifi"
+	compTypeBLE          = "ble"
+	compTypeMqtt         = "mqtt"
+	compTypeSys          = "sys"
+	compTypeBTHome       = "bthome"
+	compTypeBTHomeDevice = "bthomedevice"
+	compTypeBTHomeSensor = "bthomesensor"
+	compTypeRGB          = "rgb"
+	compTypeRGBW         = "rgbw"
+)
+
+// RPC namespace names for components whose capitalization does not follow the
+// default first-letter-uppercase rule. These match the namespace expected by the
+// device RPC API (e.g. "EM1.GetConfig").
+const (
+	rpcNameEM1          = "EM1"
+	rpcNamePM1          = "PM1"
+	rpcNameKVS          = "KVS"
+	rpcNameWiFi         = "WiFi"
+	rpcNameBLE          = "BLE"
+	rpcNameSys          = "Sys"
+	rpcNameBTHome       = "BTHome"
+	rpcNameBTHomeDevice = "BTHomeDevice"
+	rpcNameBTHomeSensor = "BTHomeSensor"
+	rpcNameRGB          = "RGB"
+	rpcNameRGBW         = "RGBW"
+)
+
 // componentTypeNames maps lowercase component types to their RPC method names.
 // This is used for special cases where the RPC name doesn't follow standard capitalization.
 var componentTypeNames = map[string]string{
-	"em":           "EM",
-	"em1":          "EM1",
-	"emdata":       "EMData",
-	"em1data":      "EM1Data",
-	"pm":           "PM",
-	"pm1":          "PM1",
-	"kvs":          "KVS",
-	"wifi":         "WiFi",
-	"ble":          "BLE",
-	"mqtt":         "Mqtt",
-	"ui":           "UI",
-	"sys":          "Sys",
-	"ws":           "Ws",
-	"bthome":       "BTHome",
-	"bthomedevice": "BTHomeDevice",
-	"bthomesensor": "BTHomeSensor",
-	"rgb":          "RGB",
-	"rgbw":         "RGBW",
-	"ht_ui":        "HT_UI",
-	"plugs_ui":     "Plugs_UI",
-	"sensoraddon":  "SensorAddon",
-	"devicepower":  "DevicePower",
+	"em":                 "EM",
+	compTypeEM1:          rpcNameEM1,
+	"emdata":             "EMData",
+	"em1data":            "EM1Data",
+	"pm":                 "PM",
+	compTypePM1:          rpcNamePM1,
+	compTypeKVS:          rpcNameKVS,
+	compTypeWiFi:         rpcNameWiFi,
+	compTypeBLE:          rpcNameBLE,
+	compTypeMqtt:         "Mqtt",
+	"ui":                 "UI",
+	compTypeSys:          rpcNameSys,
+	"ws":                 "Ws",
+	compTypeBTHome:       rpcNameBTHome,
+	compTypeBTHomeDevice: rpcNameBTHomeDevice,
+	compTypeBTHomeSensor: rpcNameBTHomeSensor,
+	compTypeRGB:          rpcNameRGB,
+	compTypeRGBW:         rpcNameRGBW,
+	"ht_ui":              "HT_UI",
+	"plugs_ui":           "Plugs_UI",
+	"sensoraddon":        "SensorAddon",
+	"devicepower":        "DevicePower",
 }
 
 // capitalizedType returns the component type with the first letter capitalized.
@@ -323,7 +358,7 @@ func UnmarshalStatus[T any](ctx context.Context, c Component) (*T, error) {
 func SetConfigWithID(ctx context.Context, c Component, config any) error {
 	// Use reflection to set ID field if present and zero
 	v := reflect.ValueOf(config)
-	if v.Kind() == reflect.Ptr {
+	if v.Kind() == reflect.Pointer {
 		v = v.Elem()
 	}
 	if v.Kind() == reflect.Struct {
@@ -355,7 +390,7 @@ func EnsureIDParam(c Component, params any) any {
 	}
 
 	v := reflect.ValueOf(params)
-	if v.Kind() == reflect.Ptr {
+	if v.Kind() == reflect.Pointer {
 		v = v.Elem()
 	}
 

@@ -25,6 +25,10 @@ const (
 	securityWEP  = "WEP"
 )
 
+// defaultWiFiIface is the conventional name for the primary WiFi
+// interface, used as the detection fallback when no interface is found.
+const defaultWiFiIface = "wlan0"
+
 // platformWiFiScanner implements WiFiScanner for Linux.
 // Primary: nl80211 netlink (pure Go, zero external dependencies).
 // Fallback 1: NetworkManager D-Bus API.
@@ -51,14 +55,14 @@ func detectWiFiInterface() string {
 		}
 	}
 
-	commonNames := []string{"wlan0", "wlan1", "wlp2s0", "wlp3s0", "wlp6s0", "wlo1"}
+	commonNames := []string{defaultWiFiIface, "wlan1", "wlp2s0", "wlp3s0", "wlp6s0", "wlo1"}
 	for _, name := range commonNames {
 		if _, err := os.Stat("/sys/class/net/" + name); err == nil {
 			return name
 		}
 	}
 
-	return "wlan0"
+	return defaultWiFiIface
 }
 
 // ─── nl80211 netlink scanner (primary — zero external dependencies) ──────────
@@ -714,8 +718,8 @@ func (s *platformWiFiScanner) connectViaNM(ctx context.Context, ssid, password s
 
 	settings := map[string]map[string]interface{}{
 		"connection": {
-			"type": "802-11-wireless",
-			"id":   ssid,
+			fieldType: "802-11-wireless",
+			"id":      ssid,
 		},
 		"802-11-wireless": {
 			"ssid": []byte(ssid),
@@ -977,7 +981,7 @@ func (s *platformWiFiScanner) currentNetworkNmcli(ctx context.Context) (*WiFiNet
 		}
 	}
 
-	return nil, &WiFiError{Message: "not connected to any WiFi network"}
+	return nil, &WiFiError{Message: msgNotConnected}
 }
 
 // parseNmcliLine parses a single line from nmcli wifi list output.
@@ -1030,7 +1034,7 @@ func (s *platformWiFiScanner) currentNetworkWpaCli(ctx context.Context) (*WiFiNe
 	}
 
 	if state != "COMPLETED" || ssid == "" {
-		return nil, &WiFiError{Message: "not connected to any WiFi network"}
+		return nil, &WiFiError{Message: msgNotConnected}
 	}
 
 	return &WiFiNetwork{SSID: ssid, LastSeen: time.Now()}, nil
@@ -1049,7 +1053,7 @@ func (s *platformWiFiScanner) currentNetworkIwconfig(ctx context.Context) (*WiFi
 	outputStr := string(output)
 	essidIdx := strings.Index(outputStr, `ESSID:"`)
 	if essidIdx == -1 {
-		return nil, &WiFiError{Message: "not connected to any WiFi network"}
+		return nil, &WiFiError{Message: msgNotConnected}
 	}
 
 	start := essidIdx + 7
@@ -1060,7 +1064,7 @@ func (s *platformWiFiScanner) currentNetworkIwconfig(ctx context.Context) (*WiFi
 
 	ssid := outputStr[start : start+end]
 	if ssid == "" || ssid == "off/any" {
-		return nil, &WiFiError{Message: "not connected to any WiFi network"}
+		return nil, &WiFiError{Message: msgNotConnected}
 	}
 
 	return &WiFiNetwork{SSID: ssid, LastSeen: time.Now()}, nil

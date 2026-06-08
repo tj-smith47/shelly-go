@@ -492,7 +492,15 @@ func (r *MessageRouter) Route(msg *RoutedMessage) (int, error) {
 
 	// Auto-register device if enabled
 	if autoRegister && registry != nil && msg.FromDevice != "" {
-		if _, err := registry.Get(msg.FromDevice); errors.Is(err, ErrDeviceNotFound) {
+		_, getErr := registry.Get(msg.FromDevice)
+		// Re-register when the device is unknown, or when UpdateLastSeen reports it
+		// vanished between the Get and the update (concurrent deregistration).
+		needsRegister := errors.Is(getErr, ErrDeviceNotFound)
+		if getErr == nil {
+			updateErr := registry.UpdateLastSeen(msg.FromDevice, msg.RSSI, msg.SNR)
+			needsRegister = errors.Is(updateErr, ErrDeviceNotFound)
+		}
+		if needsRegister {
 			registry.RegisterOrUpdate(&RegisteredDevice{
 				DeviceID: msg.FromDevice,
 				LastSeen: msg.Timestamp,
@@ -500,9 +508,6 @@ func (r *MessageRouter) Route(msg *RoutedMessage) (int, error) {
 				LastSNR:  msg.SNR,
 				Online:   true,
 			})
-		} else if err == nil {
-			//nolint:errcheck // Update is best-effort tracking; doesn't affect message handling
-			registry.UpdateLastSeen(msg.FromDevice, msg.RSSI, msg.SNR)
 		}
 	}
 
@@ -621,15 +626,15 @@ func decodeBase64(s string) ([]byte, error) {
 
 		// Extract bytes based on valid characters
 		if validChars >= 2 && j < outputLen {
-			result[j] = byte(n >> 16)
+			result[j] = byte((n >> 16) & 0xFF)
 			j++
 		}
 		if validChars >= 3 && j < outputLen {
-			result[j] = byte(n >> 8)
+			result[j] = byte((n >> 8) & 0xFF)
 			j++
 		}
 		if validChars >= 4 && j < outputLen {
-			result[j] = byte(n)
+			result[j] = byte(n & 0xFF)
 			j++
 		}
 	}

@@ -263,7 +263,7 @@ func (w *WiFi) GetConfig(ctx context.Context) (*WiFiConfig, error) {
 //	})
 func (w *WiFi) SetConfig(ctx context.Context, config *WiFiConfig) error {
 	params := map[string]any{
-		"config": config,
+		paramConfig: config,
 	}
 
 	_, err := w.client.Call(ctx, "Wifi.SetConfig", params)

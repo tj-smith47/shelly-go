@@ -2,6 +2,20 @@ package types
 
 import "fmt"
 
+// Generation display strings, returned by Generation.String and recognized by
+// Generation.UnmarshalText.
+const (
+	genLabel1       = "Gen1"
+	genLabel2       = "Gen2"
+	genLabel3       = "Gen3"
+	genLabel4       = "Gen4"
+	genLabelUnknown = "Unknown"
+)
+
+// labelUnknown is the lowercase "unknown" token shared by generation parsing
+// and model category classification.
+const labelUnknown = "unknown"
+
 // Generation represents the hardware/firmware generation of a Shelly device.
 // Different generations use different protocols and APIs.
 type Generation int
@@ -56,15 +70,15 @@ const (
 func (g Generation) String() string {
 	switch g {
 	case Generation1:
-		return "Gen1"
+		return genLabel1
 	case Generation2:
-		return "Gen2"
+		return genLabel2
 	case Generation3:
-		return "Gen3"
+		return genLabel3
 	case Generation4:
-		return "Gen4"
+		return genLabel4
 	default:
-		return "Unknown"
+		return genLabelUnknown
 	}
 }
 
@@ -88,15 +102,15 @@ func (g Generation) MarshalText() ([]byte, error) {
 // UnmarshalText implements encoding.TextUnmarshaler.
 func (g *Generation) UnmarshalText(text []byte) error {
 	switch string(text) {
-	case "Gen1", "gen1", "1":
+	case genLabel1, "gen1", "1":
 		*g = Generation1
-	case "Gen2", "gen2", "2", "Plus", "Pro":
+	case genLabel2, "gen2", "2", "Plus", "Pro":
 		*g = Generation2
-	case "Gen3", "gen3", "3":
+	case genLabel3, "gen3", "3":
 		*g = Generation3
-	case "Gen4", "gen4", "4":
+	case genLabel4, "gen4", "4":
 		*g = Generation4
-	case "Unknown", "unknown", "":
+	case genLabelUnknown, labelUnknown, "":
 		*g = GenerationUnknown
 	default:
 		return fmt.Errorf("unknown generation: %s", text)

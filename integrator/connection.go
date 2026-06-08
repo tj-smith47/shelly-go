@@ -13,6 +13,15 @@ import (
 const (
 	turnOn  = "on"
 	turnOff = "off"
+
+	// paramTurn is the relay/light "turn" parameter key.
+	paramTurn = "turn"
+
+	// actionRelay is the relay command action name.
+	actionRelay = "relay"
+
+	// rollerGoToPos is the roller "go" value for moving to a position.
+	rollerGoToPos = "to_pos"
 )
 
 // WSConnector interface for WebSocket connections (allows mocking).
@@ -231,9 +240,9 @@ func (c *Connection) SendRelayCommand(ctx context.Context, deviceID string, chan
 	if on {
 		turn = turnOn
 	}
-	return c.SendCommand(ctx, deviceID, "relay", map[string]any{
-		"id":   channel,
-		"turn": turn,
+	return c.SendCommand(ctx, deviceID, actionRelay, map[string]any{
+		"id":      channel,
+		paramTurn: turn,
 	})
 }
 
@@ -249,7 +258,7 @@ func (c *Connection) SendRollerCommand(ctx context.Context, deviceID string, cha
 func (c *Connection) SendRollerPosition(ctx context.Context, deviceID string, channel, position int) error {
 	return c.SendCommand(ctx, deviceID, "roller", map[string]any{
 		"id":         channel,
-		"go":         "to_pos",
+		"go":         rollerGoToPos,
 		"roller_pos": position,
 	})
 }
@@ -261,8 +270,8 @@ func (c *Connection) SendLightCommand(ctx context.Context, deviceID string, chan
 		turn = turnOn
 	}
 	return c.SendCommand(ctx, deviceID, "light", map[string]any{
-		"id":   channel,
-		"turn": turn,
+		"id":      channel,
+		paramTurn: turn,
 	})
 }
 

@@ -144,8 +144,8 @@ func (i *Illuminance) SetConfig(ctx context.Context, config *IlluminanceConfig) 
 		"id": i.id,
 	}
 	params := map[string]any{
-		"id":     i.id,
-		"config": configMap,
+		"id":        i.id,
+		paramConfig: configMap,
 	}
 
 	if config.Name != nil {

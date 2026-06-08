@@ -108,7 +108,7 @@ func (c *Cloud) GetConfig(ctx context.Context) (*CloudConfig, error) {
 //	})
 func (c *Cloud) SetConfig(ctx context.Context, config *CloudConfig) error {
 	params := map[string]any{
-		"config": config,
+		paramConfig: config,
 	}
 
 	_, err := c.client.Call(ctx, "Cloud.SetConfig", params)

@@ -166,7 +166,7 @@ func (b *BTHome) AddDevice(
 	ctx context.Context, config *BTHomeAddDeviceConfig, id *int,
 ) (*BTHomeAddDeviceResponse, error) {
 	params := map[string]any{
-		"config": config,
+		paramConfig: config,
 	}
 	if id != nil {
 		params["id"] = *id
@@ -227,7 +227,7 @@ func (b *BTHome) AddSensor(
 	ctx context.Context, config *BTHomeAddSensorConfig, id *int,
 ) (*BTHomeAddSensorResponse, error) {
 	params := map[string]any{
-		"config": config,
+		paramConfig: config,
 	}
 	if id != nil {
 		params["id"] = *id

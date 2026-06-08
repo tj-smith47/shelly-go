@@ -192,12 +192,12 @@ func (m *Manager) GetRollbackStatus(ctx context.Context) (*RollbackStatus, error
 
 // UpdateStable updates to the latest stable firmware.
 func (m *Manager) UpdateStable(ctx context.Context) error {
-	return m.Update(ctx, &UpdateOptions{Stage: "stable"})
+	return m.Update(ctx, &UpdateOptions{Stage: StageStable})
 }
 
 // UpdateBeta updates to the latest beta firmware.
 func (m *Manager) UpdateBeta(ctx context.Context) error {
-	return m.Update(ctx, &UpdateOptions{Stage: "beta"})
+	return m.Update(ctx, &UpdateOptions{Stage: StageBeta})
 }
 
 // UpdateFromURL updates from a specific firmware URL.
@@ -437,7 +437,7 @@ func (m *Manager) GetFirmwareURL(ctx context.Context, stage string) (string, err
 	// Shelly firmware URLs follow pattern: http://archive.shelly-tools.de/version/DEVICE_MODEL.zip
 	// or from Shelly's own servers
 	var buildID string
-	if stage == "beta" && response.Beta != nil {
+	if stage == StageBeta && response.Beta != nil {
 		buildID = response.Beta.BuildID
 	} else if response.Stable != nil {
 		buildID = response.Stable.BuildID

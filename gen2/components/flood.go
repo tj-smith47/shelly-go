@@ -149,8 +149,8 @@ func (f *Flood) SetConfig(ctx context.Context, config *FloodConfig) error {
 		"id": f.id,
 	}
 	params := map[string]any{
-		"id":     f.id,
-		"config": configMap,
+		"id":        f.id,
+		paramConfig: configMap,
 	}
 
 	if config.Name != nil {

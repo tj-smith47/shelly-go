@@ -58,3 +58,9 @@ coverage.html
 # Agent Files
 .claude/
 PLAN.md
+CLAUDE.local.md
+.claude/local/
+.claude/scratch/
+
+# go-task checksum cache
+.task/

@@ -2,7 +2,9 @@ package discovery
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -39,13 +41,24 @@ func Identify(ctx context.Context, address string) (*DeviceInfo, error) {
 
 // IdentifyWithTimeout identifies a device with a custom timeout.
 func IdentifyWithTimeout(ctx context.Context, address string, timeout time.Duration) (*DeviceInfo, error) {
-	client := &http.Client{Timeout: timeout}
-
 	// Normalize address
 	if !strings.HasPrefix(address, "http://") && !strings.HasPrefix(address, "https://") {
 		address = "http://" + address
 	}
 	address = strings.TrimSuffix(address, "/")
+
+	defaultTransport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return nil, errors.New("http.DefaultTransport is not an *http.Transport")
+	}
+	httpTransport := defaultTransport.Clone()
+	if strings.HasPrefix(address, "https") {
+		// Shelly devices ship self-signed certs, so HTTPS probes must skip
+		// certificate verification or identification fails on https:// endpoints.
+		httpTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec
+	}
+
+	client := &http.Client{Timeout: timeout, Transport: httpTransport}
 
 	// Single request to /shelly — try parsing as Gen2 first, then Gen1.
 	// Both generations respond to the same endpoint, so one request suffices.

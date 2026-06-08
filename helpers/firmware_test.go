@@ -13,10 +13,8 @@ import (
 // TestFirmwareResults tests the FirmwareResults helper methods.
 func TestFirmwareResults(t *testing.T) {
 	t.Run("AllSuccessful", func(t *testing.T) {
-		results := FirmwareResults{
-			{Success: true},
-			{Success: true},
-		}
+		results := make(FirmwareResults, 0, 3)
+		results = append(results, FirmwareResult{Success: true}, FirmwareResult{Success: true})
 		if !results.AllSuccessful() {
 			t.Errorf("AllSuccessful() should return true")
 		}

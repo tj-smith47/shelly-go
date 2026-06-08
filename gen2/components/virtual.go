@@ -93,7 +93,7 @@ func (v *Virtual) Add(
 		"type": componentType,
 	}
 	if config != nil {
-		params["config"] = config
+		params[paramConfig] = config
 	}
 	if id > 0 {
 		params["id"] = id
@@ -122,7 +122,7 @@ func (v *Virtual) Add(
 //	err := virtual.Delete(ctx, "boolean:200")
 func (v *Virtual) Delete(ctx context.Context, key string) error {
 	params := map[string]any{
-		"key": key,
+		paramKey: key,
 	}
 
 	_, err := v.client.Call(ctx, "Virtual.Delete", params)
@@ -243,8 +243,8 @@ func (vb *VirtualBoolean) SetConfig(ctx context.Context, config *VirtualBooleanC
 	}
 
 	params := map[string]any{
-		"id":     vb.id,
-		"config": configMap,
+		"id":        vb.id,
+		paramConfig: configMap,
 	}
 
 	_, err := vb.client.Call(ctx, "Boolean.SetConfig", params)
@@ -277,8 +277,8 @@ func (vb *VirtualBoolean) GetStatus(ctx context.Context) (*VirtualBooleanStatus,
 //	err := vBool.Set(ctx, true)
 func (vb *VirtualBoolean) Set(ctx context.Context, value bool) error {
 	params := map[string]any{
-		"id":    vb.id,
-		"value": value,
+		"id":       vb.id,
+		paramValue: value,
 	}
 
 	_, err := vb.client.Call(ctx, "Boolean.Set", params)
@@ -407,8 +407,8 @@ func (vn *VirtualNumber) SetConfig(ctx context.Context, config *VirtualNumberCon
 	}
 
 	params := map[string]any{
-		"id":     vn.id,
-		"config": configMap,
+		"id":        vn.id,
+		paramConfig: configMap,
 	}
 
 	_, err := vn.client.Call(ctx, "Number.SetConfig", params)
@@ -441,8 +441,8 @@ func (vn *VirtualNumber) GetStatus(ctx context.Context) (*VirtualNumberStatus, e
 //	err := vNum.Set(ctx, 22.5)
 func (vn *VirtualNumber) Set(ctx context.Context, value float64) error {
 	params := map[string]any{
-		"id":    vn.id,
-		"value": value,
+		"id":       vn.id,
+		paramValue: value,
 	}
 
 	_, err := vn.client.Call(ctx, "Number.Set", params)
@@ -540,8 +540,8 @@ func (vt *VirtualText) SetConfig(ctx context.Context, config *VirtualTextConfig)
 	}
 
 	params := map[string]any{
-		"id":     vt.id,
-		"config": configMap,
+		"id":        vt.id,
+		paramConfig: configMap,
 	}
 
 	_, err := vt.client.Call(ctx, "Text.SetConfig", params)
@@ -574,8 +574,8 @@ func (vt *VirtualText) GetStatus(ctx context.Context) (*VirtualTextStatus, error
 //	err := vText.Set(ctx, "Hello, World!")
 func (vt *VirtualText) Set(ctx context.Context, value string) error {
 	params := map[string]any{
-		"id":    vt.id,
-		"value": value,
+		"id":       vt.id,
+		paramValue: value,
 	}
 
 	_, err := vt.client.Call(ctx, "Text.Set", params)
@@ -673,8 +673,8 @@ func (ve *VirtualEnum) SetConfig(ctx context.Context, config *VirtualEnumConfig)
 	}
 
 	params := map[string]any{
-		"id":     ve.id,
-		"config": configMap,
+		"id":        ve.id,
+		paramConfig: configMap,
 	}
 
 	_, err := ve.client.Call(ctx, "Enum.SetConfig", params)
@@ -709,8 +709,8 @@ func (ve *VirtualEnum) GetStatus(ctx context.Context) (*VirtualEnumStatus, error
 //	err := vEnum.Set(ctx, "option1")
 func (ve *VirtualEnum) Set(ctx context.Context, value string) error {
 	params := map[string]any{
-		"id":    ve.id,
-		"value": value,
+		"id":       ve.id,
+		paramValue: value,
 	}
 
 	_, err := ve.client.Call(ctx, "Enum.Set", params)
@@ -796,8 +796,8 @@ func (vb *VirtualButton) SetConfig(ctx context.Context, config *VirtualButtonCon
 	}
 
 	params := map[string]any{
-		"id":     vb.id,
-		"config": configMap,
+		"id":        vb.id,
+		paramConfig: configMap,
 	}
 
 	_, err := vb.client.Call(ctx, "Button.SetConfig", params)
@@ -919,8 +919,8 @@ func (vg *VirtualGroup) SetConfig(ctx context.Context, config *VirtualGroupConfi
 	}
 
 	params := map[string]any{
-		"id":     vg.id,
-		"config": configMap,
+		"id":        vg.id,
+		paramConfig: configMap,
 	}
 
 	_, err := vg.client.Call(ctx, "Group.SetConfig", params)

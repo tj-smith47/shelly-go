@@ -198,7 +198,7 @@ func (d *Device) PM(id int) Component {
 // Parameters:
 //   - id: Component ID
 func (d *Device) PM1(id int) Component {
-	return NewBaseComponent(d.client, "pm1", id)
+	return NewBaseComponent(d.client, compTypePM1, id)
 }
 
 // EM returns an Energy Monitor component accessor.
@@ -214,7 +214,7 @@ func (d *Device) EM(id int) Component {
 // Parameters:
 //   - id: Component ID
 func (d *Device) EM1(id int) Component {
-	return NewBaseComponent(d.client, "em1", id)
+	return NewBaseComponent(d.client, compTypeEM1, id)
 }
 
 // Voltmeter returns a Voltmeter component accessor.
@@ -286,7 +286,7 @@ func (d *Device) Webhook(id int) Component {
 // Parameters:
 //   - id: Component ID (usually 0)
 func (d *Device) WiFi(id int) Component {
-	return NewBaseComponent(d.client, "wifi", id)
+	return NewBaseComponent(d.client, compTypeWiFi, id)
 }
 
 // Ethernet returns an Ethernet component accessor.
@@ -302,7 +302,7 @@ func (d *Device) Ethernet(id int) Component {
 // Parameters:
 //   - id: Component ID (usually 0)
 func (d *Device) BLE(id int) Component {
-	return NewBaseComponent(d.client, "ble", id)
+	return NewBaseComponent(d.client, compTypeBLE, id)
 }
 
 // Cloud returns a Cloud component accessor.
@@ -318,7 +318,7 @@ func (d *Device) Cloud(id int) Component {
 // Parameters:
 //   - id: Component ID (usually 0)
 func (d *Device) MQTT(id int) Component {
-	return NewBaseComponent(d.client, "mqtt", id)
+	return NewBaseComponent(d.client, compTypeMqtt, id)
 }
 
 // WS returns an Outbound WebSocket component accessor.
@@ -334,7 +334,7 @@ func (d *Device) WS(id int) Component {
 // Parameters:
 //   - id: Component ID (usually 0)
 func (d *Device) Sys(id int) Component {
-	return NewBaseComponent(d.client, "sys", id)
+	return NewBaseComponent(d.client, compTypeSys, id)
 }
 
 // UI returns a UI component accessor.
@@ -350,7 +350,7 @@ func (d *Device) UI(id int) Component {
 // KVS allows storing arbitrary key-value pairs on the device.
 func (d *Device) KVS() Component {
 	// KVS doesn't have an ID
-	return NewBaseComponent(d.client, "kvs", 0)
+	return NewBaseComponent(d.client, compTypeKVS, 0)
 }
 
 // BTHome returns a BTHome component accessor.
@@ -358,7 +358,7 @@ func (d *Device) KVS() Component {
 // Parameters:
 //   - id: Component ID
 func (d *Device) BTHome(id int) Component {
-	return NewBaseComponent(d.client, "bthome", id)
+	return NewBaseComponent(d.client, compTypeBTHome, id)
 }
 
 // BTHomeDevice returns a BTHomeDevice component accessor.
@@ -366,7 +366,7 @@ func (d *Device) BTHome(id int) Component {
 // Parameters:
 //   - id: Device ID
 func (d *Device) BTHomeDevice(id int) Component {
-	return NewBaseComponent(d.client, "bthomedevice", id)
+	return NewBaseComponent(d.client, compTypeBTHomeDevice, id)
 }
 
 // BTHomeSensor returns a BTHomeSensor component accessor.
@@ -374,7 +374,7 @@ func (d *Device) BTHomeDevice(id int) Component {
 // Parameters:
 //   - id: Sensor ID
 func (d *Device) BTHomeSensor(id int) Component {
-	return NewBaseComponent(d.client, "bthomesensor", id)
+	return NewBaseComponent(d.client, compTypeBTHomeSensor, id)
 }
 
 // RGB returns an RGB component accessor.
@@ -382,7 +382,7 @@ func (d *Device) BTHomeSensor(id int) Component {
 // Parameters:
 //   - id: Component ID
 func (d *Device) RGB(id int) Component {
-	return NewBaseComponent(d.client, "rgb", id)
+	return NewBaseComponent(d.client, compTypeRGB, id)
 }
 
 // RGBW returns an RGBW component accessor.
@@ -390,7 +390,7 @@ func (d *Device) RGB(id int) Component {
 // Parameters:
 //   - id: Component ID
 func (d *Device) RGBW(id int) Component {
-	return NewBaseComponent(d.client, "rgbw", id)
+	return NewBaseComponent(d.client, compTypeRGBW, id)
 }
 
 // ModBus returns a ModBus component accessor.

@@ -17,6 +17,13 @@ import (
 	"github.com/tj-smith47/shelly-go/rpc"
 )
 
+// Component name identifiers used for restore tracking and migration reporting.
+const (
+	componentCloud = "cloud"
+	componentBLE   = "ble"
+	componentMQTT  = "mqtt"
+)
+
 // Common errors.
 var (
 	// ErrInvalidBackup indicates the backup data is invalid.
@@ -190,9 +197,15 @@ func (m *Manager) restoreOptionalConfigs(
 	}
 	configRestores := []configRestore{
 		{data: backup.WiFi, method: "WiFi.SetConfig", name: "WiFi", restore: opts.RestoreWiFi, setRestart: true},
-		{data: backup.Cloud, method: "Cloud.SetConfig", name: "cloud", restore: opts.RestoreCloud, setRestart: false},
-		{data: backup.BLE, method: "BLE.SetConfig", name: "ble", restore: opts.RestoreBLE, setRestart: false},
-		{data: backup.MQTT, method: "MQTT.SetConfig", name: "mqtt", restore: opts.RestoreMQTT, setRestart: false},
+		{
+			data: backup.Cloud, method: "Cloud.SetConfig", name: componentCloud,
+			restore: opts.RestoreCloud, setRestart: false,
+		},
+		{data: backup.BLE, method: "BLE.SetConfig", name: componentBLE, restore: opts.RestoreBLE, setRestart: false},
+		{
+			data: backup.MQTT, method: "MQTT.SetConfig", name: componentMQTT,
+			restore: opts.RestoreMQTT, setRestart: false,
+		},
 	}
 
 	for _, cr := range configRestores {
@@ -769,9 +782,9 @@ func (m *Migrator) Migrate(ctx context.Context, opts *MigrationOptions) (*Migrat
 		include bool
 	}{
 		{name: "wifi", include: opts.IncludeWiFi},
-		{name: "cloud", include: opts.IncludeCloud},
-		{name: "mqtt", include: opts.IncludeMQTT},
-		{name: "ble", include: opts.IncludeBLE},
+		{name: componentCloud, include: opts.IncludeCloud},
+		{name: componentMQTT, include: opts.IncludeMQTT},
+		{name: componentBLE, include: opts.IncludeBLE},
 		{name: "schedules", include: opts.IncludeSchedules},
 		{name: "webhooks", include: opts.IncludeWebhooks},
 		{name: "scripts", include: opts.IncludeScripts},

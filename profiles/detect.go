@@ -263,7 +263,7 @@ func InferCapabilitiesFromApp(app string) Capabilities {
 	}
 
 	// Cover/shutter support
-	if strings.Contains(app, "2pm") || strings.Contains(app, "cover") ||
+	if strings.Contains(app, "2pm") || strings.Contains(app, capCover) ||
 		strings.Contains(app, "shutter") || strings.Contains(app, "roller") {
 		caps.CoverSupport = true
 	}
@@ -276,7 +276,7 @@ func InferCapabilitiesFromApp(app string) Capabilities {
 
 	// Color support
 	if strings.Contains(app, "rgb") || strings.Contains(app, "bulb") ||
-		strings.Contains(app, "color") {
+		strings.Contains(app, capColor) {
 		caps.ColorSupport = true
 	}
 

@@ -141,7 +141,7 @@ func setGen2SwitchState(ctx context.Context, dev *factory.Gen2Device, on bool) e
 		return types.ErrUnsupportedDevice
 	}
 	params := map[string]any{"id": sw.ID(), "on": on}
-	_, err := sw.Client().Call(ctx, "Switch.Set", params)
+	_, err := sw.Client().Call(ctx, methodSwitchSet, params)
 	return err
 }
 

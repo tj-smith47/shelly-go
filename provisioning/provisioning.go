@@ -17,6 +17,32 @@ const DefaultAPAddress = "192.168.33.1"
 // IPv4 mode constants.
 const ipv4ModeStatic = "static"
 
+// RPC method names.
+const (
+	methodWiFiSetConfig  = "WiFi.SetConfig"
+	methodSysSetConfig   = "Sys.SetConfig"
+	methodCloudSetConfig = "Cloud.SetConfig"
+)
+
+// Config parameter keys used in RPC request bodies.
+const (
+	keyConfig   = "config"
+	keySTA      = "sta"
+	keySSID     = "ssid"
+	keyEnable   = "enable"
+	keyLocation = "location"
+)
+
+// Misc literal constants.
+const (
+	jsonRPCVersion       = "2.0"
+	defaultTimezone      = "America/New_York"
+	exampleTagTypeHome   = "home"
+	exampleTagTypeKey    = "type"
+	exampleAdminUsername = "admin"
+	exampleTagLevelKey   = "level"
+)
+
 // Common errors.
 var (
 	// ErrNotConnected indicates the device is not connected to WiFi.
@@ -51,7 +77,7 @@ func (p *Provisioner) ConfigureWiFi(ctx context.Context, config *WiFiConfig) err
 
 	// Build station config
 	staConfig := map[string]any{
-		"ssid": config.SSID,
+		keySSID: config.SSID,
 	}
 
 	// Enable station mode by default
@@ -59,7 +85,7 @@ func (p *Provisioner) ConfigureWiFi(ctx context.Context, config *WiFiConfig) err
 	if config.Enable != nil {
 		enable = *config.Enable
 	}
-	staConfig["enable"] = enable
+	staConfig[keyEnable] = enable
 
 	// Add password if provided
 	if config.Password != "" {
@@ -85,12 +111,12 @@ func (p *Provisioner) ConfigureWiFi(ctx context.Context, config *WiFiConfig) err
 	}
 
 	params := map[string]any{
-		"config": map[string]any{
-			"sta": staConfig,
+		keyConfig: map[string]any{
+			keySTA: staConfig,
 		},
 	}
 
-	_, err := p.client.Call(ctx, "WiFi.SetConfig", params)
+	_, err := p.client.Call(ctx, methodWiFiSetConfig, params)
 	return err
 }
 
@@ -99,27 +125,27 @@ func (p *Provisioner) ConfigureAP(ctx context.Context, config *APConfig) error {
 	apConfig := make(map[string]any)
 
 	if config.Enable != nil {
-		apConfig["enable"] = *config.Enable
+		apConfig[keyEnable] = *config.Enable
 	}
 	if config.SSID != "" {
-		apConfig["ssid"] = config.SSID
+		apConfig[keySSID] = config.SSID
 	}
 	if config.Password != "" {
 		apConfig["pass"] = config.Password
 	}
 	if config.RangeExtender != nil {
 		apConfig["range_extender"] = map[string]any{
-			"enable": *config.RangeExtender,
+			keyEnable: *config.RangeExtender,
 		}
 	}
 
 	params := map[string]any{
-		"config": map[string]any{
+		keyConfig: map[string]any{
 			"ap": apConfig,
 		},
 	}
 
-	_, err := p.client.Call(ctx, "WiFi.SetConfig", params)
+	_, err := p.client.Call(ctx, methodWiFiSetConfig, params)
 	return err
 }
 
@@ -147,43 +173,43 @@ func (p *Provisioner) SetAuth(ctx context.Context, config *AuthConfig) error {
 // SetDeviceName sets the device's human-readable name.
 func (p *Provisioner) SetDeviceName(ctx context.Context, name string) error {
 	params := map[string]any{
-		"config": map[string]any{
+		keyConfig: map[string]any{
 			"device": map[string]any{
 				"name": name,
 			},
 		},
 	}
 
-	_, err := p.client.Call(ctx, "Sys.SetConfig", params)
+	_, err := p.client.Call(ctx, methodSysSetConfig, params)
 	return err
 }
 
 // SetTimezone sets the device's timezone.
 func (p *Provisioner) SetTimezone(ctx context.Context, timezone string) error {
 	params := map[string]any{
-		"config": map[string]any{
-			"location": map[string]any{
+		keyConfig: map[string]any{
+			keyLocation: map[string]any{
 				"tz": timezone,
 			},
 		},
 	}
 
-	_, err := p.client.Call(ctx, "Sys.SetConfig", params)
+	_, err := p.client.Call(ctx, methodSysSetConfig, params)
 	return err
 }
 
 // SetLocation sets the device's geographic location.
 func (p *Provisioner) SetLocation(ctx context.Context, lat, lon float64) error {
 	params := map[string]any{
-		"config": map[string]any{
-			"location": map[string]any{
+		keyConfig: map[string]any{
+			keyLocation: map[string]any{
 				"lat": lat,
 				"lon": lon,
 			},
 		},
 	}
 
-	_, err := p.client.Call(ctx, "Sys.SetConfig", params)
+	_, err := p.client.Call(ctx, methodSysSetConfig, params)
 	return err
 }
 
@@ -192,17 +218,17 @@ func (p *Provisioner) ConfigureCloud(ctx context.Context, config *CloudConfig) e
 	cloudConfig := make(map[string]any)
 
 	if config.Enable != nil {
-		cloudConfig["enable"] = *config.Enable
+		cloudConfig[keyEnable] = *config.Enable
 	}
 	if config.Server != "" {
 		cloudConfig["server"] = config.Server
 	}
 
 	params := map[string]any{
-		"config": cloudConfig,
+		keyConfig: cloudConfig,
 	}
 
-	_, err := p.client.Call(ctx, "Cloud.SetConfig", params)
+	_, err := p.client.Call(ctx, methodCloudSetConfig, params)
 	return err
 }
 
@@ -274,8 +300,8 @@ func (p *Provisioner) Reboot(ctx context.Context) error {
 // DisableBLE disables Bluetooth Low Energy on the device.
 func (p *Provisioner) DisableBLE(ctx context.Context) error {
 	params := map[string]any{
-		"config": map[string]any{
-			"enable": false,
+		keyConfig: map[string]any{
+			keyEnable: false,
 		},
 	}
 	_, err := p.client.Call(ctx, "BLE.SetConfig", params)
@@ -285,8 +311,8 @@ func (p *Provisioner) DisableBLE(ctx context.Context) error {
 // EnableBLE enables Bluetooth Low Energy on the device.
 func (p *Provisioner) EnableBLE(ctx context.Context) error {
 	params := map[string]any{
-		"config": map[string]any{
-			"enable": true,
+		keyConfig: map[string]any{
+			keyEnable: true,
 		},
 	}
 	_, err := p.client.Call(ctx, "BLE.SetConfig", params)
@@ -668,8 +694,8 @@ func (b *BLEProvisioner) buildProvisionCommands(config *BLEProvisionConfig) []BL
 	// Configure WiFi
 	if config.WiFi != nil && config.WiFi.SSID != "" {
 		staConfig := map[string]any{
-			"ssid":   config.WiFi.SSID,
-			"enable": true,
+			keySSID:   config.WiFi.SSID,
+			keyEnable: true,
 		}
 		if config.WiFi.Password != "" {
 			staConfig["pass"] = config.WiFi.Password
@@ -688,10 +714,10 @@ func (b *BLEProvisioner) buildProvisionCommands(config *BLEProvisionConfig) []BL
 		}
 
 		commands = append(commands, BLERPCCommand{
-			Method: "WiFi.SetConfig",
+			Method: methodWiFiSetConfig,
 			Params: map[string]any{
-				"config": map[string]any{
-					"sta": staConfig,
+				keyConfig: map[string]any{
+					keySTA: staConfig,
 				},
 			},
 		})
@@ -700,9 +726,9 @@ func (b *BLEProvisioner) buildProvisionCommands(config *BLEProvisionConfig) []BL
 	// Set device name
 	if config.DeviceName != "" {
 		commands = append(commands, BLERPCCommand{
-			Method: "Sys.SetConfig",
+			Method: methodSysSetConfig,
 			Params: map[string]any{
-				"config": map[string]any{
+				keyConfig: map[string]any{
 					"device": map[string]any{
 						"name": config.DeviceName,
 					},
@@ -714,10 +740,10 @@ func (b *BLEProvisioner) buildProvisionCommands(config *BLEProvisionConfig) []BL
 	// Set timezone
 	if config.Timezone != "" {
 		commands = append(commands, BLERPCCommand{
-			Method: "Sys.SetConfig",
+			Method: methodSysSetConfig,
 			Params: map[string]any{
-				"config": map[string]any{
-					"location": map[string]any{
+				keyConfig: map[string]any{
+					keyLocation: map[string]any{
 						"tz": config.Timezone,
 					},
 				},
@@ -728,10 +754,10 @@ func (b *BLEProvisioner) buildProvisionCommands(config *BLEProvisionConfig) []BL
 	// Configure cloud
 	if config.EnableCloud != nil {
 		commands = append(commands, BLERPCCommand{
-			Method: "Cloud.SetConfig",
+			Method: methodCloudSetConfig,
 			Params: map[string]any{
-				"config": map[string]any{
-					"enable": *config.EnableCloud,
+				keyConfig: map[string]any{
+					keyEnable: *config.EnableCloud,
 				},
 			},
 		})
@@ -748,7 +774,12 @@ func (b *BLEProvisioner) transmitCommands(
 	if err := b.Transmitter.Connect(ctx, address); err != nil {
 		return fmt.Errorf("%w: %w", ErrBLEConnectionFailed, err)
 	}
-	defer b.Transmitter.Disconnect() //nolint:errcheck // Best-effort disconnect
+	defer func() {
+		// Best-effort disconnect during teardown; a failure here is not actionable.
+		if err := b.Transmitter.Disconnect(); err != nil {
+			return
+		}
+	}()
 
 	// Send each command and wait for response
 	for i, cmd := range commands {
@@ -784,7 +815,7 @@ type BLERPCCommand struct {
 // ToJSON converts the command to JSON bytes for BLE transmission.
 func (c *BLERPCCommand) ToJSON(id int) ([]byte, error) {
 	request := map[string]any{
-		"jsonrpc": "2.0",
+		"jsonrpc": jsonRPCVersion,
 		"id":      id,
 		"method":  c.Method,
 	}
@@ -1191,24 +1222,24 @@ func StandardProfiles() []*Profile {
 			Name:        "home-basic",
 			Description: "Basic home network configuration",
 			Config: &DeviceConfig{
-				Timezone: "America/New_York",
+				Timezone: defaultTimezone,
 				Cloud: &CloudConfig{
 					Enable: &enableCloud,
 				},
 			},
 			Options: DefaultProvisionOptions(),
-			Tags:    map[string]string{"type": "home", "level": "basic"},
+			Tags:    map[string]string{exampleTagTypeKey: exampleTagTypeHome, exampleTagLevelKey: "basic"},
 		},
 		{
 			Name:        "home-advanced",
 			Description: "Advanced home configuration with auth",
 			Config: &DeviceConfig{
-				Timezone: "America/New_York",
+				Timezone: defaultTimezone,
 				Cloud: &CloudConfig{
 					Enable: &enableCloud,
 				},
 				Auth: &AuthConfig{
-					User: "admin",
+					User: exampleAdminUsername,
 				},
 			},
 			Options: &ProvisionOptions{
@@ -1217,7 +1248,7 @@ func StandardProfiles() []*Profile {
 				VerifyConnection:  true,
 				DisableAP:         true,
 			},
-			Tags: map[string]string{"type": "home", "level": "advanced"},
+			Tags: map[string]string{exampleTagTypeKey: exampleTagTypeHome, exampleTagLevelKey: "advanced"},
 		},
 		{
 			Name:        "enterprise-secure",
@@ -1227,7 +1258,7 @@ func StandardProfiles() []*Profile {
 					Enable: &disableCloud,
 				},
 				Auth: &AuthConfig{
-					User: "admin",
+					User: exampleAdminUsername,
 				},
 			},
 			Options: &ProvisionOptions{
@@ -1237,7 +1268,7 @@ func StandardProfiles() []*Profile {
 				DisableAP:         true,
 				DisableBLE:        true,
 			},
-			Tags: map[string]string{"type": "enterprise", "level": "secure"},
+			Tags: map[string]string{exampleTagTypeKey: "enterprise", exampleTagLevelKey: "secure"},
 		},
 		{
 			Name:        "iot-minimal",
@@ -1253,7 +1284,7 @@ func StandardProfiles() []*Profile {
 				VerifyConnection:  false,
 				DisableAP:         false,
 			},
-			Tags: map[string]string{"type": "iot", "level": "minimal"},
+			Tags: map[string]string{exampleTagTypeKey: "iot", exampleTagLevelKey: "minimal"},
 		},
 	}
 }

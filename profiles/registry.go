@@ -119,46 +119,71 @@ func ListByCapability(capability string) []*Profile {
 	return result
 }
 
+// Canonical capability names used as map values, switch labels, and alias keys.
+const (
+	capPowerMetering         = "power_metering"
+	capEnergyMetering        = "energy_metering"
+	capCoverSupport          = "cover_support"
+	capCover                 = "cover"
+	capDimmingSupport        = "dimming_support"
+	capColorSupport          = "color_support"
+	capColor                 = "color"
+	capColorTemperature      = "color_temperature"
+	capScripting             = "scripting"
+	capSchedules             = "schedules"
+	capWebhooks              = "webhooks"
+	capKVS                   = "kvs"
+	capVirtualComponents     = "virtual_components"
+	capActions               = "actions"
+	capSensorAddon           = "sensor_addon"
+	capCalibration           = "calibration"
+	capInputEvents           = "input_events"
+	capEffects               = "effects"
+	capNoNeutral             = "no_neutral"
+	capBidirectionalMetering = "bidirectional_metering"
+	capThreePhase            = "three_phase"
+)
+
 // capabilityAliases maps various capability name formats to canonical names.
 var capabilityAliases = map[string]string{
-	"power_metering":         "power_metering",
-	"powermetering":          "power_metering",
-	"energy_metering":        "energy_metering",
-	"energymetering":         "energy_metering",
-	"cover_support":          "cover_support",
-	"coversupport":           "cover_support",
-	"cover":                  "cover_support",
-	"dimming_support":        "dimming_support",
-	"dimmingsupport":         "dimming_support",
-	"dimming":                "dimming_support",
-	"color_support":          "color_support",
-	"colorsupport":           "color_support",
-	"color":                  "color_support",
-	"rgb":                    "color_support",
-	"color_temperature":      "color_temperature",
-	"colortemperature":       "color_temperature",
-	"cct":                    "color_temperature",
-	"scripting":              "scripting",
-	"scripts":                "scripting",
-	"schedules":              "schedules",
-	"webhooks":               "webhooks",
-	"kvs":                    "kvs",
-	"virtual_components":     "virtual_components",
-	"virtualcomponents":      "virtual_components",
-	"actions":                "actions",
-	"sensor_addon":           "sensor_addon",
-	"sensoraddon":            "sensor_addon",
-	"calibration":            "calibration",
-	"input_events":           "input_events",
-	"inputevents":            "input_events",
-	"effects":                "effects",
-	"no_neutral":             "no_neutral",
-	"noneutral":              "no_neutral",
-	"bidirectional_metering": "bidirectional_metering",
-	"bidirectionalmetering":  "bidirectional_metering",
-	"three_phase":            "three_phase",
-	"threephase":             "three_phase",
-	"3phase":                 "three_phase",
+	capPowerMetering:         capPowerMetering,
+	"powermetering":          capPowerMetering,
+	capEnergyMetering:        capEnergyMetering,
+	"energymetering":         capEnergyMetering,
+	capCoverSupport:          capCoverSupport,
+	"coversupport":           capCoverSupport,
+	capCover:                 capCoverSupport,
+	capDimmingSupport:        capDimmingSupport,
+	"dimmingsupport":         capDimmingSupport,
+	"dimming":                capDimmingSupport,
+	capColorSupport:          capColorSupport,
+	"colorsupport":           capColorSupport,
+	capColor:                 capColorSupport,
+	"rgb":                    capColorSupport,
+	capColorTemperature:      capColorTemperature,
+	"colortemperature":       capColorTemperature,
+	"cct":                    capColorTemperature,
+	capScripting:             capScripting,
+	"scripts":                capScripting,
+	capSchedules:             capSchedules,
+	capWebhooks:              capWebhooks,
+	capKVS:                   capKVS,
+	capVirtualComponents:     capVirtualComponents,
+	"virtualcomponents":      capVirtualComponents,
+	capActions:               capActions,
+	capSensorAddon:           capSensorAddon,
+	"sensoraddon":            capSensorAddon,
+	capCalibration:           capCalibration,
+	capInputEvents:           capInputEvents,
+	"inputevents":            capInputEvents,
+	capEffects:               capEffects,
+	capNoNeutral:             capNoNeutral,
+	"noneutral":              capNoNeutral,
+	capBidirectionalMetering: capBidirectionalMetering,
+	"bidirectionalmetering":  capBidirectionalMetering,
+	capThreePhase:            capThreePhase,
+	"threephase":             capThreePhase,
+	"3phase":                 capThreePhase,
 }
 
 // hasCapability checks if a profile has a specific capability by name.
@@ -175,43 +200,43 @@ func hasCapability(p *Profile, capability string) bool {
 //nolint:gocyclo,cyclop // Capability value extraction checks multiple capability fields
 func getCapabilityValue(p *Profile, canonical string) bool {
 	switch canonical {
-	case "power_metering":
+	case capPowerMetering:
 		return p.Capabilities.PowerMetering
-	case "energy_metering":
+	case capEnergyMetering:
 		return p.Capabilities.EnergyMetering
-	case "cover_support":
+	case capCoverSupport:
 		return p.Capabilities.CoverSupport
-	case "dimming_support":
+	case capDimmingSupport:
 		return p.Capabilities.DimmingSupport
-	case "color_support":
+	case capColorSupport:
 		return p.Capabilities.ColorSupport
-	case "color_temperature":
+	case capColorTemperature:
 		return p.Capabilities.ColorTemperature
-	case "scripting":
+	case capScripting:
 		return p.Capabilities.Scripting
-	case "schedules":
+	case capSchedules:
 		return p.Capabilities.Schedules
-	case "webhooks":
+	case capWebhooks:
 		return p.Capabilities.Webhooks
-	case "kvs":
+	case capKVS:
 		return p.Capabilities.KVS
-	case "virtual_components":
+	case capVirtualComponents:
 		return p.Capabilities.VirtualComponents
-	case "actions":
+	case capActions:
 		return p.Capabilities.Actions
-	case "sensor_addon":
+	case capSensorAddon:
 		return p.Capabilities.SensorAddon
-	case "calibration":
+	case capCalibration:
 		return p.Capabilities.Calibration
-	case "input_events":
+	case capInputEvents:
 		return p.Capabilities.InputEvents
-	case "effects":
+	case capEffects:
 		return p.Capabilities.Effects
-	case "no_neutral":
+	case capNoNeutral:
 		return p.Capabilities.NoNeutral
-	case "bidirectional_metering":
+	case capBidirectionalMetering:
 		return p.Capabilities.BidirectionalMetering
-	case "three_phase":
+	case capThreePhase:
 		return p.Capabilities.ThreePhase
 	default:
 		return false

@@ -66,7 +66,7 @@ To add support for a new Shelly device:
 
 ### Prerequisites
 
-- **Go 1.25.5 or later** (required for latest features)
+- **Go 1.26.4 or later** (required for latest features)
 - **golangci-lint** for code quality checks
 - **make** (optional, for convenience commands)
 

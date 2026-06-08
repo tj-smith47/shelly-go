@@ -110,6 +110,12 @@ const (
 	StateClosed
 )
 
+// JSON-RPC request field keys shared across transports.
+const (
+	rpcFieldSrc    = "src"
+	rpcFieldMethod = "method"
+)
+
 // String returns the string representation of the connection state.
 func (s ConnectionState) String() string {
 	switch s {

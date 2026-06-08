@@ -5,6 +5,15 @@ import (
 	"github.com/tj-smith47/shelly-go/types"
 )
 
+// Firmware update stage channels.
+const (
+	// StageStable selects the latest stable firmware channel.
+	StageStable = "stable"
+
+	// StageBeta selects the latest beta firmware channel.
+	StageBeta = "beta"
+)
+
 // Device represents a device that can be managed by the firmware package.
 // This interface is used for batch operations.
 type Device interface {

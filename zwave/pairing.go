@@ -1,5 +1,15 @@
 package zwave
 
+// Shared S-button manual learn-mode instruction steps reused across the
+// inclusion and exclusion instruction sets.
+const (
+	stepPressHoldSButton = "2. Press and hold the S button until the LED turns solid blue"
+	stepReleaseSButton   = "3. Release the S button"
+	stepPressHoldAgain   = "4. Press and hold the S button again (> 2 seconds) until the LED blinks faster"
+	stepReleaseLearnMode = "5. Release the S button to start Learn mode"
+	stepGatewayExclusion = "1. Put your Z-Wave gateway into exclusion mode"
+)
+
 // InclusionMode represents the Z-Wave inclusion method.
 type InclusionMode string
 
@@ -52,10 +62,10 @@ func GetInclusionInfo(device *Device, mode InclusionMode) *InclusionInfo {
 	case InclusionButton:
 		info.Instructions = []string{
 			"1. Put your Z-Wave gateway into inclusion mode",
-			"2. Press and hold the S button until the LED turns solid blue",
-			"3. Release the S button",
-			"4. Press and hold the S button again (> 2 seconds) until the LED blinks faster",
-			"5. Release the S button to start Learn mode",
+			stepPressHoldSButton,
+			stepReleaseSButton,
+			stepPressHoldAgain,
+			stepReleaseLearnMode,
 			"6. Enter the 5-digit DSK PIN from the device label if prompted",
 		}
 	case InclusionSwitch:
@@ -96,27 +106,27 @@ func GetExclusionInfo(device *Device, mode InclusionMode) *ExclusionInfo {
 	switch mode {
 	case InclusionButton:
 		info.Instructions = []string{
-			"1. Put your Z-Wave gateway into exclusion mode",
-			"2. Press and hold the S button until the LED turns solid blue",
-			"3. Release the S button",
-			"4. Press and hold the S button again (> 2 seconds) until the LED blinks faster",
-			"5. Release the S button to start Learn mode",
+			stepGatewayExclusion,
+			stepPressHoldSButton,
+			stepReleaseSButton,
+			stepPressHoldAgain,
+			stepReleaseLearnMode,
 			"6. The device will be removed from the network",
 		}
 	case InclusionSwitch:
 		info.Instructions = []string{
-			"1. Put your Z-Wave gateway into exclusion mode",
+			stepGatewayExclusion,
 			"2. Toggle the connected switch 3 times quickly",
 			"3. The device will enter Learn mode and be removed from the network",
 		}
 	default:
 		// SmartStart devices still need manual exclusion
 		info.Instructions = []string{
-			"1. Put your Z-Wave gateway into exclusion mode",
-			"2. Press and hold the S button until the LED turns solid blue",
-			"3. Release the S button",
-			"4. Press and hold the S button again (> 2 seconds) until the LED blinks faster",
-			"5. Release the S button to start Learn mode",
+			stepGatewayExclusion,
+			stepPressHoldSButton,
+			stepReleaseSButton,
+			stepPressHoldAgain,
+			stepReleaseLearnMode,
 			"6. The device will be removed from the network",
 		}
 	}
