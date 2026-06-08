@@ -11,9 +11,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/tj-smith47/shelly-go/gen2"
 	"github.com/tj-smith47/shelly-go/rpc"
 )
 
@@ -22,6 +25,7 @@ const (
 	componentCloud = "cloud"
 	componentBLE   = "ble"
 	componentMQTT  = "mqtt"
+	componentWiFi  = "wifi"
 )
 
 // Common errors.
@@ -173,11 +177,96 @@ func (m *Manager) Restore(ctx context.Context, data []byte, opts *RestoreOptions
 	// Restore optional configs using table-driven approach
 	m.restoreOptionalConfigs(ctx, opts, &backup, result)
 
+	// Restore the full device configuration captured from Shelly.GetConfig:
+	// Sys, Ethernet, WebSocket, and every component config.
+	m.restoreDeviceConfig(ctx, opts, &backup, result)
+
 	// Restore complex items
 	m.restoreComplexItems(ctx, opts, &backup, result)
 
 	result.Success = len(result.Errors) == 0
 	return result, nil
+}
+
+// restoreDeviceConfig applies the per-component configuration captured in
+// backup.Config (the Shelly.GetConfig result) that the optional-config and
+// complex-item restores do not cover: Sys, Ethernet, WebSocket, and every
+// component (Switch, Cover, Light, Input, PM, EM, ...). WiFi/Cloud/BLE/MQTT are
+// restored from their dedicated backup fields by restoreOptionalConfigs and are
+// skipped here to avoid double application.
+//
+// Per-section failures are recorded as warnings, not errors: a device may
+// reject a read-only field in a round-tripped config section, and that must not
+// fail the whole restore or block the remaining sections.
+func (m *Manager) restoreDeviceConfig(
+	ctx context.Context,
+	opts *RestoreOptions,
+	backup *Backup,
+	result *RestoreResult,
+) {
+	if len(backup.Config) == 0 {
+		return
+	}
+	var cfg map[string]json.RawMessage
+	if err := json.Unmarshal(backup.Config, &cfg); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("parse device config: %w", err))
+		return
+	}
+
+	keys := make([]string, 0, len(cfg))
+	for key := range cfg {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	for _, key := range keys {
+		if !shouldRestoreConfigKey(key, opts) {
+			continue
+		}
+		if err := m.setComponentConfig(ctx, key, cfg[key]); err != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("restore %s: %v", key, err))
+			continue
+		}
+		if strings.HasPrefix(key, "eth") {
+			result.RestartRequired = true
+		}
+	}
+}
+
+// shouldRestoreConfigKey reports whether a Shelly.GetConfig section should be
+// applied during restore, honoring the restore options. WiFi/Cloud/BLE/MQTT are
+// handled by restoreOptionalConfigs; Ethernet follows the network option; Sys
+// and WebSocket are always restored; everything else is treated as a component.
+func shouldRestoreConfigKey(key string, opts *RestoreOptions) bool {
+	base := key
+	if i := strings.IndexByte(key, ':'); i >= 0 {
+		base = key[:i]
+	}
+	switch base {
+	case componentWiFi, componentCloud, componentBLE, componentMQTT:
+		return false
+	case "eth":
+		return opts.RestoreWiFi
+	case "sys", "ws":
+		return true
+	default:
+		return opts.RestoreComponents
+	}
+}
+
+// setComponentConfig applies one Shelly.GetConfig section back to the device.
+// Instanced components ("switch:0") go through gen2.BaseComponent.SetConfig,
+// which builds the "<Class>.SetConfig" method and {id, config} params; singleton
+// sections ("sys", "eth", "ws") are applied with a plain {config} payload.
+func (m *Manager) setComponentConfig(ctx context.Context, key string, raw json.RawMessage) error {
+	if strings.ContainsRune(key, ':') {
+		typ, id, err := gen2.ParseComponentKey(key)
+		if err != nil {
+			return err
+		}
+		return gen2.NewBaseComponent(m.client, typ, id).SetConfig(ctx, raw)
+	}
+	return m.setConfig(ctx, gen2.ComponentClassName(key)+".SetConfig", raw)
 }
 
 // restoreOptionalConfigs restores optional configuration sections based on options.
@@ -781,7 +870,7 @@ func (m *Migrator) Migrate(ctx context.Context, opts *MigrationOptions) (*Migrat
 		name    string
 		include bool
 	}{
-		{name: "wifi", include: opts.IncludeWiFi},
+		{name: componentWiFi, include: opts.IncludeWiFi},
 		{name: componentCloud, include: opts.IncludeCloud},
 		{name: componentMQTT, include: opts.IncludeMQTT},
 		{name: componentBLE, include: opts.IncludeBLE},

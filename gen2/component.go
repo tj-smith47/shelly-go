@@ -205,6 +205,7 @@ const (
 	compTypeBTHomeSensor = "bthomesensor"
 	compTypeRGB          = "rgb"
 	compTypeRGBW         = "rgbw"
+	compTypeDevicePower  = "devicepower"
 )
 
 // RPC namespace names for components whose capitalization does not follow the
@@ -222,6 +223,7 @@ const (
 	rpcNameBTHomeSensor = "BTHomeSensor"
 	rpcNameRGB          = "RGB"
 	rpcNameRGBW         = "RGBW"
+	rpcNameDevicePower  = "DevicePower"
 )
 
 // componentTypeNames maps lowercase component types to their RPC method names.
@@ -248,23 +250,32 @@ var componentTypeNames = map[string]string{
 	"ht_ui":              "HT_UI",
 	"plugs_ui":           "Plugs_UI",
 	"sensoraddon":        "SensorAddon",
-	"devicepower":        "DevicePower",
+	compTypeDevicePower:  rpcNameDevicePower,
+}
+
+// ComponentClassName returns the RPC class name for a component type — the part
+// of a component key before ":" (e.g. "switch" -> "Switch", "wifi" -> "WiFi",
+// "em1" -> "EM1"). It is the basis for "<Class>.GetConfig"/"<Class>.SetConfig"
+// method names and is exported so config-restore code can build method names for
+// a component key without re-deriving the special-case capitalization here.
+func ComponentClassName(componentType string) string {
+	if componentType == "" {
+		return ""
+	}
+
+	// Check for special cases first
+	if name, ok := componentTypeNames[componentType]; ok {
+		return name
+	}
+
+	// Standard capitalization: first letter uppercase
+	return string(componentType[0]-32) + componentType[1:]
 }
 
 // capitalizedType returns the component type with the first letter capitalized.
 // This is used for RPC method names (e.g., "switch" -> "Switch").
 func (c *BaseComponent) capitalizedType() string {
-	if c.typ == "" {
-		return ""
-	}
-
-	// Check for special cases first
-	if name, ok := componentTypeNames[c.typ]; ok {
-		return name
-	}
-
-	// Standard capitalization: first letter uppercase
-	return string(c.typ[0]-32) + c.typ[1:]
+	return ComponentClassName(c.typ)
 }
 
 // ComponentList represents a list of components on a device.
