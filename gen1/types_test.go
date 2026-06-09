@@ -665,11 +665,16 @@ func TestMeterSettings(t *testing.T) {
 // TestEMeterSettings tests EMeterSettings struct.
 func TestEMeterSettings(t *testing.T) {
 	settings := EMeterSettings{
-		CTType: 1, // 120A CT
+		MaxPower:              2300,
+		OverPowerURL:          "http://hook/over",
+		OverPowerURLThreshold: 2000,
 	}
 
-	if settings.CTType != 1 {
-		t.Errorf("expected CT type 1, got %d", settings.CTType)
+	if settings.MaxPower != 2300 {
+		t.Errorf("expected max power 2300, got %g", settings.MaxPower)
+	}
+	if settings.OverPowerURL != "http://hook/over" {
+		t.Errorf("unexpected over power url %q", settings.OverPowerURL)
 	}
 }
 

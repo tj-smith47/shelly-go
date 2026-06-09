@@ -413,7 +413,7 @@ func TestEMeterResetCounters(t *testing.T) {
 // TestEMeterGetConfig tests config retrieval.
 func TestEMeterGetConfig(t *testing.T) {
 	mt := newMockTransport()
-	mt.SetResponse("/settings/emeter/0", &EMeterConfig{CTType: 1})
+	mt.SetResponse("/settings/emeter/0", &EMeterConfig{MaxPower: 2300, OverPowerURL: "http://hook/over"})
 
 	emeter := NewEMeter(mt, 0)
 	ctx := context.Background()
@@ -423,20 +423,24 @@ func TestEMeterGetConfig(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if config.CTType != 1 {
-		t.Errorf("expected CT type 1, got %d", config.CTType)
+	if config.MaxPower != 2300 {
+		t.Errorf("expected max power 2300, got %g", config.MaxPower)
+	}
+	if config.OverPowerURL != "http://hook/over" {
+		t.Errorf("unexpected over power url %q", config.OverPowerURL)
 	}
 }
 
-// TestEMeterSetCTType tests CT type setting.
-func TestEMeterSetCTType(t *testing.T) {
+// TestEMeterSetConfig asserts the writable emeter params (max_power + over/under
+// power URLs and thresholds) are sent to /settings/emeter/{index}.
+func TestEMeterSetConfig(t *testing.T) {
 	mt := newMockTransport()
-	mt.SetResponse("/settings/emeter/0?cttype=1", map[string]bool{"ok": true})
+	mt.SetResponse("/settings/emeter/0?max_power=2300&over_power_url=http%3A%2F%2Fhook%2Fover&over_power_url_threshold=2000", map[string]bool{"ok": true})
 
 	emeter := NewEMeter(mt, 0)
 	ctx := context.Background()
 
-	err := emeter.SetCTType(ctx, 1)
+	err := emeter.SetConfig(ctx, EMeterConfig{MaxPower: 2300, OverPowerURL: "http://hook/over", OverPowerURLThreshold: 2000})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -745,15 +749,15 @@ func TestEMeterGetConfigError(t *testing.T) {
 	}
 }
 
-// TestEMeterSetCTTypeError tests SetCTType error handling.
-func TestEMeterSetCTTypeError(t *testing.T) {
+// TestEMeterSetConfigError tests SetConfig error handling.
+func TestEMeterSetConfigError(t *testing.T) {
 	mt := newMockTransport()
-	mt.SetError("/settings/emeter/0?cttype=1", errors.New("invalid"))
+	mt.SetError("/settings/emeter/0?max_power=2300", errors.New("invalid"))
 
 	emeter := NewEMeter(mt, 0)
 	ctx := context.Background()
 
-	err := emeter.SetCTType(ctx, 1)
+	err := emeter.SetConfig(ctx, EMeterConfig{MaxPower: 2300})
 	if err == nil {
 		t.Fatal("expected error")
 	}

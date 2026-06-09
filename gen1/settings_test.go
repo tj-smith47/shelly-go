@@ -3,10 +3,45 @@ package gen1
 import (
 	"context"
 	"encoding/json"
+	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/tj-smith47/shelly-go/internal/testutil"
 )
+
+// recordedScheduleRules returns the decoded schedule_rules query value from the
+// most recent recorded call whose path contains pathSubstr. present reports
+// whether the param was sent at all; count is how many calls matched pathSubstr
+// (used to prove the rules ride atomically in a single config write, not a second
+// follow-up call the device can silently drop).
+func recordedScheduleRules(t *testing.T, mock *testutil.MockTransport, pathSubstr string) (value string, present bool, count int) {
+	t.Helper()
+	var match string
+	for _, c := range mock.Calls() {
+		if !strings.Contains(c.Method, pathSubstr) {
+			continue
+		}
+		count++
+		match = c.Method
+	}
+	if count == 0 {
+		t.Fatalf("no recorded call containing %q; calls=%v", pathSubstr, mock.Calls())
+	}
+	q := match
+	if i := strings.IndexByte(q, '?'); i >= 0 {
+		q = q[i+1:]
+	}
+	vals, err := url.ParseQuery(q)
+	if err != nil {
+		t.Fatalf("parse query %q: %v", match, err)
+	}
+	v, ok := vals["schedule_rules"]
+	if !ok {
+		return "", false, count
+	}
+	return strings.Join(v, ""), true, count
+}
 
 func TestSetWiFiStation(t *testing.T) {
 	mock := testutil.NewMockTransport()
@@ -44,6 +79,45 @@ func TestSetWiFiAP(t *testing.T) {
 	err := device.SetWiFiAP(context.Background(), true, "MyAP", "appassword")
 	if err != nil {
 		t.Fatalf("SetWiFiAP failed: %v", err)
+	}
+}
+
+func TestSetWiFiStation1(t *testing.T) {
+	mock := testutil.NewMockTransport()
+	defer mock.ClearMatchers()
+	device := NewDevice(mock)
+
+	mock.OnPathContains("/settings/sta1?", json.RawMessage(`{}`), nil)
+
+	err := device.SetWiFiStation1(context.Background(), true, "BackupNet", "pass123")
+	if err != nil {
+		t.Fatalf("SetWiFiStation1 failed: %v", err)
+	}
+}
+
+func TestSetWiFiStation1Static(t *testing.T) {
+	mock := testutil.NewMockTransport()
+	defer mock.ClearMatchers()
+	device := NewDevice(mock)
+
+	mock.OnPathContains("ipv4_method=static", json.RawMessage(`{}`), nil)
+
+	err := device.SetWiFiStation1Static(context.Background(), "BackupNet", "pass", "192.168.1.50", "192.168.1.1", "255.255.255.0", "8.8.8.8")
+	if err != nil {
+		t.Fatalf("SetWiFiStation1Static failed: %v", err)
+	}
+}
+
+func TestSetApRoaming(t *testing.T) {
+	mock := testutil.NewMockTransport()
+	defer mock.ClearMatchers()
+	device := NewDevice(mock)
+
+	mock.OnPathContains("ap_roaming_enabled", json.RawMessage(`{}`), nil)
+
+	err := device.SetApRoaming(context.Background(), true, -70)
+	if err != nil {
+		t.Fatalf("SetApRoaming failed: %v", err)
 	}
 }
 
@@ -311,7 +385,7 @@ func TestSetLightConfig(t *testing.T) {
 		Schedule:     false,
 	}
 
-	err := device.SetLightConfig(context.Background(), 0, config)
+	err := device.SetLightConfig(context.Background(), 0, &config)
 	if err != nil {
 		t.Fatalf("SetLightConfig failed: %v", err)
 	}
@@ -443,16 +517,27 @@ func TestGetExternalSensor(t *testing.T) {
 	}
 }
 
+// TestAddScheduleRule asserts the append is a read-modify-write: it reads the
+// relay's current rules and rewrites the whole comma-joined set with the new rule
+// appended (Gen1 has no append endpoint; the indexed schedule_rules[]= form is
+// silently ignored by the device).
 func TestAddScheduleRule(t *testing.T) {
 	mock := testutil.NewMockTransport()
 	defer mock.ClearMatchers()
 	device := NewDevice(mock)
 
+	mock.OnCallJSON("/settings/relay/0", `{"schedule_rules":["0700-0123456-0-on"]}`)
 	mock.OnPathContains("/settings/relay/0?schedule_rules", json.RawMessage(`{}`), nil)
 
-	err := device.AddScheduleRule(context.Background(), 0, "0800-7F-0-on")
-	if err != nil {
+	if err := device.AddScheduleRule(context.Background(), 0, "2200-0123456-0-off"); err != nil {
 		t.Fatalf("AddScheduleRule failed: %v", err)
+	}
+	val, present, _ := recordedScheduleRules(t, mock, "/settings/relay/0?schedule_rules")
+	if !present {
+		t.Fatal("AddScheduleRule did not write schedule_rules")
+	}
+	if want := "0700-0123456-0-on,2200-0123456-0-off"; val != want {
+		t.Errorf("schedule_rules = %q, want existing+appended %q", val, want)
 	}
 }
 
@@ -466,6 +551,150 @@ func TestSetScheduleRules(t *testing.T) {
 	err := device.SetScheduleRules(context.Background(), 0, []string{"0800-7F-0-on", "2200-7F-0-off"})
 	if err != nil {
 		t.Fatalf("SetScheduleRules failed: %v", err)
+	}
+}
+
+func TestSetLightScheduleRules(t *testing.T) {
+	mock := testutil.NewMockTransport()
+	defer mock.ClearMatchers()
+	device := NewDevice(mock)
+
+	mock.OnPathContains("/settings/light/0?", json.RawMessage(`{}`), nil)
+
+	err := device.SetLightScheduleRules(context.Background(), 0, []string{"0800-7F-0-on", "2200-7F-0-off"})
+	if err != nil {
+		t.Fatalf("SetLightScheduleRules failed: %v", err)
+	}
+}
+
+// TestSetEMeterConfig asserts the writable emeter params are sent to
+// /settings/emeter/{index} and that ct_type is never emitted (Gen1 has none).
+func TestSetEMeterConfig(t *testing.T) {
+	mock := testutil.NewMockTransport()
+	defer mock.ClearMatchers()
+	device := NewDevice(mock)
+	mock.OnPathContains("/settings/emeter/0?", json.RawMessage(`{}`), nil)
+
+	cfg := EMeterSettings{MaxPower: 2300, OverPowerURL: "http://hook/over", OverPowerURLThreshold: 2000}
+	if err := device.SetEMeterConfig(context.Background(), 0, cfg); err != nil {
+		t.Fatalf("SetEMeterConfig: %v", err)
+	}
+	var path string
+	for _, c := range mock.Calls() {
+		if strings.Contains(c.Method, "/settings/emeter/0?") {
+			path = c.Method
+		}
+	}
+	if path == "" {
+		t.Fatalf("no /settings/emeter/0 call; calls=%v", mock.Calls())
+	}
+	q, _ := url.ParseQuery(path[strings.IndexByte(path, '?')+1:])
+	if q.Get("max_power") != "2300" {
+		t.Errorf("max_power = %q, want 2300", q.Get("max_power"))
+	}
+	if q.Get("over_power_url") != "http://hook/over" {
+		t.Errorf("over_power_url = %q", q.Get("over_power_url"))
+	}
+	if _, ct := q["ct_type"]; ct {
+		t.Error("ct_type must not be sent on Gen1")
+	}
+	if _, ct := q["cttype"]; ct {
+		t.Error("cttype must not be sent on Gen1")
+	}
+}
+
+// TestSetEMeterConfig_EmptyIsNoOp asserts an all-zero config sends no request.
+func TestSetEMeterConfig_EmptyIsNoOp(t *testing.T) {
+	mock := testutil.NewMockTransport()
+	defer mock.ClearMatchers()
+	device := NewDevice(mock)
+
+	if err := device.SetEMeterConfig(context.Background(), 0, EMeterSettings{}); err != nil {
+		t.Fatalf("SetEMeterConfig: %v", err)
+	}
+	if mock.CallCount() != 0 {
+		t.Errorf("expected no calls for empty config, got %d", mock.CallCount())
+	}
+}
+
+// TestSetLightConfig_ScheduleRulesAtomic asserts the rules are carried as a single
+// comma-joined schedule_rules value inside the one /settings/light config write —
+// not a separate follow-up call that the device silently drops.
+func TestSetLightConfig_ScheduleRulesAtomic(t *testing.T) {
+	mock := testutil.NewMockTransport()
+	defer mock.ClearMatchers()
+	device := NewDevice(mock)
+	mock.OnPathContains("/settings/light/0?", json.RawMessage(`{}`), nil)
+
+	rules := []string{"0000asr-0123456-0;101;off", "0000ass-0123456-100;60;on"}
+	if err := device.SetLightConfig(context.Background(), 0, &LightConfig{Name: "L", Schedule: false, ScheduleRules: rules}); err != nil {
+		t.Fatalf("SetLightConfig: %v", err)
+	}
+	val, present, count := recordedScheduleRules(t, mock, "/settings/light/0?")
+	if count != 1 {
+		t.Errorf("expected exactly 1 /settings/light/0 call (atomic), got %d", count)
+	}
+	if !present {
+		t.Fatal("schedule_rules not sent in the light config write")
+	}
+	if want := strings.Join(rules, ","); val != want {
+		t.Errorf("schedule_rules = %q, want comma-joined %q", val, want)
+	}
+}
+
+// TestSetLightConfig_NilScheduleRules_Omitted asserts a nil ScheduleRules leaves
+// schedule_rules out of the write entirely (device rules untouched).
+func TestSetLightConfig_NilScheduleRules_Omitted(t *testing.T) {
+	mock := testutil.NewMockTransport()
+	defer mock.ClearMatchers()
+	device := NewDevice(mock)
+	mock.OnPathContains("/settings/light/0?", json.RawMessage(`{}`), nil)
+
+	if err := device.SetLightConfig(context.Background(), 0, &LightConfig{Name: "L"}); err != nil {
+		t.Fatalf("SetLightConfig: %v", err)
+	}
+	if _, present, _ := recordedScheduleRules(t, mock, "/settings/light/0?"); present {
+		t.Error("schedule_rules should be omitted when ScheduleRules is nil")
+	}
+}
+
+// TestSetRelayConfig_ScheduleRulesAtomic mirrors the light atomic-write assertion
+// for relays.
+func TestSetRelayConfig_ScheduleRulesAtomic(t *testing.T) {
+	mock := testutil.NewMockTransport()
+	defer mock.ClearMatchers()
+	device := NewDevice(mock)
+	mock.OnPathContains("/settings/relay/0?", json.RawMessage(`{}`), nil)
+
+	rules := []string{"0800-0123456-0-on", "2200-0123456-0-off"}
+	if err := device.SetRelayConfig(context.Background(), 0, &RelayConfig{Name: "R", Schedule: true, ScheduleRules: rules}); err != nil {
+		t.Fatalf("SetRelayConfig: %v", err)
+	}
+	val, present, count := recordedScheduleRules(t, mock, "/settings/relay/0?")
+	if count != 1 {
+		t.Errorf("expected exactly 1 /settings/relay/0 call (atomic), got %d", count)
+	}
+	if !present {
+		t.Fatal("schedule_rules not sent in the relay config write")
+	}
+	if want := strings.Join(rules, ","); val != want {
+		t.Errorf("schedule_rules = %q, want comma-joined %q", val, want)
+	}
+}
+
+// TestSetRelayConfig_NilScheduleRules_Omitted is the relay counterpart of the
+// light omission assertion.
+func TestSetRelayConfig_NilScheduleRules_Omitted(t *testing.T) {
+	mock := testutil.NewMockTransport()
+	defer mock.ClearMatchers()
+	device := NewDevice(mock)
+	mock.OnPathContains("/settings/relay/0?", json.RawMessage(`{}`), nil)
+
+	if err := device.SetRelayConfig(context.Background(), 0, &RelayConfig{Name: "R"}); err != nil {
+		t.Fatalf("SetRelayConfig: %v", err)
+	}
+	if _, present, _ := recordedScheduleRules(t, mock, "/settings/relay/0?"); present {
+		t.Error("schedule_rules should be omitted when ScheduleRules is nil")
 	}
 }
 
@@ -877,7 +1106,7 @@ func TestSetLightConfigError(t *testing.T) {
 	mock.OnPathContains("/settings/light/0?", nil, errTest)
 
 	config := LightConfig{BtnReverse: true, AutoOn: 10}
-	err := device.SetLightConfig(context.Background(), 0, config)
+	err := device.SetLightConfig(context.Background(), 0, &config)
 	if err == nil {
 		t.Fatal("expected error")
 	}

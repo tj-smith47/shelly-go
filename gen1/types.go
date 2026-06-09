@@ -481,10 +481,21 @@ type MeterSettings struct {
 	OverLimit float64 `json:"over_limit,omitempty"`
 }
 
-// EMeterSettings contains settings for an energy meter.
+// EMeterSettings contains the writable settings for a Gen1 energy meter
+// (/settings/emeter/{index} on Shelly EM and 3EM). These five are the only
+// writable parameters the Gen1 API exposes for an energy meter. Gen1 has no
+// CT-type setting — the ct_type concept belongs to the Gen2 EM/EM1 components.
 type EMeterSettings struct {
-	// CTType is the current transformer type.
-	CTType int `json:"cttype,omitempty"`
+	// OverPowerURL is the action URL called when power exceeds OverPowerURLThreshold.
+	OverPowerURL string `json:"over_power_url,omitempty"`
+	// UnderPowerURL is the action URL called when power drops below UnderPowerURLThreshold.
+	UnderPowerURL string `json:"under_power_url,omitempty"`
+	// OverPowerURLThreshold is the overpower action threshold in watts.
+	OverPowerURLThreshold float64 `json:"over_power_url_threshold,omitempty"`
+	// UnderPowerURLThreshold is the underpower action threshold in watts.
+	UnderPowerURLThreshold float64 `json:"under_power_url_threshold,omitempty"`
+	// MaxPower is the overpower-protection threshold in watts.
+	MaxPower float64 `json:"max_power,omitempty"`
 }
 
 // UpdateInfo contains firmware update check results.

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
+	"strconv"
 
 	"github.com/tj-smith47/shelly-go/transport"
 )
@@ -65,11 +67,21 @@ type EMeterStatus struct {
 	TotalReturned float64 `json:"total_returned,omitempty"`
 }
 
-// EMeterConfig contains energy meter configuration options.
+// EMeterConfig contains the writable energy meter configuration
+// (/settings/emeter/{index}). These are the only writable parameters the Gen1
+// API exposes for an energy meter; Gen1 has no CT-type setting (ct_type is a
+// Gen2 EM/EM1 concept).
 type EMeterConfig struct {
-	// CTType is the current transformer type.
-	// 0 = 50A, 1 = 120A, etc.
-	CTType int `json:"cttype,omitempty"`
+	// OverPowerURL is the action URL called when power exceeds OverPowerURLThreshold.
+	OverPowerURL string `json:"over_power_url,omitempty"`
+	// UnderPowerURL is the action URL called when power drops below UnderPowerURLThreshold.
+	UnderPowerURL string `json:"under_power_url,omitempty"`
+	// OverPowerURLThreshold is the overpower action threshold in watts.
+	OverPowerURLThreshold float64 `json:"over_power_url_threshold,omitempty"`
+	// UnderPowerURLThreshold is the underpower action threshold in watts.
+	UnderPowerURLThreshold float64 `json:"under_power_url_threshold,omitempty"`
+	// MaxPower is the overpower-protection threshold in watts.
+	MaxPower float64 `json:"max_power,omitempty"`
 }
 
 // EMeterData contains historical energy data.
@@ -211,15 +223,34 @@ func (e *EMeter) GetConfig(ctx context.Context) (*EMeterConfig, error) {
 	return &config, nil
 }
 
-// SetCTType sets the current transformer type.
-//
-// Parameters:
-//   - ctType: CT type (0 = 50A, 1 = 120A, etc.)
-func (e *EMeter) SetCTType(ctx context.Context, ctType int) error {
-	path := fmt.Sprintf("/settings/emeter/%d?cttype=%d", e.id, ctType)
-	_, err := restCall(ctx, e.transport, path)
-	if err != nil {
-		return fmt.Errorf("failed to set CT type: %w", err)
+// SetConfig writes the writable energy meter settings to /settings/emeter/{index}:
+// the overpower-protection threshold and the optional over/under-power action URLs
+// and their thresholds. Zero-valued numeric fields and empty URLs are omitted. Per
+// the Gen1 API these are the only writable emeter parameters — there is no ct_type
+// on Gen1 (that belongs to the Gen2 EM/EM1 components).
+func (e *EMeter) SetConfig(ctx context.Context, config EMeterConfig) error {
+	params := url.Values{}
+	if config.MaxPower > 0 {
+		params.Set("max_power", strconv.FormatFloat(config.MaxPower, 'f', -1, 64))
+	}
+	if config.OverPowerURL != "" {
+		params.Set("over_power_url", config.OverPowerURL)
+	}
+	if config.OverPowerURLThreshold > 0 {
+		params.Set("over_power_url_threshold", strconv.FormatFloat(config.OverPowerURLThreshold, 'f', -1, 64))
+	}
+	if config.UnderPowerURL != "" {
+		params.Set("under_power_url", config.UnderPowerURL)
+	}
+	if config.UnderPowerURLThreshold > 0 {
+		params.Set("under_power_url_threshold", strconv.FormatFloat(config.UnderPowerURLThreshold, 'f', -1, 64))
+	}
+	if len(params) == 0 {
+		return nil
+	}
+	path := fmt.Sprintf("/settings/emeter/%d?%s", e.id, params.Encode())
+	if _, err := restCall(ctx, e.transport, path); err != nil {
+		return fmt.Errorf("failed to set emeter config: %w", err)
 	}
 	return nil
 }

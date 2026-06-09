@@ -49,22 +49,39 @@ func (d *Device) SetWiFiStation(ctx context.Context, enabled bool, ssid, passwor
 //   - mask: Subnet mask
 //   - dns: DNS server (optional, empty string to skip)
 func (d *Device) SetWiFiStationStatic(ctx context.Context, ssid, password, ip, gateway, mask, dns string) error {
-	params := url.Values{}
-	params.Set("wifi_sta_enabled", "true")
-	params.Set("wifi_sta_ssid", ssid)
-	params.Set("wifi_sta_key", password)
-	params.Set("wifi_sta_ipv4_method", "static")
-	params.Set("wifi_sta_ip", ip)
-	params.Set("wifi_sta_gw", gateway)
-	params.Set("wifi_sta_mask", mask)
-	if dns != "" {
-		params.Set("wifi_sta_dns", dns)
-	}
+	return d.setStaticWiFi(ctx, "/settings", &staticWiFiKeys{
+		enabled: "wifi_sta_enabled", ssid: "wifi_sta_ssid", key: "wifi_sta_key",
+		method: "wifi_sta_ipv4_method", ip: "wifi_sta_ip", gateway: "wifi_sta_gw",
+		mask: "wifi_sta_mask", dns: "wifi_sta_dns",
+	}, ssid, password, ip, gateway, mask, dns)
+}
 
-	endpoint := "/settings?" + params.Encode()
-	_, err := d.restCall(ctx, endpoint)
-	if err != nil {
-		return fmt.Errorf("failed to set WiFi station static: %w", err)
+// staticWiFiKeys names the form parameters a static-WiFi write uses. The primary
+// station (/settings) and the secondary station (/settings/sta1) share the same
+// shape but spell their keys differently.
+type staticWiFiKeys struct {
+	enabled, ssid, key, method, ip, gateway, mask, dns string
+}
+
+// setStaticWiFi writes a static-IP WiFi station config to endpoint using the given
+// parameter names. An empty dns is omitted.
+func (d *Device) setStaticWiFi(
+	ctx context.Context, endpoint string, k *staticWiFiKeys,
+	ssid, password, ip, gateway, mask, dns string,
+) error {
+	params := url.Values{}
+	params.Set(k.enabled, "true")
+	params.Set(k.ssid, ssid)
+	params.Set(k.key, password)
+	params.Set(k.method, "static")
+	params.Set(k.ip, ip)
+	params.Set(k.gateway, gateway)
+	params.Set(k.mask, mask)
+	if dns != "" {
+		params.Set(k.dns, dns)
+	}
+	if _, err := d.restCall(ctx, endpoint+"?"+params.Encode()); err != nil {
+		return fmt.Errorf("failed to set static WiFi at %s: %w", endpoint, err)
 	}
 	return nil
 }
@@ -89,6 +106,54 @@ func (d *Device) SetWiFiAP(ctx context.Context, enabled bool, ssid, password str
 	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set WiFi AP: %w", err)
+	}
+	return nil
+}
+
+// SetWiFiStation1 configures the secondary (backup) WiFi station, which the
+// device falls back to when the primary station is unreachable. It is the sta1
+// counterpart of SetWiFiStation and targets the dedicated /settings/sta1 resource.
+func (d *Device) SetWiFiStation1(ctx context.Context, enabled bool, ssid, password string) error {
+	params := url.Values{}
+	params.Set("enabled", boolToString(enabled))
+	if ssid != "" {
+		params.Set("ssid", ssid)
+	}
+	if password != "" {
+		params.Set("key", password)
+	}
+
+	endpoint := "/settings/sta1?" + params.Encode()
+	_, err := d.restCall(ctx, endpoint)
+	if err != nil {
+		return fmt.Errorf("failed to set WiFi station1: %w", err)
+	}
+	return nil
+}
+
+// SetWiFiStation1Static configures the secondary WiFi station with a static IP.
+// It is the sta1 counterpart of SetWiFiStationStatic; an empty dns is omitted.
+func (d *Device) SetWiFiStation1Static(ctx context.Context, ssid, password, ip, gateway, mask, dns string) error {
+	return d.setStaticWiFi(ctx, "/settings/sta1", &staticWiFiKeys{
+		enabled: "enabled", ssid: "ssid", key: "key", method: "ipv4_method",
+		ip: "ip", gateway: "gateway", mask: "netmask", dns: "dns",
+	}, ssid, password, ip, gateway, mask, dns)
+}
+
+// SetApRoaming enables or disables AP roaming and sets its RSSI threshold (in
+// dBm), letting the device switch to a stronger AP on the same network. A zero
+// threshold is omitted so the device keeps its default.
+func (d *Device) SetApRoaming(ctx context.Context, enabled bool, threshold int) error {
+	params := url.Values{}
+	params.Set("ap_roaming_enabled", boolToString(enabled))
+	if threshold != 0 {
+		params.Set("ap_roaming_threshold", strconv.Itoa(threshold))
+	}
+
+	endpoint := "/settings?" + params.Encode()
+	_, err := d.restCall(ctx, endpoint)
+	if err != nil {
+		return fmt.Errorf("failed to set AP roaming: %w", err)
 	}
 	return nil
 }
@@ -397,11 +462,17 @@ type RelayConfig struct {
 	Name         string
 	DefaultState string
 	BtnType      string
-	AutoOn       float64
-	AutoOff      float64
-	MaxPower     int
-	BtnReverse   bool
-	Schedule     bool
+	// ScheduleRules, when non-nil, replaces the relay's whole schedule rule set in
+	// the same /settings/relay write as the rest of the config. A nil slice leaves
+	// the device's existing rules untouched; an empty non-nil slice clears them.
+	// Sending the rules atomically with the config avoids a device-side race where
+	// a separate follow-up schedule_rules write is silently dropped.
+	ScheduleRules []string
+	AutoOn        float64
+	AutoOff       float64
+	MaxPower      int
+	BtnReverse    bool
+	Schedule      bool
 }
 
 // SetRelayConfig configures a relay's settings.
@@ -427,6 +498,9 @@ func (d *Device) SetRelayConfig(ctx context.Context, id int, config *RelayConfig
 		params.Set("max_power", strconv.Itoa(config.MaxPower))
 	}
 	params.Set("schedule", boolToString(config.Schedule))
+	if config.ScheduleRules != nil {
+		params.Set("schedule_rules", strings.Join(config.ScheduleRules, ","))
+	}
 
 	endpoint := fmt.Sprintf("/settings/relay/%d?%s", id, params.Encode())
 	_, err := d.restCall(ctx, endpoint)
@@ -543,14 +617,20 @@ type LightConfig struct {
 	Name         string
 	DefaultState string
 	BtnType      string
-	AutoOn       float64
-	AutoOff      float64
-	BtnReverse   bool
-	Schedule     bool
+	// ScheduleRules, when non-nil, replaces the light's whole schedule rule set in
+	// the same /settings/light write as the rest of the config. A nil slice leaves
+	// the device's existing rules untouched; an empty non-nil slice clears them.
+	// Sending the rules atomically with the config avoids a device-side race where
+	// a separate follow-up schedule_rules write is silently dropped.
+	ScheduleRules []string
+	AutoOn        float64
+	AutoOff       float64
+	BtnReverse    bool
+	Schedule      bool
 }
 
 // SetLightConfig configures a light's settings.
-func (d *Device) SetLightConfig(ctx context.Context, id int, config LightConfig) error {
+func (d *Device) SetLightConfig(ctx context.Context, id int, config *LightConfig) error {
 	params := url.Values{}
 	if config.Name != "" {
 		params.Set("name", config.Name)
@@ -569,6 +649,9 @@ func (d *Device) SetLightConfig(ctx context.Context, id int, config LightConfig)
 	}
 	params.Set("btn_reverse", boolToString(config.BtnReverse))
 	params.Set("schedule", boolToString(config.Schedule))
+	if config.ScheduleRules != nil {
+		params.Set("schedule_rules", strings.Join(config.ScheduleRules, ","))
+	}
 
 	endpoint := fmt.Sprintf("/settings/light/%d?%s", id, params.Encode())
 	_, err := d.restCall(ctx, endpoint)
@@ -745,25 +828,48 @@ func (d *Device) GetExternalSensor(ctx context.Context) (*ExternalSensorStatus, 
 //   - "0800-7F-0-on" - Turn relay 0 on at 8:00 every day
 //   - "2200-1F-0-off" - Turn relay 0 off at 22:00 Mon-Fri
 func (d *Device) AddScheduleRule(ctx context.Context, relayID int, rule string) error {
-	endpoint := fmt.Sprintf("/settings/relay/%d?schedule_rules[]=%s", relayID, url.QueryEscape(rule))
-	_, err := d.restCall(ctx, endpoint)
+	// Gen1 has no append endpoint and ignores the indexed schedule_rules[]= form:
+	// the whole set must be rewritten as one comma-joined value. Read the current
+	// rules, append, and write them back.
+	settings, err := d.GetRelaySettings(ctx, relayID)
 	if err != nil {
+		return fmt.Errorf("failed to read relay %d schedule rules: %w", relayID, err)
+	}
+	rules := append([]string(nil), settings.ScheduleRules...)
+	rules = append(rules, rule)
+	if err := d.SetScheduleRules(ctx, relayID, rules); err != nil {
 		return fmt.Errorf("failed to add schedule rule: %w", err)
 	}
 	return nil
 }
 
-// SetScheduleRules replaces all schedule rules for a relay.
+// SetScheduleRules replaces all schedule rules for a relay. Gen1 sets the
+// schedule as a whole set via a single comma-separated `schedule_rules` value
+// (per the Gen1 HTTP API), not indexed parameters; passing an empty slice clears
+// all rules.
 func (d *Device) SetScheduleRules(ctx context.Context, relayID int, rules []string) error {
 	params := url.Values{}
-	for i, rule := range rules {
-		params.Set(fmt.Sprintf("schedule_rules[%d]", i), rule)
-	}
+	params.Set("schedule_rules", strings.Join(rules, ","))
 
 	endpoint := fmt.Sprintf("/settings/relay/%d?%s", relayID, params.Encode())
 	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set schedule rules: %w", err)
+	}
+	return nil
+}
+
+// SetLightScheduleRules replaces all schedule rules for a light (the light
+// counterpart of SetScheduleRules, which targets relays). Like the relay form,
+// the whole set is sent as a single comma-separated `schedule_rules` value.
+func (d *Device) SetLightScheduleRules(ctx context.Context, lightID int, rules []string) error {
+	params := url.Values{}
+	params.Set("schedule_rules", strings.Join(rules, ","))
+
+	endpoint := fmt.Sprintf("/settings/light/%d?%s", lightID, params.Encode())
+	_, err := d.restCall(ctx, endpoint)
+	if err != nil {
+		return fmt.Errorf("failed to set light schedule rules: %w", err)
 	}
 	return nil
 }
@@ -812,6 +918,39 @@ func (d *Device) SetMaxPower(ctx context.Context, maxPower int) error {
 	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set max power: %w", err)
+	}
+	return nil
+}
+
+// SetEMeterConfig writes the writable settings for an energy meter (Shelly EM /
+// 3EM) to /settings/emeter/{index}: the overpower-protection threshold and the
+// optional over/under-power action URLs and their thresholds. Zero-valued
+// numeric fields and empty URLs are omitted from the write. Per the Gen1 API
+// these are the only writable emeter parameters — there is no ct_type on Gen1.
+func (d *Device) SetEMeterConfig(ctx context.Context, id int, config EMeterSettings) error {
+	params := url.Values{}
+	if config.MaxPower > 0 {
+		params.Set("max_power", strconv.FormatFloat(config.MaxPower, 'f', -1, 64))
+	}
+	if config.OverPowerURL != "" {
+		params.Set("over_power_url", config.OverPowerURL)
+	}
+	if config.OverPowerURLThreshold > 0 {
+		params.Set("over_power_url_threshold", strconv.FormatFloat(config.OverPowerURLThreshold, 'f', -1, 64))
+	}
+	if config.UnderPowerURL != "" {
+		params.Set("under_power_url", config.UnderPowerURL)
+	}
+	if config.UnderPowerURLThreshold > 0 {
+		params.Set("under_power_url_threshold", strconv.FormatFloat(config.UnderPowerURLThreshold, 'f', -1, 64))
+	}
+	if len(params) == 0 {
+		return nil
+	}
+	endpoint := fmt.Sprintf("/settings/emeter/%d?%s", id, params.Encode())
+	_, err := d.restCall(ctx, endpoint)
+	if err != nil {
+		return fmt.Errorf("failed to set emeter %d config: %w", id, err)
 	}
 	return nil
 }
