@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -631,8 +632,68 @@ func (s *platformWiFiScanner) Connect(ctx context.Context, ssid, password string
 		s.obtainIPAddress(ctx, s.iface)
 	} else {
 		s.removeAPStaticIP(ctx, s.iface)
+		s.reacquireDHCP(ctx, s.iface)
 	}
 	return nil
+}
+
+// reacquireDHCP obtains a DHCP lease on iface after returning to a real network.
+// Driving association manually (wpa_cli/nl80211) bypasses the host's normal
+// DHCP trigger, so a host whose WiFi this scanner connected can be left without
+// a lease — losing all connectivity on that interface until something re-leases
+// it. It is skipped when the interface already carries a routable IPv4 (a managed
+// host — NetworkManager or systemd-networkd — already handled it), so it never
+// fights an existing manager. Best-effort: the first available DHCP client wins
+// and any failure is left for the caller's next operation to surface.
+func (s *platformWiFiScanner) reacquireDHCP(ctx context.Context, iface string) {
+	if hasRoutableIPv4(iface) {
+		return
+	}
+	// Ordered by ubiquity; -1/-n/-q variants make a single bounded attempt and
+	// exit rather than daemonizing.
+	clients := [][]string{
+		{"dhclient", "-1", iface},
+		{"dhcpcd", "-n", iface},
+		{"udhcpc", "-i", iface, "-q", "-n"},
+	}
+	for _, c := range clients {
+		if !hasCommand(c[0]) {
+			continue
+		}
+		//nolint:gosec // G204: client name is a fixed literal; iface comes from the kernel
+		if err := exec.CommandContext(ctx, c[0], c[1:]...).Run(); err == nil {
+			return
+		}
+	}
+}
+
+// hasRoutableIPv4 reports whether iface carries an IPv4 address usable on a real
+// network — excluding loopback, link-local (169.254), and the Shelly AP subnet
+// (192.168.33.0/24), none of which indicate a working home-network lease.
+func hasRoutableIPv4(iface string) bool {
+	ifi, err := net.InterfaceByName(iface)
+	if err != nil {
+		return false
+	}
+	addrs, err := ifi.Addrs()
+	if err != nil {
+		return false
+	}
+	for _, a := range addrs {
+		ipNet, ok := a.(*net.IPNet)
+		if !ok {
+			continue
+		}
+		ip4 := ipNet.IP.To4()
+		if ip4 == nil || ip4.IsLoopback() || ip4.IsLinkLocalUnicast() {
+			continue
+		}
+		if strings.HasPrefix(ip4.String(), "192.168.33.") {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 // connectViaNl80211 connects using the nl80211 netlink interface.
