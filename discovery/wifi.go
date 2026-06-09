@@ -22,6 +22,13 @@ const (
 	// DefaultAPIP is the default IP address of Shelly devices in AP mode.
 	DefaultAPIP = "192.168.33.1"
 
+	// DefaultAPHostIP is the static IPv4 the host assigns to its own WiFi
+	// interface while joined to a Shelly device's AP (192.168.33.0/24). The AP's
+	// DHCP server is unreliable and pollutes /etc/resolv.conf, so a static host
+	// address is used instead. .133 sits clear of the device (.1) and the typical
+	// DHCP pool (.100+). Override via APHostIPSetter when it conflicts.
+	DefaultAPHostIP = "192.168.33.133"
+
 	// DefaultAPPort is the default HTTP port for Shelly devices.
 	DefaultAPPort = 80
 )
@@ -76,6 +83,32 @@ type WiFiScanner interface {
 
 	// CurrentNetwork returns the currently connected network, if any.
 	CurrentNetwork(ctx context.Context) (*WiFiNetwork, error)
+}
+
+// APHostIPSetter is implemented by scanners that assign the host a static IP on a
+// Shelly AP subnet during provisioning (currently Linux). Callers override the
+// DefaultAPHostIP via a type assertion when the default conflicts on their
+// network; scanners that obtain an address some other way need not implement it.
+type APHostIPSetter interface {
+	// SetAPHostIP overrides the static host IP used on the AP subnet. An empty
+	// or invalid value leaves the default in place.
+	SetAPHostIP(ip string)
+}
+
+// HostNetworkPasswordProvider is implemented by scanners that can recover the
+// host's stored passphrase for a known WiFi network from the operating system's
+// credential store (currently Linux: NetworkManager, then wpa_supplicant). It
+// lets a caller join a device to the same network the host is already on without
+// re-supplying a passphrase the host already holds — useful because no Shelly
+// device returns its station key (Gen1 masks it, Gen2+ makes it write-only).
+// Callers reach it via a type assertion; scanners without a readable credential
+// store need not implement it.
+type HostNetworkPasswordProvider interface {
+	// HostNetworkPassword returns the plaintext passphrase the host has stored
+	// for ssid, or an error when none can be recovered: the network is unknown,
+	// its secret is stored only as a pre-computed PSK hash (not reversible to a
+	// passphrase), or the credential store is not readable (often needs root).
+	HostNetworkPassword(ctx context.Context, ssid string) (string, error)
 }
 
 // newDefaultWiFiScanner creates the default WiFi scanner with platform-specific

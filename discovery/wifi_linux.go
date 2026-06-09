@@ -34,14 +34,35 @@ const defaultWiFiIface = "wlan0"
 // Fallback 1: NetworkManager D-Bus API.
 // Fallback 2: nmcli, iw CLI tools.
 type platformWiFiScanner struct {
-	iface string
+	iface    string
+	apHostIP string // static host IPv4 used on a Shelly AP subnet (no mask)
 }
 
 // newPlatformWiFiScanner creates a platform-specific WiFi scanner for Linux.
 func newPlatformWiFiScanner() WiFiScanner {
 	return &platformWiFiScanner{
-		iface: detectWiFiInterface(),
+		iface:    detectWiFiInterface(),
+		apHostIP: DefaultAPHostIP,
 	}
+}
+
+// SetAPHostIP overrides the static host IP assigned on a Shelly AP subnet.
+// Empty input is ignored so the default remains in effect. Implements
+// APHostIPSetter.
+func (s *platformWiFiScanner) SetAPHostIP(ip string) {
+	if ip != "" {
+		s.apHostIP = ip
+	}
+}
+
+// apHostCIDR returns the host's AP-subnet address in CIDR form (e.g.
+// "192.168.33.133/24"), falling back to the default if unset.
+func (s *platformWiFiScanner) apHostCIDR() string {
+	ip := s.apHostIP
+	if ip == "" {
+		ip = DefaultAPHostIP
+	}
+	return ip + "/24"
 }
 
 // detectWiFiInterface finds the primary WiFi interface on Linux.
@@ -545,52 +566,73 @@ func parseIwField(n *WiFiNetwork, line string) {
 // Connect connects to a WiFi network on Linux.
 func (s *platformWiFiScanner) Connect(ctx context.Context, ssid, password string) error {
 	var errors []string
+	connected := false
 
 	// Primary: nl80211 netlink (pure Go).
 	if err := s.connectViaNl80211(ctx, ssid, password); err == nil {
-		return nil
+		connected = true
 	} else {
 		errors = append(errors, "nl80211: "+err.Error())
 	}
 
 	// Fallback 1: NetworkManager D-Bus.
-	if err := s.connectViaNM(ctx, ssid, password); err == nil {
-		return nil
-	} else {
-		errors = append(errors, "NetworkManager D-Bus: "+err.Error())
+	if !connected {
+		if err := s.connectViaNM(ctx, ssid, password); err == nil {
+			connected = true
+		} else {
+			errors = append(errors, "NetworkManager D-Bus: "+err.Error())
+		}
 	}
 
 	// Fallback 2: nmcli CLI.
-	if hasCommand("nmcli") {
+	if !connected && hasCommand("nmcli") {
 		if err := s.connectNmcli(ctx, ssid, password); err == nil {
-			return nil
+			connected = true
 		} else {
 			errors = append(errors, "nmcli: "+err.Error())
 		}
 	}
 
 	// Fallback 3: wpa_cli.
-	if hasCommand("wpa_cli") {
+	if !connected && hasCommand("wpa_cli") {
 		if err := s.connectWpaCli(ctx, ssid, password); err == nil {
-			return nil
+			connected = true
 		} else {
 			errors = append(errors, "wpa_cli: "+err.Error())
 		}
 	}
 
 	// Fallback 4: iwconfig (deprecated).
-	if hasCommand("iwconfig") {
+	if !connected && hasCommand("iwconfig") {
 		if err := s.connectIwconfig(ctx, ssid, password); err == nil {
-			return nil
+			connected = true
 		} else {
 			errors = append(errors, "iwconfig: "+err.Error())
 		}
 	}
 
-	return &WiFiError{
-		Message: "WiFi connect failed, all methods tried: " +
-			strings.Join(errors, "; "),
+	if !connected {
+		return &WiFiError{
+			Message: "WiFi connect failed, all methods tried: " +
+				strings.Join(errors, "; "),
+		}
 	}
+
+	// Ensure the interface carries a usable address for the network just joined.
+	// A Shelly device in AP mode runs an unreliable DHCP server that also rewrites
+	// /etc/resolv.conf, so a static IP on its 192.168.33.0/24 subnet is assigned
+	// instead; every other network must shed any leftover AP address so its own
+	// DHCP lease is the only one. This applies to ALL connect methods — nl80211
+	// and the wpa_cli/nmcli/NetworkManager fallbacks alike. Previously only the
+	// nl80211 path assigned the AP IP, so a host that fell back to wpa_cli (e.g.
+	// where wpa_supplicant owns the interface) associated with the AP but had no
+	// route to the device at 192.168.33.1.
+	if IsShellyAP(ssid) {
+		s.obtainIPAddress(ctx, s.iface)
+	} else {
+		s.removeAPStaticIP(ctx, s.iface)
+	}
+	return nil
 }
 
 // connectViaNl80211 connects using the nl80211 netlink interface.
@@ -640,13 +682,9 @@ func (s *platformWiFiScanner) connectViaNl80211(ctx context.Context, ssid, passw
 		return fmt.Errorf("connect %q: %w", ssid, err)
 	}
 
-	// Wait for association to complete.
+	// Wait for association to complete. IP addressing is applied centrally by
+	// Connect once any method succeeds, so it covers every connect path.
 	time.Sleep(1 * time.Second)
-
-	// When connecting via nl80211 directly (without NetworkManager),
-	// DHCP does not run automatically. Attempt DHCP client, and if that
-	// fails, assign a static IP for the Shelly AP subnet (192.168.33.0/24).
-	s.obtainIPAddress(ctx, ifi.Name)
 
 	return nil
 }
@@ -657,7 +695,7 @@ func (s *platformWiFiScanner) connectViaNl80211(ctx context.Context, ssid, passw
 //
 //nolint:gosec // G204: Interface name is from kernel, not user input
 func (s *platformWiFiScanner) removeAPStaticIP(ctx context.Context, ifaceName string) {
-	staticIP := DefaultAPIP[:len(DefaultAPIP)-1] + "10/24"
+	staticIP := s.apHostCIDR()
 	// Address may not exist — that's expected; only log unexpected errors.
 	if err := exec.CommandContext(ctx, "ip", "addr", "del", staticIP, "dev", ifaceName).Run(); err != nil {
 		// exit code 2 = "RTNETLINK answers: Cannot assign requested address" (addr not found)
@@ -666,9 +704,10 @@ func (s *platformWiFiScanner) removeAPStaticIP(ctx context.Context, ifaceName st
 	}
 }
 
-// obtainIPAddress assigns a static IP for the Shelly AP subnet on the WiFi
-// interface. Shelly devices in AP mode use 192.168.33.1, so we assign .10
-// to avoid conflicts with the device (.1) and typical DHCP range (.100+).
+// obtainIPAddress assigns the host a static IP on the Shelly AP subnet. Shelly
+// devices in AP mode serve 192.168.33.1, so the host takes apHostIP
+// (DefaultAPHostIP, .133, unless overridden via SetAPHostIP) to stay clear of the
+// device (.1) and the typical DHCP range (.100+).
 //
 // We intentionally avoid running dhclient/dhcpcd because DHCP from the Shelly
 // AP overwrites /etc/resolv.conf with nameserver 192.168.33.1, which breaks
@@ -676,12 +715,119 @@ func (s *platformWiFiScanner) removeAPStaticIP(ctx context.Context, ifaceName st
 //
 //nolint:gosec // G204: Interface name is from kernel, not user input
 func (s *platformWiFiScanner) obtainIPAddress(ctx context.Context, ifaceName string) {
-	staticIP := DefaultAPIP[:len(DefaultAPIP)-1] + "10/24"
+	staticIP := s.apHostCIDR()
 	if err := exec.CommandContext(ctx, "ip", "addr", "add", staticIP, "dev", ifaceName).Run(); err != nil {
 		// May fail if address already assigned — that's fine.
 		return
 	}
 	time.Sleep(500 * time.Millisecond)
+}
+
+// HostNetworkPassword recovers the passphrase the host has stored for ssid,
+// trying NetworkManager (nmcli) first, then wpa_supplicant config files. Only a
+// plaintext passphrase is returned; a network whose secret is stored solely as a
+// 64-hex pre-computed PSK cannot be reversed to a passphrase and yields an error.
+// Reading wpa_supplicant config generally requires root.
+func (s *platformWiFiScanner) HostNetworkPassword(ctx context.Context, ssid string) (string, error) {
+	if ssid == "" {
+		return "", fmt.Errorf("ssid is required")
+	}
+	if pw, err := hostPasswordViaNmcli(ctx, ssid); err == nil && pw != "" {
+		return pw, nil
+	}
+	if pw := hostPasswordViaWpaSupplicant(ssid); pw != "" {
+		return pw, nil
+	}
+	return "", fmt.Errorf("no stored passphrase found for %q on this host", ssid)
+}
+
+// hostPasswordViaNmcli asks NetworkManager for the stored passphrase of the
+// connection whose id matches ssid. -s reveals secrets; -g extracts one field.
+//
+//nolint:gosec // G204: ssid names a network the host already trusts, not untrusted input
+func hostPasswordViaNmcli(ctx context.Context, ssid string) (string, error) {
+	if !hasCommand("nmcli") {
+		return "", fmt.Errorf("nmcli not available")
+	}
+	out, err := exec.CommandContext(ctx, "nmcli", "-s", "-g",
+		"802-11-wireless-security.psk", "connection", "show", "id", ssid).Output()
+	if err != nil {
+		return "", fmt.Errorf("nmcli connection show %q: %w", ssid, err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// wpaSupplicantConfigGlobs lists the standard wpa_supplicant config locations,
+// including the systemd per-interface variant (wpa_supplicant-<iface>.conf).
+var wpaSupplicantConfigGlobs = []string{
+	"/etc/wpa_supplicant/wpa_supplicant-*.conf",
+	"/etc/wpa_supplicant/wpa_supplicant.conf",
+	"/etc/wpa_supplicant.conf",
+}
+
+// hostPasswordViaWpaSupplicant scans wpa_supplicant config files for a network
+// block whose ssid matches and returns its plaintext psk. Returns "" when no
+// usable passphrase is found (unknown network, or only a hashed psk stored).
+func hostPasswordViaWpaSupplicant(ssid string) string {
+	for _, glob := range wpaSupplicantConfigGlobs {
+		paths, err := filepath.Glob(glob)
+		if err != nil {
+			continue
+		}
+		for _, path := range paths {
+			data, readErr := os.ReadFile(path) //nolint:gosec // G304: fixed system config paths, not user input
+			if readErr != nil {
+				continue
+			}
+			if pw := wpaPSKForSSID(string(data), ssid); pw != "" {
+				return pw
+			}
+		}
+	}
+	return ""
+}
+
+// wpaPSKForSSID extracts the plaintext psk for ssid from wpa_supplicant config
+// text. It walks network={...} blocks, matching ssid="..." and returning the
+// block's psk when it is a quoted passphrase. An unquoted 64-hex psk is a
+// pre-computed hash that cannot be turned back into a passphrase, so it is
+// skipped. Returns "" when no matching block carries a usable passphrase.
+func wpaPSKForSSID(conf, ssid string) string {
+	var (
+		inBlock   bool
+		blockSSID string
+		blockPSK  string
+	)
+	for _, raw := range strings.Split(conf, "\n") {
+		line := strings.TrimSpace(raw)
+		switch {
+		case strings.HasPrefix(line, "network="):
+			inBlock, blockSSID, blockPSK = true, "", ""
+		case inBlock && strings.HasPrefix(line, "}"):
+			if blockSSID == ssid && blockPSK != "" {
+				return blockPSK
+			}
+			inBlock = false
+		case inBlock && strings.HasPrefix(line, "ssid="):
+			blockSSID = unquoteWpaValue(strings.TrimPrefix(line, "ssid="))
+		case inBlock && strings.HasPrefix(line, "psk="):
+			// Only a quoted value is a usable passphrase; a bare 64-hex string is
+			// a pre-computed PSK that cannot be reversed to a passphrase.
+			if val := strings.TrimSpace(strings.TrimPrefix(line, "psk=")); strings.HasPrefix(val, `"`) {
+				blockPSK = unquoteWpaValue(val)
+			}
+		}
+	}
+	return ""
+}
+
+// unquoteWpaValue strips surrounding double quotes from a wpa_supplicant value.
+func unquoteWpaValue(v string) string {
+	v = strings.TrimSpace(v)
+	if len(v) >= 2 && strings.HasPrefix(v, `"`) && strings.HasSuffix(v, `"`) {
+		return v[1 : len(v)-1]
+	}
+	return v
 }
 
 // findNl80211Interface finds the WiFi interface for nl80211 operations.

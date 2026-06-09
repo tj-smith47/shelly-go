@@ -262,3 +262,58 @@ func TestHasCommand(t *testing.T) {
 		t.Error("hasCommand returned true for nonexistent command")
 	}
 }
+
+func TestWpaPSKForSSID(t *testing.T) {
+	const conf = `ctrl_interface=/run/wpa_supplicant
+update_config=1
+
+network={
+	ssid="OnyxCheetah4.7"
+	psk="hunter2hunter"
+	key_mgmt=WPA-PSK
+}
+
+network={
+	ssid="HashedNet"
+	psk=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+}
+
+network={
+	ssid="OpenNet"
+	key_mgmt=NONE
+}
+`
+	tests := []struct {
+		name string
+		ssid string
+		want string
+	}{
+		{"quoted passphrase recovered", "OnyxCheetah4.7", "hunter2hunter"},
+		{"hashed psk skipped", "HashedNet", ""},
+		{"open network has no psk", "OpenNet", ""},
+		{"unknown ssid", "Nope", ""},
+		{"empty ssid", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := wpaPSKForSSID(conf, tt.ssid); got != tt.want {
+				t.Errorf("wpaPSKForSSID(%q) = %q, want %q", tt.ssid, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestUnquoteWpaValue(t *testing.T) {
+	tests := map[string]string{
+		`"quoted"`:  "quoted",
+		`  "pad"  `: "pad",
+		`bare`:      "bare",
+		`"`:         `"`,
+		``:          "",
+	}
+	for in, want := range tests {
+		if got := unquoteWpaValue(in); got != want {
+			t.Errorf("unquoteWpaValue(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
