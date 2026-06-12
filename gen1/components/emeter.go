@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/tj-smith47/shelly-go/internal/jsonx"
 	"github.com/tj-smith47/shelly-go/transport"
 )
 
@@ -58,7 +59,7 @@ type EMeterStatus struct {
 	Voltage float64 `json:"voltage,omitempty"`
 
 	// IsValid indicates if the reading is valid.
-	IsValid bool `json:"is_valid,omitempty"`
+	IsValid jsonx.FlexBool `json:"is_valid,omitempty"`
 
 	// Total is total consumed energy in watt-hours.
 	Total float64 `json:"total,omitempty"`

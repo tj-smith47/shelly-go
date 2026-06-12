@@ -48,7 +48,7 @@ func TestSetWiFiStation(t *testing.T) {
 	defer mock.ClearMatchers()
 	device := NewDevice(mock)
 
-	mock.OnPathContains("wifi_sta_enabled", json.RawMessage(`{}`), nil)
+	mock.OnPathContains("/settings/sta?enabled=true&key=pass123&ssid=MyNetwork", json.RawMessage(`{}`), nil)
 
 	err := device.SetWiFiStation(context.Background(), true, "MyNetwork", "pass123")
 	if err != nil {
@@ -61,7 +61,7 @@ func TestSetWiFiStationStatic(t *testing.T) {
 	defer mock.ClearMatchers()
 	device := NewDevice(mock)
 
-	mock.OnPathContains("wifi_sta_ipv4_method=static", json.RawMessage(`{}`), nil)
+	mock.OnPathContains("/settings/sta?dns=8.8.8.8&enabled=true&gateway=192.168.1.1&ip=192.168.1.100&ipv4_method=static&key=pass&netmask=255.255.255.0&ssid=Network", json.RawMessage(`{}`), nil)
 
 	err := device.SetWiFiStationStatic(context.Background(), "Network", "pass", "192.168.1.100", "192.168.1.1", "255.255.255.0", "8.8.8.8")
 	if err != nil {
@@ -873,7 +873,7 @@ func TestSetWiFiStationError(t *testing.T) {
 	defer mock.ClearMatchers()
 	device := NewDevice(mock)
 
-	mock.OnPathContains("wifi_sta_enabled", nil, errTest)
+	mock.OnPathContains("/settings/sta?enabled=true", nil, errTest)
 
 	err := device.SetWiFiStation(context.Background(), true, "MyNetwork", "pass123")
 	if err == nil {
@@ -886,7 +886,7 @@ func TestSetWiFiStationStaticError(t *testing.T) {
 	defer mock.ClearMatchers()
 	device := NewDevice(mock)
 
-	mock.OnPathContains("wifi_sta_ipv4_method=static", nil, errTest)
+	mock.OnPathContains("/settings/sta?enabled=true&gateway=192.168.1.1", nil, errTest)
 
 	err := device.SetWiFiStationStatic(context.Background(), "Network", "pass", "192.168.1.100", "192.168.1.1", "255.255.255.0", "")
 	if err == nil {

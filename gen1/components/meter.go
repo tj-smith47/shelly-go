@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/tj-smith47/shelly-go/internal/jsonx"
 	"github.com/tj-smith47/shelly-go/transport"
 )
 
@@ -36,12 +37,12 @@ func (m *Meter) ID() int {
 
 // MeterStatus contains power meter readings.
 type MeterStatus struct {
-	Counters  []float64 `json:"counters,omitempty"`
-	Power     float64   `json:"power"`
-	Overpower float64   `json:"overpower,omitempty"`
-	Timestamp int64     `json:"timestamp,omitempty"`
-	Total     int       `json:"total,omitempty"`
-	IsValid   bool      `json:"is_valid,omitempty"`
+	Counters  []float64      `json:"counters,omitempty"`
+	Power     float64        `json:"power"`
+	Overpower float64        `json:"overpower,omitempty"`
+	Timestamp int64          `json:"timestamp,omitempty"`
+	Total     int            `json:"total,omitempty"`
+	IsValid   jsonx.FlexBool `json:"is_valid,omitempty"`
 }
 
 // MeterConfig contains meter configuration options.

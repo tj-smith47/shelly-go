@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/tj-smith47/shelly-go/internal/jsonx"
 	"github.com/tj-smith47/shelly-go/transport"
 )
 
@@ -38,17 +39,17 @@ func (r *Roller) ID() int {
 
 // RollerStatus contains the current roller state.
 type RollerStatus struct {
-	State           string  `json:"state,omitempty"`
-	Source          string  `json:"source,omitempty"`
-	StopReason      string  `json:"stop_reason,omitempty"`
-	LastDirection   string  `json:"last_direction,omitempty"`
-	Power           float64 `json:"power,omitempty"`
-	CurrentPos      int     `json:"current_pos,omitempty"`
-	IsValid         bool    `json:"is_valid,omitempty"`
-	SafetySwitch    bool    `json:"safety_switch,omitempty"`
-	Overtemperature bool    `json:"overtemperature,omitempty"`
-	Calibrating     bool    `json:"calibrating,omitempty"`
-	Positioning     bool    `json:"positioning,omitempty"`
+	State           string         `json:"state,omitempty"`
+	Source          string         `json:"source,omitempty"`
+	StopReason      string         `json:"stop_reason,omitempty"`
+	LastDirection   string         `json:"last_direction,omitempty"`
+	Power           float64        `json:"power,omitempty"`
+	CurrentPos      int            `json:"current_pos,omitempty"`
+	IsValid         jsonx.FlexBool `json:"is_valid,omitempty"`
+	SafetySwitch    bool           `json:"safety_switch,omitempty"`
+	Overtemperature bool           `json:"overtemperature,omitempty"`
+	Calibrating     bool           `json:"calibrating,omitempty"`
+	Positioning     bool           `json:"positioning,omitempty"`
 }
 
 // RollerConfig contains roller configuration options.

@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/tj-smith47/shelly-go/internal/jsonx"
 )
 
 // WiFi settings methods
@@ -23,15 +25,19 @@ import (
 //	err := device.SetWiFiStation(ctx, true, "MyNetwork", "password123")
 func (d *Device) SetWiFiStation(ctx context.Context, enabled bool, ssid, password string) error {
 	params := url.Values{}
-	params.Set("wifi_sta_enabled", boolToString(enabled))
+	params.Set("enabled", boolToString(enabled))
 	if ssid != "" {
-		params.Set("wifi_sta_ssid", ssid)
+		params.Set("ssid", ssid)
 	}
 	if password != "" {
-		params.Set("wifi_sta_key", password)
+		params.Set("key", password)
 	}
 
-	endpoint := "/settings?" + params.Encode()
+	// The dedicated /settings/sta resource (mirroring SetWiFiStation1's
+	// /settings/sta1) is the firmware's canonical station endpoint. The global
+	// /settings?wifi_sta_* form answers 200 but silently drops the write on a
+	// Gen1 device sitting at its clockless factory AP, so onboarding never takes.
+	endpoint := "/settings/sta?" + params.Encode()
 	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set WiFi station: %w", err)
@@ -49,10 +55,9 @@ func (d *Device) SetWiFiStation(ctx context.Context, enabled bool, ssid, passwor
 //   - mask: Subnet mask
 //   - dns: DNS server (optional, empty string to skip)
 func (d *Device) SetWiFiStationStatic(ctx context.Context, ssid, password, ip, gateway, mask, dns string) error {
-	return d.setStaticWiFi(ctx, "/settings", &staticWiFiKeys{
-		enabled: "wifi_sta_enabled", ssid: "wifi_sta_ssid", key: "wifi_sta_key",
-		method: "wifi_sta_ipv4_method", ip: "wifi_sta_ip", gateway: "wifi_sta_gw",
-		mask: "wifi_sta_mask", dns: "wifi_sta_dns",
+	return d.setStaticWiFi(ctx, "/settings/sta", &staticWiFiKeys{
+		enabled: "enabled", ssid: "ssid", key: "key", method: "ipv4_method",
+		ip: "ip", gateway: "gateway", mask: "netmask", dns: "dns",
 	}, ssid, password, ip, gateway, mask, dns)
 }
 
@@ -745,9 +750,9 @@ func (d *Device) GetCoIoTStatusValues(ctx context.Context) (*HTTPCoIoTStatusValu
 
 // TemperatureStatus contains temperature sensor reading.
 type TemperatureStatus struct {
-	TC      float64 `json:"tC,omitempty"`       // Temperature in Celsius
-	TF      float64 `json:"tF,omitempty"`       // Temperature in Fahrenheit
-	IsValid bool    `json:"is_valid,omitempty"` // Reading validity
+	TC      float64        `json:"tC,omitempty"`       // Temperature in Celsius
+	TF      float64        `json:"tF,omitempty"`       // Temperature in Fahrenheit
+	IsValid jsonx.FlexBool `json:"is_valid,omitempty"` // Reading validity
 }
 
 // GetTemperature retrieves the temperature sensor reading.
@@ -769,8 +774,8 @@ func (d *Device) GetTemperature(ctx context.Context) (*TemperatureStatus, error)
 
 // HumidityStatus contains humidity sensor reading.
 type HumidityStatus struct {
-	Value   float64 `json:"value,omitempty"`    // Humidity percentage
-	IsValid bool    `json:"is_valid,omitempty"` // Reading validity
+	Value   float64        `json:"value,omitempty"`    // Humidity percentage
+	IsValid jsonx.FlexBool `json:"is_valid,omitempty"` // Reading validity
 }
 
 // GetHumidity retrieves the humidity sensor reading.
@@ -792,10 +797,10 @@ func (d *Device) GetHumidity(ctx context.Context) (*HumidityStatus, error) {
 
 // ExternalSensorStatus contains external sensor reading.
 type ExternalSensorStatus struct {
-	TC       float64 `json:"tC,omitempty"`       // Temperature in Celsius
-	TF       float64 `json:"tF,omitempty"`       // Temperature in Fahrenheit
-	Humidity float64 `json:"hum,omitempty"`      // Humidity percentage (if available)
-	IsValid  bool    `json:"is_valid,omitempty"` // Reading validity
+	TC       float64        `json:"tC,omitempty"`       // Temperature in Celsius
+	TF       float64        `json:"tF,omitempty"`       // Temperature in Fahrenheit
+	Humidity float64        `json:"hum,omitempty"`      // Humidity percentage (if available)
+	IsValid  jsonx.FlexBool `json:"is_valid,omitempty"` // Reading validity
 }
 
 // GetExternalSensor retrieves external temperature sensor reading.
