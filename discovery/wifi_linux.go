@@ -35,6 +35,11 @@ const defaultWiFiIface = "wlan0"
 // Fallback 1: NetworkManager D-Bus API.
 // Fallback 2: nmcli, iw CLI tools.
 type platformWiFiScanner struct {
+	// wpaRun, when non-nil, replaces the real wpa_cli invocation in wpa(). It
+	// exists so the connect/rollback command sequence can be exercised without a
+	// live wpa_supplicant; production code leaves it nil.
+	wpaRun func(ctx context.Context, args ...string) (string, error)
+
 	iface    string
 	apHostIP string // static host IPv4 used on a Shelly AP subnet (no mask)
 }
@@ -757,11 +762,12 @@ func (s *platformWiFiScanner) connectViaNl80211(ctx context.Context, ssid, passw
 //nolint:gosec // G204: Interface name is from kernel, not user input
 func (s *platformWiFiScanner) removeAPStaticIP(ctx context.Context, ifaceName string) {
 	staticIP := s.apHostCIDR()
-	// Address may not exist — that's expected; only log unexpected errors.
+	// The AP static IP is usually absent (exit 2, "RTNETLINK answers: Cannot assign
+	// requested address") when none was ever assigned — the normal case. The delete
+	// is best-effort: a failure here must not block returning to the home network,
+	// so the checked error is intentionally not propagated.
 	if err := exec.CommandContext(ctx, "ip", "addr", "del", staticIP, "dev", ifaceName).Run(); err != nil {
-		// exit code 2 = "RTNETLINK answers: Cannot assign requested address" (addr not found)
-		// This is the normal case when no static IP was previously assigned.
-		_ = err
+		return
 	}
 }
 
@@ -999,45 +1005,191 @@ func (s *platformWiFiScanner) connectNmcli(ctx context.Context, ssid, password s
 	return s.waitForConnection(ctx, ssid, 15*time.Second)
 }
 
-// connectWpaCli connects using wpa_supplicant's wpa_cli.
+// wpa runs a single wpa_cli subcommand against this scanner's interface and
+// returns its trimmed stdout. The wpaRun seam (nil in production) lets the
+// connect/rollback sequence be tested without a live wpa_supplicant.
 //
-//nolint:gosec // G204: Interface name is auto-detected, not user input; network ID from wpa_cli output
+//nolint:gosec // G204: Interface name is auto-detected, not user input; args are fixed verbs + ids from wpa_cli output
+func (s *platformWiFiScanner) wpa(ctx context.Context, args ...string) (string, error) {
+	if s.wpaRun != nil {
+		return s.wpaRun(ctx, args...)
+	}
+	full := append([]string{"-i", s.iface}, args...)
+	out, err := exec.CommandContext(ctx, "wpa_cli", full...).Output()
+	return strings.TrimSpace(string(out)), err
+}
+
+// tryWpa runs a wpa_cli subcommand for its side effect only, used on best-effort
+// rollback paths where a failure leaves nothing further to attempt. The error is
+// examined and intentionally not propagated.
+func (s *platformWiFiScanner) tryWpa(ctx context.Context, args ...string) {
+	if _, err := s.wpa(ctx, args...); err != nil {
+		return
+	}
+}
+
+// wpaNetwork is one row of `wpa_cli list_networks` output.
+type wpaNetwork struct {
+	id      string
+	ssid    string
+	current bool // carries the [CURRENT] flag — the network wpa_supplicant is on
+}
+
+// parseWpaNetworkList parses `wpa_cli list_networks` output. The first line is a
+// header ("network id / ssid / bssid / flags"); each remaining line is
+// tab-separated: id, ssid, bssid, flags. A network whose flags contain [CURRENT]
+// is the one wpa_supplicant is currently associated with.
+func parseWpaNetworkList(out string) []wpaNetwork {
+	lines := strings.Split(out, "\n")
+	nets := make([]wpaNetwork, 0, len(lines))
+	for i, line := range lines {
+		if i == 0 || strings.TrimSpace(line) == "" {
+			continue // header / blank
+		}
+		fields := strings.Split(line, "\t")
+		if len(fields) < 2 {
+			continue
+		}
+		n := wpaNetwork{id: strings.TrimSpace(fields[0]), ssid: fields[1]}
+		if len(fields) >= 4 {
+			n.current = strings.Contains(fields[3], "[CURRENT]")
+		}
+		nets = append(nets, n)
+	}
+	return nets
+}
+
+// connectWpaCli connects using wpa_supplicant's wpa_cli. It reuses an existing
+// network block for the SSID when one is present (so repeated AP hops do not leak
+// a duplicate block per hop), and on any failure it rolls the supplicant back to
+// the network it was on before — removing only a block it actually added and
+// re-enabling the prior networks — so a failed hop never strands the host with
+// every network disabled.
 func (s *platformWiFiScanner) connectWpaCli(ctx context.Context, ssid, password string) error {
-	addCmd := exec.CommandContext(ctx, "wpa_cli", "-i", s.iface, "add_network")
-	output, err := addCmd.Output()
+	_, rollback, err := s.configureWpaNetwork(ctx, ssid, password)
 	if err != nil {
-		return &WiFiError{Message: "wpa_cli add_network failed", Err: err}
-	}
-	networkID := strings.TrimSpace(string(output))
-
-	setSSID := exec.CommandContext(ctx, "wpa_cli", "-i", s.iface, "set_network", networkID, "ssid", `"`+ssid+`"`)
-	if err := setSSID.Run(); err != nil {
-		return &WiFiError{Message: "wpa_cli set ssid failed", Err: err}
+		return err
 	}
 
+	if err := s.waitForConnection(ctx, ssid, 15*time.Second); err != nil {
+		rollback()
+		return err
+	}
+	return nil
+}
+
+// configureWpaNetwork selects (creating if absent) a wpa_cli network block for
+// ssid/password and returns its id together with a rollback that undoes the
+// in-memory change. select_network disables every other network in the running
+// config, so without rollback a later failure would leave the host unable to fall
+// back to its home network. On its own error path configureWpaNetwork has already
+// rolled back. The returned rollback is idempotent-safe to call once on a later
+// failure (e.g. association timeout).
+func (s *platformWiFiScanner) configureWpaNetwork(
+	ctx context.Context,
+	ssid, password string,
+) (networkID string, rollback func(), err error) {
+	noop := func() {}
+
+	// Snapshot existing networks: reuse a block already configured for this SSID
+	// and remember the one the supplicant is on, so a failure can restore it.
+	reuseID, priorCurrentID, err := s.snapshotWpaNetworks(ctx, ssid)
+	if err != nil {
+		return "", noop, err
+	}
+
+	// enable_network all + reselect the prior network restores the running config
+	// after select_network disabled everything but our target.
+	restorePrior := func() {
+		s.tryWpa(ctx, "enable_network", "all")
+		if priorCurrentID != "" {
+			s.tryWpa(ctx, "select_network", priorCurrentID)
+		}
+	}
+
+	added := false
+	networkID = reuseID
+	if networkID == "" {
+		out, addErr := s.wpa(ctx, "add_network")
+		if addErr != nil {
+			return "", noop, &WiFiError{Message: "wpa_cli add_network failed", Err: addErr}
+		}
+		networkID = strings.TrimSpace(out)
+		added = true
+	}
+
+	// rollback removes only a block this call added (never a reused one) and
+	// restores the supplicant to the network it was on before this attempt.
+	rollback = func() {
+		if added {
+			s.tryWpa(ctx, "remove_network", networkID)
+		}
+		restorePrior()
+	}
+
+	fail := func(msg string, cause error) (string, func(), error) {
+		rollback()
+		return "", noop, &WiFiError{Message: msg, Err: cause}
+	}
+
+	// A reused block already carries SSID + credentials; only a freshly added block
+	// needs configuring.
+	if added {
+		if e := s.setNewWpaNetwork(ctx, networkID, ssid, password); e != nil {
+			return fail(e.Message, e.Err)
+		}
+	}
+
+	if _, e := s.wpa(ctx, "enable_network", networkID); e != nil {
+		return fail("wpa_cli enable_network failed", e)
+	}
+	if _, e := s.wpa(ctx, "select_network", networkID); e != nil {
+		return fail("wpa_cli select_network failed", e)
+	}
+
+	return networkID, rollback, nil
+}
+
+// snapshotWpaNetworks lists the configured networks and returns the id of an
+// existing block for ssid (empty if none, so a fresh block is added) and the id of
+// the network the supplicant is currently on (empty if none), used to restore the
+// running config if the connect attempt fails.
+func (s *platformWiFiScanner) snapshotWpaNetworks(
+	ctx context.Context,
+	ssid string,
+) (reuseID, priorCurrentID string, err error) {
+	list, err := s.wpa(ctx, "list_networks")
+	if err != nil {
+		return "", "", &WiFiError{Message: "wpa_cli list_networks failed", Err: err}
+	}
+	for _, n := range parseWpaNetworkList(list) {
+		if n.current {
+			priorCurrentID = n.id
+		}
+		if n.ssid == ssid {
+			reuseID = n.id
+		}
+	}
+	return reuseID, priorCurrentID, nil
+}
+
+// setNewWpaNetwork sets the SSID and credentials on a freshly added block: an open
+// SSID gets key_mgmt NONE, a protected one gets the quoted PSK. On failure it
+// returns a *WiFiError so the caller can roll the block back.
+func (s *platformWiFiScanner) setNewWpaNetwork(ctx context.Context, id, ssid, password string) *WiFiError {
+	if _, e := s.wpa(ctx, "set_network", id, "ssid", `"`+ssid+`"`); e != nil {
+		return &WiFiError{Message: "wpa_cli set ssid failed", Err: e}
+	}
 	if password == "" {
-		setKeyMgmt := exec.CommandContext(ctx, "wpa_cli", "-i", s.iface, "set_network", networkID, "key_mgmt", "NONE")
-		if err := setKeyMgmt.Run(); err != nil {
-			return &WiFiError{Message: "wpa_cli set key_mgmt failed", Err: err}
+		if _, e := s.wpa(ctx, "set_network", id, "key_mgmt", "NONE"); e != nil {
+			return &WiFiError{Message: "wpa_cli set key_mgmt failed", Err: e}
 		}
-	} else {
-		setPSK := exec.CommandContext(ctx, "wpa_cli", "-i", s.iface, "set_network", networkID, "psk", `"`+password+`"`)
-		if err := setPSK.Run(); err != nil {
-			return &WiFiError{Message: "wpa_cli set psk failed", Err: err}
-		}
+		return nil
 	}
-
-	enableCmd := exec.CommandContext(ctx, "wpa_cli", "-i", s.iface, "enable_network", networkID)
-	if err := enableCmd.Run(); err != nil {
-		return &WiFiError{Message: "wpa_cli enable_network failed", Err: err}
+	if _, e := s.wpa(ctx, "set_network", id, "psk", `"`+password+`"`); e != nil {
+		return &WiFiError{Message: "wpa_cli set psk failed", Err: e}
 	}
-
-	selectCmd := exec.CommandContext(ctx, "wpa_cli", "-i", s.iface, "select_network", networkID)
-	if err := selectCmd.Run(); err != nil {
-		return &WiFiError{Message: "wpa_cli select_network failed", Err: err}
-	}
-
-	return s.waitForConnection(ctx, ssid, 15*time.Second)
+	return nil
 }
 
 // connectIwconfig connects using iwconfig (deprecated).

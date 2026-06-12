@@ -3,6 +3,8 @@
 package discovery
 
 import (
+	"context"
+	"strings"
 	"testing"
 )
 
@@ -300,6 +302,159 @@ network={
 				t.Errorf("wpaPSKForSSID(%q) = %q, want %q", tt.ssid, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestParseWpaNetworkList(t *testing.T) {
+	out := "network id / ssid / bssid / flags\n" +
+		"0\tOnyxCheetah4.7\tany\t[CURRENT]\n" +
+		"1\tShellyBulb-AABBCC\tany\t[DISABLED]\n" +
+		"2\tNoFlagsNet\tany\t\n" +
+		"\n"
+	got := parseWpaNetworkList(out)
+	if len(got) != 3 {
+		t.Fatalf("expected 3 networks, got %d: %+v", len(got), got)
+	}
+	if got[0].id != "0" || got[0].ssid != "OnyxCheetah4.7" || !got[0].current {
+		t.Errorf("network[0] = %+v, want id=0 ssid=OnyxCheetah4.7 current=true", got[0])
+	}
+	if got[1].current {
+		t.Errorf("network[1] (%+v) should not be current", got[1])
+	}
+	if got[2].id != "2" || got[2].ssid != "NoFlagsNet" || got[2].current {
+		t.Errorf("network[2] = %+v, want id=2 ssid=NoFlagsNet current=false", got[2])
+	}
+}
+
+// fakeWpa records each wpa_cli invocation and replays scripted output. A verb
+// listed in failOn returns failErr; otherwise outputs[verb] (default "OK").
+func fakeWpa(seq *[]string, outputs map[string]string, failOn map[string]error) func(context.Context, ...string) (string, error) {
+	return func(_ context.Context, args ...string) (string, error) {
+		*seq = append(*seq, strings.Join(args, " "))
+		verb := args[0]
+		if failOn != nil {
+			if e, ok := failOn[verb]; ok {
+				return "", e
+			}
+		}
+		if o, ok := outputs[verb]; ok {
+			return o, nil
+		}
+		return "OK", nil
+	}
+}
+
+func seqHas(seq []string, want string) bool {
+	for _, c := range seq {
+		if c == want {
+			return true
+		}
+	}
+	return false
+}
+
+func TestConfigureWpaNetwork_FreshAddThenRollback(t *testing.T) {
+	var seq []string
+	s := &platformWiFiScanner{
+		iface: "wlan0",
+		wpaRun: fakeWpa(&seq, map[string]string{
+			"list_networks": "network id / ssid / bssid / flags\n0\tHome\tany\t[CURRENT]\n",
+			"add_network":   "5",
+		}, nil),
+	}
+
+	id, rollback, err := s.configureWpaNetwork(context.Background(), "ShellyAP", "")
+	if err != nil {
+		t.Fatalf("configureWpaNetwork returned error: %v", err)
+	}
+	if id != "5" {
+		t.Errorf("id = %q, want 5", id)
+	}
+	for _, want := range []string{
+		"add_network",
+		`set_network 5 ssid "ShellyAP"`,
+		"set_network 5 key_mgmt NONE", // open AP: no password
+		"enable_network 5",
+		"select_network 5",
+	} {
+		if !seqHas(seq, want) {
+			t.Errorf("connect sequence missing %q; got %v", want, seq)
+		}
+	}
+
+	// Rollback must drop the block this call added and re-enable the prior network,
+	// so a failed hop never strands the host with everything disabled.
+	rollback()
+	for _, want := range []string{"remove_network 5", "enable_network all", "select_network 0"} {
+		if !seqHas(seq, want) {
+			t.Errorf("rollback sequence missing %q; got %v", want, seq)
+		}
+	}
+}
+
+func TestConfigureWpaNetwork_ReusesExistingBlock(t *testing.T) {
+	var seq []string
+	s := &platformWiFiScanner{
+		iface: "wlan0",
+		wpaRun: fakeWpa(&seq, map[string]string{
+			"list_networks": "network id / ssid / bssid / flags\n" +
+				"0\tHome\tany\t[CURRENT]\n1\tShellyAP\tany\t[DISABLED]\n",
+		}, nil),
+	}
+
+	id, rollback, err := s.configureWpaNetwork(context.Background(), "ShellyAP", "")
+	if err != nil {
+		t.Fatalf("configureWpaNetwork returned error: %v", err)
+	}
+	if id != "1" {
+		t.Errorf("id = %q, want 1 (reused)", id)
+	}
+	if seqHas(seq, "add_network") {
+		t.Errorf("reuse path must NOT add_network (that is the per-hop leak); got %v", seq)
+	}
+	for _, unwanted := range []string{`set_network 1 ssid "ShellyAP"`, "set_network 1 key_mgmt NONE"} {
+		if seqHas(seq, unwanted) {
+			t.Errorf("reuse path must not reconfigure block; unexpected %q in %v", unwanted, seq)
+		}
+	}
+	if !seqHas(seq, "enable_network 1") || !seqHas(seq, "select_network 1") {
+		t.Errorf("reuse path must enable+select existing block; got %v", seq)
+	}
+
+	// Reused block was not created here, so rollback must not remove it.
+	rollback()
+	if seqHas(seq, "remove_network 1") {
+		t.Errorf("rollback must not remove a reused block; got %v", seq)
+	}
+	if !seqHas(seq, "enable_network all") || !seqHas(seq, "select_network 0") {
+		t.Errorf("rollback must still restore prior network; got %v", seq)
+	}
+}
+
+func TestConfigureWpaNetwork_FailureRollsBackAutomatically(t *testing.T) {
+	var seq []string
+	s := &platformWiFiScanner{
+		iface: "wlan0",
+		wpaRun: fakeWpa(&seq, map[string]string{
+			"list_networks": "network id / ssid / bssid / flags\n0\tHome\tany\t[CURRENT]\n",
+			"add_network":   "7",
+		}, map[string]error{
+			"select_network": &WiFiError{Message: "boom"},
+		}),
+	}
+
+	_, _, err := s.configureWpaNetwork(context.Background(), "ShellyAP", "secret")
+	if err == nil {
+		t.Fatal("expected error when select_network fails")
+	}
+	// WPA-PSK path set the psk, then the failed select_network must auto-roll-back.
+	if !seqHas(seq, `set_network 7 psk "secret"`) {
+		t.Errorf("password path must set psk; got %v", seq)
+	}
+	for _, want := range []string{"remove_network 7", "enable_network all", "select_network 0"} {
+		if !seqHas(seq, want) {
+			t.Errorf("auto-rollback missing %q; got %v", want, seq)
+		}
 	}
 }
 
