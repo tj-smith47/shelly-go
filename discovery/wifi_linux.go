@@ -1028,6 +1028,28 @@ func (s *platformWiFiScanner) tryWpa(ctx context.Context, args ...string) {
 	}
 }
 
+// ForgetNetwork removes any wpa_supplicant network block configured for ssid from
+// the running config — the transient block created to hop onto a device's open
+// factory AP. It does not persist the change (no save_config): these blocks are
+// runtime-only, so dropping them keeps wpa_supplicant from accumulating stale,
+// disabled entries across a fleet of AP hops. Best-effort — a list failure is
+// returned, but a block that is missing or currently associated is left alone.
+func (s *platformWiFiScanner) ForgetNetwork(ctx context.Context, ssid string) error {
+	out, err := s.wpa(ctx, "list_networks")
+	if err != nil {
+		return &WiFiError{Message: "wpa_cli list_networks failed", Err: err}
+	}
+	for _, n := range parseWpaNetworkList(out) {
+		// Never remove the block the supplicant is currently on. ForgetNetwork runs
+		// after the host has rejoined home, so the AP block is no longer [CURRENT];
+		// skipping a current match avoids cutting a live association if mis-ordered.
+		if n.ssid == ssid && !n.current {
+			s.tryWpa(ctx, "remove_network", n.id)
+		}
+	}
+	return nil
+}
+
 // wpaNetwork is one row of `wpa_cli list_networks` output.
 type wpaNetwork struct {
 	id      string

@@ -95,6 +95,19 @@ type APHostIPSetter interface {
 	SetAPHostIP(ip string)
 }
 
+// APNetworkForgetter is implemented by scanners that create a transient network
+// block to associate with a device's open factory AP (currently Linux/wpa_cli).
+// After hopping back to the home network the caller removes that block so a fleet
+// of AP hops — each device AP has a distinct SSID — does not accumulate stale
+// (disabled) wpa_supplicant blocks. Scanners that manage AP profiles through the
+// OS (NetworkManager, macOS, Windows) leave nothing to clean up and need not
+// implement it; callers reach it via a type assertion.
+type APNetworkForgetter interface {
+	// ForgetNetwork removes any network block configured for ssid from the
+	// running config. It is best-effort and a no-op when no such block exists.
+	ForgetNetwork(ctx context.Context, ssid string) error
+}
+
 // HostNetworkPasswordProvider is implemented by scanners that can recover the
 // host's stored passphrase for a known WiFi network from the operating system's
 // credential store (currently Linux: NetworkManager, then wpa_supplicant). It

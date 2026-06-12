@@ -4,6 +4,7 @@ package discovery
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -323,6 +324,62 @@ func TestParseWpaNetworkList(t *testing.T) {
 	}
 	if got[2].id != "2" || got[2].ssid != "NoFlagsNet" || got[2].current {
 		t.Errorf("network[2] = %+v, want id=2 ssid=NoFlagsNet current=false", got[2])
+	}
+}
+
+func TestForgetNetwork_RemovesMatchingNonCurrentBlocks(t *testing.T) {
+	var seq []string
+	list := "network id / ssid / bssid / flags\n" +
+		"0\tHomeNet\tany\t[CURRENT]\n" +
+		"1\tShellyBulbDuo-D0DCFF\tany\t[DISABLED]\n" +
+		"2\tShellyBulbDuo-D0DCFF\tany\t\n" // a second stale block for the same AP
+	s := &platformWiFiScanner{
+		iface:  "wlan0",
+		wpaRun: fakeWpa(&seq, map[string]string{"list_networks": list}, nil),
+	}
+	if err := s.ForgetNetwork(context.Background(), "ShellyBulbDuo-D0DCFF"); err != nil {
+		t.Fatalf("ForgetNetwork: %v", err)
+	}
+	if !seqHas(seq, "remove_network 1") || !seqHas(seq, "remove_network 2") {
+		t.Errorf("expected both stale blocks removed, seq=%v", seq)
+	}
+	if seqHas(seq, "remove_network 0") {
+		t.Errorf("must not remove the [CURRENT] home block, seq=%v", seq)
+	}
+	// Running-config only: the change must not be persisted.
+	if seqHas(seq, "save_config") {
+		t.Errorf("ForgetNetwork must not save_config, seq=%v", seq)
+	}
+}
+
+func TestForgetNetwork_NoMatchIsNoOp(t *testing.T) {
+	var seq []string
+	list := "network id / ssid / bssid / flags\n0\tHomeNet\tany\t[CURRENT]\n"
+	s := &platformWiFiScanner{
+		iface:  "wlan0",
+		wpaRun: fakeWpa(&seq, map[string]string{"list_networks": list}, nil),
+	}
+	if err := s.ForgetNetwork(context.Background(), "ShellyBulb-XYZ"); err != nil {
+		t.Fatalf("ForgetNetwork: %v", err)
+	}
+	for _, c := range seq {
+		if strings.HasPrefix(c, "remove_network") {
+			t.Errorf("unexpected removal on no match: %q", c)
+		}
+	}
+}
+
+func TestForgetNetwork_ListFailureReturnsError(t *testing.T) {
+	var seq []string
+	s := &platformWiFiScanner{
+		iface:  "wlan0",
+		wpaRun: fakeWpa(&seq, nil, map[string]error{"list_networks": errors.New("wpa down")}),
+	}
+	if err := s.ForgetNetwork(context.Background(), "X"); err == nil {
+		t.Fatal("expected an error when list_networks fails")
+	}
+	if seqHas(seq, "remove_network") {
+		t.Errorf("must not attempt removal when the list could not be read, seq=%v", seq)
 	}
 }
 
