@@ -189,8 +189,14 @@ func DefaultRestoreOptions() *RestoreOptions {
 
 // RestoreResult contains the result of a restore operation.
 type RestoreResult struct {
-	Warnings        []string
-	Errors          []error
-	Success         bool
-	RestartRequired bool
+	// DestabilizedStep names the restore step after which the device failed to
+	// climb back to a stable uptime within the recovery budget — evidence the
+	// write drove it into a reboot loop. Empty when no step destabilized the
+	// device. When set, the restore halted at that step rather than stacking
+	// further writes onto a crashing device, and Success is false.
+	DestabilizedStep string
+	Warnings         []string
+	Errors           []error
+	Success          bool
+	RestartRequired  bool
 }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"strconv"
 	"time"
 
 	"github.com/tj-smith47/shelly-go/gen1"
@@ -40,6 +42,12 @@ type Gen1RestoreOptions struct {
 	// NetworkOverride, when non-nil, replaces the backup's WiFi station settings
 	// before they are applied. Ignored when SkipNetwork is true.
 	NetworkOverride *Gen1NetworkOverride
+	// StepTrace, when non-nil, receives one human-readable line per restore step
+	// recording the step's warnings/errors and the device's post-write uptime and
+	// stability. It is the diagnostic seam for pinpointing which setting drives a
+	// fragile device into a reboot loop: leave it nil for a normal restore (zero
+	// overhead) and point it at a file from a debug flag to capture the trace.
+	StepTrace io.Writer
 	// Name overrides the device's stored display name. Empty leaves the name as
 	// the backup's. Used so a cloned device is named distinctly from its source.
 	Name string
@@ -56,6 +64,20 @@ type Gen1RestoreOptions struct {
 	SkipMeters bool
 	// SkipWebhooks skips webhook (action URL) restoration.
 	SkipWebhooks bool
+	// ClockDependentOnly restores only the configuration a device rejects while
+	// it has no clock — light component config (schedules) and captured light
+	// state (color temperature, brightness). It is used for the second pass of a
+	// factory-AP restore: the first pass applies everything at the clockless AP
+	// (where these writes fail with "Timezone and time should be set"), and once
+	// the device has joined the LAN and obtained NTP time this pass re-applies
+	// just those, without re-thrashing settings that already took at the AP.
+	ClockDependentOnly bool
+	// AllowFirmwareDowngrade overrides the firmware-downgrade refusal. By default a
+	// restore refuses when the target device's firmware predates the firmware the
+	// backup was captured from, because applying a newer firmware's configuration
+	// onto older firmware can drive the device into a reboot loop. Set this only
+	// after updating the device firmware is not an option and the risk is accepted.
+	AllowFirmwareDowngrade bool
 }
 
 // gen1IPv4ModeStatic is the value used to request static IPv4 addressing on Gen1
@@ -138,9 +160,245 @@ func ExportGen1(ctx context.Context, dev *gen1.Device) (*Backup, error) {
 	return bkp, nil
 }
 
+// Gen1 firmware older than this build date (the YYYYMMDD prefix of the
+// /settings "fw" string) predates the firmware's tolerance for rapid
+// consecutive settings writes. A full restore issues ~15 writes in sequence —
+// several of which restart the device — and on legacy firmware that write storm
+// crashes the device into a reboot loop (uptime resets every few seconds, the
+// device keeps its half-applied config and never settles). Such firmware is
+// paced more aggressively. The cutoff is conservative: anything older than, or
+// with an unreadable, build date is treated as legacy.
+const gen1LegacyFirmwareDate = 20210101
+
+// Settle floors and recovery bounds for pacing consecutive Gen1 settings
+// writes. These are deliberately not user-tunable: a restore that bricks a
+// device into a boot loop is never an acceptable default, so the pacing that
+// prevents it is always on.
+const (
+	gen1SettleModern = 750 * time.Millisecond
+	gen1SettleLegacy = 2 * time.Second
+	// gen1StableUptime is the uptime (seconds) a device must report before it is
+	// judged stable — evidence it finished booting and is holding, rather than
+	// being caught mid-restart from the previous write. It is deliberately set
+	// above a reboot loop's period (a configuration-storm loop resets every
+	// ~5-9s): a looping device momentarily reads a low uptime each cycle but can
+	// never sustain one this high, so requiring it cleanly separates "booted and
+	// holding" from "looping."
+	gen1StableUptime = 12
+	// gen1RecoveryBudget bounds the wait for a device to climb back to a stable
+	// uptime after a write that restarted it, so a device that never recovers
+	// lets the restore proceed (and fail loudly downstream) instead of hanging.
+	gen1RecoveryBudget = 45 * time.Second
+	gen1RecoveryPoll   = 1 * time.Second
+)
+
+// gen1Pacer throttles consecutive settings writes so a Gen1 device is never
+// handed a new write while it is still applying — or rebooting from — the
+// previous one. That back-to-back write storm is what drives an unpaced full
+// restore into the configuration-storm boot loop.
+type gen1Pacer struct {
+	settle time.Duration
+}
+
+// gen1LiveFirmware reads the device's current firmware string, returning "" when
+// the device cannot be read. An empty string sorts as oldest/legacy everywhere it
+// is used (pacing and the downgrade gate), so an unreadable device is handled
+// conservatively rather than optimistically.
+func gen1LiveFirmware(ctx context.Context, dev *gen1.Device) string {
+	settings, err := dev.GetSettings(ctx)
+	if err != nil {
+		return ""
+	}
+	return settings.FW
+}
+
+// gen1SettleFor selects a settle interval from a firmware build date. Firmware
+// older than gen1LegacyFirmwareDate — or whose date is unparseable — is treated
+// as legacy (slower, safer): being unable to confirm modern firmware is itself a
+// reason to pace conservatively.
+func gen1SettleFor(fw string) time.Duration {
+	if parseGen1FirmwareDate(fw) < gen1LegacyFirmwareDate {
+		return gen1SettleLegacy
+	}
+	return gen1SettleModern
+}
+
+// gen1FirmwareDowngrade reports whether applying a backup captured from backupFW
+// onto a device running liveFW is a firmware downgrade — the target's firmware
+// predates the backup's. Restoring a newer firmware's richer configuration onto
+// older firmware is the proven trigger for the Gen1 configuration-storm boot loop
+// (the older firmware mishandles fields the newer one wrote), so the restore
+// refuses it by default. Returns false when either firmware date is unknown: an
+// unparseable date is not affirmative evidence of a downgrade.
+func gen1FirmwareDowngrade(liveFW, backupFW string) bool {
+	live := parseGen1FirmwareDate(liveFW)
+	backup := parseGen1FirmwareDate(backupFW)
+	return live > 0 && backup > 0 && live < backup
+}
+
+// parseGen1FirmwareDate extracts the YYYYMMDD build date that prefixes a Gen1
+// "fw" string (e.g. "20230913-111821/v1.14.0-gcb84623" → 20230913). Returns 0
+// when no leading 8-digit date is present, which sorts as oldest/legacy.
+func parseGen1FirmwareDate(fw string) int {
+	if len(fw) < 8 {
+		return 0
+	}
+	date := 0
+	for i := range 8 {
+		c := fw[i]
+		if c < '0' || c > '9' {
+			return 0
+		}
+		date = date*10 + int(c-'0')
+	}
+	return date
+}
+
+// afterWrite paces after a settings write that leaves the device at the same
+// address: it waits out the settle floor, then polls until the device reports a
+// stable, held uptime (proof it is not mid-reboot) before the next write. A
+// write that restarted the device drives its uptime toward zero; afterWrite
+// waits for recovery, which is precisely what stops a full restore from stacking
+// writes into a boot loop.
+//
+// It reports the last uptime observed and whether the device restabilized within
+// the recovery budget. stable=false means the write left the device unable to
+// hold a healthy uptime — a reboot loop — and the caller halts rather than
+// writing further into a crashing device. lastUptime is the highest uptime seen
+// (0 when the device was never reachable during the wait).
+func (p gen1Pacer) afterWrite(ctx context.Context, dev *gen1.Device) (lastUptime int, stable bool) {
+	if !sleepCtx(ctx, p.settle) {
+		return 0, false
+	}
+	deadline := time.Now().Add(gen1RecoveryBudget)
+	for {
+		if status, err := dev.GetFullStatus(ctx); err == nil {
+			if status.Uptime > lastUptime {
+				lastUptime = status.Uptime
+			}
+			if status.Uptime >= gen1StableUptime {
+				return status.Uptime, true
+			}
+		}
+		if time.Now().After(deadline) || !sleepCtx(ctx, gen1RecoveryPoll) {
+			return lastUptime, false
+		}
+	}
+}
+
+// afterNetworkWrite paces after a WiFi write, which on a LAN restore can move
+// the device to a new address (static-IP change) and make it unreachable at the
+// current one. It waits only the settle floor — never the uptime poll — so the
+// pacer does not hang waiting for a device that has legitimately relocated; any
+// restart is caught by the next afterWrite when the device is reachable again
+// (at the factory AP it never moves, so the following write paces normally).
+func (p gen1Pacer) afterNetworkWrite(ctx context.Context) {
+	sleepCtx(ctx, p.settle)
+}
+
+// sleepCtx sleeps for d unless ctx is canceled first. It reports false when
+// canceled, so callers can stop pacing promptly on shutdown.
+func sleepCtx(ctx context.Context, d time.Duration) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(d):
+		return true
+	}
+}
+
+// runGen1Step performs one same-address restore step — the write closure, then
+// pacing — and judges whether the device survived it. When step tracing is
+// enabled it records the step's outcome (the warnings/errors the write raised and
+// the device's post-write uptime/stability), giving an exact map of which setting
+// the device tolerated and which one broke it. It returns false when the write
+// drove the device into a reboot loop, recording the breaking step on the result
+// so the caller halts instead of stacking further writes onto a crashing device.
+func runGen1Step(
+	ctx context.Context,
+	dev *gen1.Device,
+	pacer gen1Pacer,
+	opts *Gen1RestoreOptions,
+	step string,
+	result *RestoreResult,
+	write func(),
+) bool {
+	warnBefore, errBefore := len(result.Warnings), len(result.Errors)
+	write()
+	uptime, stable := pacer.afterWrite(ctx, dev)
+	traceGen1Step(opts.StepTrace, step, result, warnBefore, errBefore, uptime, stable)
+	if !stable {
+		result.DestabilizedStep = step
+		result.Success = false
+		result.Errors = append(result.Errors,
+			fmt.Errorf("device became unstable after writing %s; restore halted to avoid a reboot loop", step))
+	}
+	return stable
+}
+
+// gen1RestoreStep is one entry in the Gen1 restore sequence: a labeled write,
+// optionally skipped, optionally unprobed. probe is false for a network write
+// that may relocate the device — it is paced but not polled for stability, since
+// unreachability there is relocation rather than a crash.
+type gen1RestoreStep struct {
+	write func()
+	name  string
+	skip  bool
+	probe bool
+}
+
+// runGen1RestoreStep runs one restore step: a probed step writes, paces, traces,
+// and halts on destabilization (via runGen1Step); an unprobed step (a network
+// write) writes, paces without polling, and traces as applied-not-probed. It
+// reports whether the restore may continue.
+func runGen1RestoreStep(
+	ctx context.Context,
+	dev *gen1.Device,
+	pacer gen1Pacer,
+	opts *Gen1RestoreOptions,
+	step gen1RestoreStep,
+	result *RestoreResult,
+) bool {
+	if step.probe {
+		return runGen1Step(ctx, dev, pacer, opts, step.name, result, step.write)
+	}
+	warnBefore, errBefore := len(result.Warnings), len(result.Errors)
+	step.write()
+	pacer.afterNetworkWrite(ctx)
+	traceGen1Step(opts.StepTrace, step.name, result, warnBefore, errBefore, -1, true)
+	return true
+}
+
+// traceGen1Step appends one line per restore step to the trace sink, capturing
+// the warnings and errors the step raised and the device's post-write uptime and
+// stability. A negative uptime marks a step that could not be probed (a network
+// write may relocate the device, so it is paced but not polled). It is a no-op
+// when tracing is disabled (w == nil) — a normal restore pays nothing for it.
+func traceGen1Step(w io.Writer, step string, result *RestoreResult, warnBefore, errBefore, uptime int, stable bool) {
+	if w == nil {
+		return
+	}
+	state := "ok"
+	switch {
+	case !stable:
+		state = "DESTABILIZED"
+	case uptime < 0:
+		state = "applied (not probed)"
+	}
+	uptimeField := "n/a"
+	if uptime >= 0 {
+		uptimeField = strconv.Itoa(uptime)
+	}
+	fmt.Fprintf(w, "step=%-18s warnings=%d errors=%d uptime=%-5s %s\n",
+		step, len(result.Warnings)-warnBefore, len(result.Errors)-errBefore, uptimeField, state)
+}
+
 // RestoreGen1 restores a Backup to a Gen1 device via individual HTTP settings
 // calls. The order of operations mirrors the device's hardware-verified restore
-// sequence and must not be reordered.
+// sequence and must not be reordered. Each write group is paced (see gen1Pacer)
+// so the device is never handed a new setting while still rebooting from the
+// previous one — without that pacing a full restore crashes Gen1 firmware,
+// notably pre-2021 builds, into a reboot loop.
 func RestoreGen1(ctx context.Context, dev *gen1.Device, bkp *Backup, opts *Gen1RestoreOptions) (*RestoreResult, error) {
 	result := &RestoreResult{
 		Success: true,
@@ -159,52 +417,93 @@ func RestoreGen1(ctx context.Context, dev *gen1.Device, bkp *Backup, opts *Gen1R
 		settings.Name = opts.Name
 	}
 
-	// Restore device-level settings
-	restoreGen1DeviceSettings(ctx, dev, &settings, result)
+	// Read the device's live firmware once: it selects the pacing aggressiveness
+	// for the whole restore (older firmware is more fragile to rapid writes) and
+	// gates the restore against a firmware downgrade.
+	liveFW := gen1LiveFirmware(ctx, dev)
+	pacer := gen1Pacer{settle: gen1SettleFor(liveFW)}
 
-	// Restore WiFi (if not skipped)
-	if !opts.SkipNetwork {
-		restoreGen1WiFi(ctx, dev, bkp, opts.NetworkOverride, result)
+	// Refuse a firmware downgrade before writing anything: applying a backup
+	// captured from newer firmware onto a device running older firmware is the
+	// proven trigger for the Gen1 reboot loop. The remedy is to update the
+	// device's firmware first, so this fails loudly rather than bricking it.
+	if !opts.AllowFirmwareDowngrade && gen1FirmwareDowngrade(liveFW, settings.FW) {
+		return nil, fmt.Errorf(
+			"refusing restore: device firmware %q predates the backup's firmware %q; "+
+				"applying a newer firmware's configuration onto older firmware can drive the "+
+				"device into a reboot loop — update the device firmware first, then restore "+
+				"(override with AllowFirmwareDowngrade)",
+			liveFW, settings.FW)
 	}
 
-	// Restore MQTT
-	restoreGen1MQTT(ctx, dev, &settings, result)
-
-	// Restore Cloud
-	restoreGen1Cloud(ctx, dev, &settings, result)
-
-	// Restore CoIoT
-	restoreGen1CoIoT(ctx, dev, &settings, result)
-
-	// Restore SNTP
-	restoreGen1SNTP(ctx, dev, &settings, result)
-
-	// Restore Auth (if not skipped)
-	if !opts.SkipAuth {
-		restoreGen1Auth(ctx, dev, bkp, result)
+	// The factory-AP restore's LAN second pass re-applies only the clock-gated
+	// config (light component config + captured light state), now that the device
+	// has a clock, without re-writing settings that already took at the AP.
+	if opts.ClockDependentOnly {
+		if !runGen1Step(ctx, dev, pacer, opts, "light-config", result, func() {
+			restoreGen1Components(ctx, dev, &settings, result)
+		}) {
+			return result, nil
+		}
+		if !opts.SkipState {
+			runGen1Step(ctx, dev, pacer, opts, "light-state", result, func() {
+				applyGen1LightState(ctx, dev, bkp, result)
+				applyGen1ColorState(ctx, dev, bkp, result)
+				applyGen1WhiteState(ctx, dev, bkp, result)
+			})
+		}
+		return result, nil
 	}
 
-	// Restore component configs (if not skipped via schedules/scripts)
-	restoreGen1Components(ctx, dev, &settings, result)
-
-	// Apply captured live light state (color temperature, brightness, color, white
-	// channels) — these live in /light, /color and /white, not /settings, so the
-	// component config above does not carry them. Each apply is a no-op when its
-	// state is absent from the backup.
-	if !opts.SkipState {
-		applyGen1LightState(ctx, dev, bkp, result)
-		applyGen1ColorState(ctx, dev, bkp, result)
-		applyGen1WhiteState(ctx, dev, bkp, result)
+	// The restore sequence mirrors the device's hardware-verified order and must
+	// not be reordered. Each step is paced; the WiFi write is unprobed because a
+	// static-IP change can relocate the device (unreachability there is relocation,
+	// not a crash). The first step that drives the device into a reboot loop halts
+	// the sequence with the breaking step recorded.
+	steps := []gen1RestoreStep{
+		// Device-level settings (name, timezone, mode — mode can restart the device
+		// in place). Discoverable is applied only when the backup captured it.
+		{name: "device-settings", probe: true, write: func() {
+			restoreGen1DeviceSettings(ctx, dev, &settings, gen1ConfigHasKey(bkp.Config, "discoverable"), result)
+		}},
+		{name: componentWiFi, skip: opts.SkipNetwork, probe: false, write: func() {
+			restoreGen1WiFi(ctx, dev, bkp, opts.NetworkOverride, result)
+		}},
+		{name: componentMQTT, probe: true, write: func() { restoreGen1MQTT(ctx, dev, &settings, result) }},
+		{name: componentCloud, probe: true, write: func() { restoreGen1Cloud(ctx, dev, &settings, result) }},
+		{name: "coiot", probe: true, write: func() { restoreGen1CoIoT(ctx, dev, &settings, result) }},
+		{name: "sntp", probe: true, write: func() { restoreGen1SNTP(ctx, dev, &settings, result) }},
+		{name: "auth", skip: opts.SkipAuth, probe: true, write: func() {
+			restoreGen1Auth(ctx, dev, bkp, result)
+		}},
+		{name: "components", probe: true, write: func() { restoreGen1Components(ctx, dev, &settings, result) }},
+		// Captured live light state (color temperature, brightness, color, white
+		// channels) lives in /light, /color and /white, not /settings, so the
+		// component config above does not carry it. Each apply is a no-op when its
+		// state is absent from the backup.
+		{name: "light-state", skip: opts.SkipState, probe: true, write: func() {
+			applyGen1LightState(ctx, dev, bkp, result)
+			applyGen1ColorState(ctx, dev, bkp, result)
+			applyGen1WhiteState(ctx, dev, bkp, result)
+		}},
+		// Per-meter overpower limits, which restoreGen1Components does not cover (the
+		// device-level max_power is restored with the device settings).
+		{name: "meters", skip: opts.SkipMeters, probe: true, write: func() {
+			restoreGen1Meters(ctx, dev, &settings, result)
+			restoreGen1EMeters(ctx, dev, &settings, result)
+		}},
+	}
+	for _, step := range steps {
+		if step.skip {
+			continue
+		}
+		if !runGen1RestoreStep(ctx, dev, pacer, opts, step, result) {
+			return result, nil
+		}
 	}
 
-	// Re-apply per-meter overpower limits, which restoreGen1Components does not
-	// cover (the device-level max_power is restored with the device settings).
-	if !opts.SkipMeters {
-		restoreGen1Meters(ctx, dev, &settings, result)
-		restoreGen1EMeters(ctx, dev, &settings, result)
-	}
-
-	// Restore action URLs / webhooks (if not skipped)
+	// Restore action URLs / webhooks (if not skipped). This is the final write and
+	// carries no pacing — nothing follows it to be protected from a restart.
 	if !opts.SkipWebhooks {
 		restoreGen1Actions(ctx, dev, bkp, result)
 	}
@@ -531,7 +830,13 @@ func marshalGen1Schedules(settings *gen1.Settings) json.RawMessage {
 }
 
 // restoreGen1DeviceSettings restores device-level settings (name, timezone, etc.).
-func restoreGen1DeviceSettings(ctx context.Context, dev *gen1.Device, settings *gen1.Settings, result *RestoreResult) {
+func restoreGen1DeviceSettings(
+	ctx context.Context,
+	dev *gen1.Device,
+	settings *gen1.Settings,
+	applyDiscoverable bool,
+	result *RestoreResult,
+) {
 	if settings.Name != "" {
 		if err := dev.SetName(ctx, settings.Name); err != nil {
 			addWarningf(result, "set name: %v", err)
@@ -552,14 +857,36 @@ func restoreGen1DeviceSettings(ctx context.Context, dev *gen1.Device, settings *
 			addWarningf(result, "set mode: %v", err)
 		}
 	}
-	if err := dev.SetDiscoverable(ctx, settings.Discoverable); err != nil {
-		addWarningf(result, "set discoverable: %v", err)
+	// Only write discoverable when the backup actually captured it. A partial
+	// backup (one taken while the device was unstable) omits the field, which
+	// unmarshals to false; writing that would force-disable mDNS the source
+	// never disabled.
+	if applyDiscoverable {
+		if err := dev.SetDiscoverable(ctx, settings.Discoverable); err != nil {
+			addWarningf(result, "set discoverable: %v", err)
+		}
 	}
 	if settings.MaxPower > 0 {
 		if err := dev.SetMaxPower(ctx, settings.MaxPower); err != nil {
 			addWarningf(result, "set max power: %v", err)
 		}
 	}
+}
+
+// gen1ConfigHasKey reports whether the backup's raw config JSON contains a
+// top-level key. It distinguishes a value the source actually set from one
+// merely defaulted by unmarshalling a partial backup, so restore does not write
+// settings the backup never captured.
+func gen1ConfigHasKey(raw json.RawMessage, key string) bool {
+	if len(raw) == 0 {
+		return false
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return false
+	}
+	_, ok := m[key]
+	return ok
 }
 
 // restoreGen1WiFi restores WiFi settings from the backup. When override is
