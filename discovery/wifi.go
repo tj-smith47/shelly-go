@@ -187,6 +187,7 @@ type WiFiDiscoverer struct {
 	OnDeviceFound  func(*WiFiDiscoveredDevice)
 	HTTPClient     *http.Client
 	ProbeTimeout   time.Duration
+	tickInterval   time.Duration // injectable for tests; 0 → 10s production default
 	mu             sync.RWMutex
 	running        bool
 	ProbeDevices   bool
@@ -458,7 +459,11 @@ func (w *WiFiDiscoverer) StartDiscovery() (<-chan DiscoveredDevice, error) {
 
 // continuousDiscovery runs continuous WiFi AP discovery.
 func (w *WiFiDiscoverer) continuousDiscovery() {
-	ticker := time.NewTicker(10 * time.Second)
+	interval := w.tickInterval
+	if interval == 0 {
+		interval = 10 * time.Second
+	}
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {

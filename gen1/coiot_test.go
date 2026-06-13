@@ -1008,17 +1008,17 @@ func TestCoIoTConstants(t *testing.T) {
 // TestSensorIDToDescription tests sensor ID mapping.
 func TestSensorIDToDescription(t *testing.T) {
 	tests := []struct {
-		id   int
 		want string
+		id   int
 	}{
-		{1101, "Relay State"},
-		{2101, "Input State"},
-		{3101, "Active Power"},
-		{3104, "Voltage"},
-		{4101, "Power (W)"},
-		{6109, "Status (Error)"},
-		{9101, "Temperature"},
-		{9999, ""}, // Unknown
+		{id: 1101, want: "Relay State"},
+		{id: 2101, want: "Input State"},
+		{id: 3101, want: "Active Power"},
+		{id: 3104, want: "Voltage"},
+		{id: 4101, want: "Power (W)"},
+		{id: 6109, want: "Status (Error)"},
+		{id: 9101, want: "Temperature"},
+		{id: 9999, want: ""}, // Unknown
 	}
 
 	for _, tt := range tests {

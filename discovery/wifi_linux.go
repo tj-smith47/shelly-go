@@ -26,6 +26,12 @@ const (
 	securityWEP  = "WEP"
 )
 
+// Connect-method label constants used as human-readable names in connectMethod.
+const (
+	methodWpaCli  = "wpa_cli"
+	methodNl80211 = "nl80211"
+)
+
 // defaultWiFiIface is the conventional name for the primary WiFi
 // interface, used as the detection fallback when no interface is found.
 const defaultWiFiIface = "wlan0"
@@ -609,16 +615,16 @@ type connectMethod struct {
 func (s *platformWiFiScanner) connectMethods(viaSupplicant bool) []connectMethod {
 	var methods []connectMethod
 	if viaSupplicant {
-		methods = append(methods, connectMethod{s.connectWpaCli, "wpa_cli"})
+		methods = append(methods, connectMethod{s.connectWpaCli, methodWpaCli})
 	} else {
-		methods = append(methods, connectMethod{s.connectViaNl80211, "nl80211"})
+		methods = append(methods, connectMethod{s.connectViaNl80211, methodNl80211})
 	}
 	methods = append(methods, connectMethod{s.connectViaNM, "NetworkManager D-Bus"})
 	if hasCommand("nmcli") {
 		methods = append(methods, connectMethod{s.connectNmcli, "nmcli"})
 	}
-	if !viaSupplicant && hasCommand("wpa_cli") {
-		methods = append(methods, connectMethod{s.connectWpaCli, "wpa_cli"})
+	if !viaSupplicant && hasCommand(methodWpaCli) {
+		methods = append(methods, connectMethod{s.connectWpaCli, methodWpaCli})
 	}
 	if hasCommand("iwconfig") {
 		methods = append(methods, connectMethod{s.connectIwconfig, "iwconfig"})
@@ -628,7 +634,7 @@ func (s *platformWiFiScanner) connectMethods(viaSupplicant bool) []connectMethod
 
 // Connect connects to a WiFi network on Linux.
 func (s *platformWiFiScanner) Connect(ctx context.Context, ssid, password string) error {
-	viaSupplicant := hasCommand("wpa_cli") && s.wpaSupplicantManages(ctx)
+	viaSupplicant := hasCommand(methodWpaCli) && s.wpaSupplicantManages(ctx)
 
 	var errs []string
 	connected := false
@@ -1039,7 +1045,7 @@ func (s *platformWiFiScanner) wpa(ctx context.Context, args ...string) (string, 
 		return s.wpaRun(ctx, args...)
 	}
 	full := append([]string{"-i", s.iface}, args...)
-	out, err := exec.CommandContext(ctx, "wpa_cli", full...).Output()
+	out, err := exec.CommandContext(ctx, methodWpaCli, full...).Output()
 	return strings.TrimSpace(string(out)), err
 }
 
@@ -1310,8 +1316,8 @@ func (s *platformWiFiScanner) Disconnect(ctx context.Context) error {
 		}
 	}
 
-	if hasCommand("wpa_cli") {
-		cmd := exec.CommandContext(ctx, "wpa_cli", "-i", s.iface, "disconnect")
+	if hasCommand(methodWpaCli) {
+		cmd := exec.CommandContext(ctx, methodWpaCli, "-i", s.iface, "disconnect")
 		if err := cmd.Run(); err == nil {
 			return nil
 		}
@@ -1374,7 +1380,7 @@ func (s *platformWiFiScanner) CurrentNetwork(ctx context.Context) (*WiFiNetwork,
 		return s.currentNetworkNmcli(ctx)
 	}
 
-	if hasCommand("wpa_cli") {
+	if hasCommand(methodWpaCli) {
 		return s.currentNetworkWpaCli(ctx)
 	}
 
@@ -1435,14 +1441,13 @@ func (s *platformWiFiScanner) parseNmcliLine(line string) *WiFiNetwork {
 //
 //nolint:gosec // G204: Interface name is auto-detected, not user input
 func (s *platformWiFiScanner) currentNetworkWpaCli(ctx context.Context) (*WiFiNetwork, error) {
-	cmd := exec.CommandContext(ctx, "wpa_cli", "-i", s.iface, "status")
-	output, err := cmd.Output()
+	output, err := s.wpa(ctx, "status")
 	if err != nil {
 		return nil, &WiFiError{Message: "wpa_cli status failed", Err: err}
 	}
 
 	var ssid, state string
-	for _, line := range strings.Split(string(output), "\n") {
+	for _, line := range strings.Split(output, "\n") {
 		if strings.HasPrefix(line, "ssid=") {
 			ssid = strings.TrimPrefix(line, "ssid=")
 		}
@@ -1462,13 +1467,16 @@ func (s *platformWiFiScanner) currentNetworkWpaCli(ctx context.Context) (*WiFiNe
 //
 //nolint:gosec // G204: Interface name is auto-detected, not user input
 func (s *platformWiFiScanner) currentNetworkIwconfig(ctx context.Context) (*WiFiNetwork, error) {
-	cmd := exec.CommandContext(ctx, "iwconfig", s.iface)
+	cmd := exec.CommandContext(ctx, "iwconfig", s.iface) //nolint:gosec // G204: iface auto-detected
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, &WiFiError{Message: "iwconfig failed", Err: err}
 	}
+	return parseIwconfigOutput(string(output))
+}
 
-	outputStr := string(output)
+// parseIwconfigOutput extracts the connected SSID from iwconfig output.
+func parseIwconfigOutput(outputStr string) (*WiFiNetwork, error) {
 	essidIdx := strings.Index(outputStr, `ESSID:"`)
 	if essidIdx == -1 {
 		return nil, &WiFiError{Message: msgNotConnected}

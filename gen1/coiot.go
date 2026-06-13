@@ -53,6 +53,7 @@ const (
 type CoIoTListener struct {
 	conn          *net.UDPConn
 	stopCh        chan struct{}
+	listenFn      func(addr *net.UDPAddr) (*net.UDPConn, error)
 	multicastAddr string
 	handlers      []StatusHandler
 	port          int
@@ -155,8 +156,16 @@ func (l *CoIoTListener) Start() error {
 		return fmt.Errorf("failed to resolve multicast address: %w", err)
 	}
 
-	// Join multicast group
-	conn, err := net.ListenMulticastUDP("udp4", nil, addr)
+	// Join multicast group. Tests inject listenFn to bypass the real multicast
+	// bind (which requires a multicast NIC and a fixed port) so that the receive
+	// loop can be exercised over a local UDP socket.
+	listenFn := l.listenFn
+	if listenFn == nil {
+		listenFn = func(a *net.UDPAddr) (*net.UDPConn, error) {
+			return net.ListenMulticastUDP("udp4", nil, a)
+		}
+	}
+	conn, err := listenFn(addr)
 	if err != nil {
 		return fmt.Errorf("failed to join multicast group: %w", err)
 	}

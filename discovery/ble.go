@@ -224,6 +224,9 @@ func (s *tinyGoBLEScanner) Stop() error {
 
 	s.running = false
 	close(s.stopCh)
+	if s.adapter == nil {
+		return nil
+	}
 	return s.adapter.StopScan()
 }
 

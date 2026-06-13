@@ -11,12 +11,19 @@ import (
 	"tinygo.org/x/bluetooth"
 )
 
+// bleConnector is the minimal interface for the BLE adapter operations used
+// by tinyGoBLETransmitter.  The production implementation delegates to
+// *bluetooth.Adapter; tests inject a fake.
+type bleConnector interface {
+	Connect(addr bluetooth.Address, params bluetooth.ConnectionParams) (bluetooth.Device, error)
+}
+
 // tinyGoBLETransmitter implements BLETransmitter using tinygo.org/x/bluetooth.
 // This implementation works on Linux (with BlueZ) and macOS (with CoreBluetooth).
 //
 //nolint:govet // Field order optimized for readability over alignment
 type tinyGoBLETransmitter struct {
-	adapter    *bluetooth.Adapter
+	connector  bleConnector
 	device     bluetooth.Device
 	rpcChar    bluetooth.DeviceCharacteristic
 	notifyChar bluetooth.DeviceCharacteristic
@@ -34,8 +41,8 @@ func NewTinyGoBLETransmitter() (*tinyGoBLETransmitter, error) {
 	}
 
 	return &tinyGoBLETransmitter{
-		adapter:  adapter,
-		notifyCh: make(chan []byte, 10),
+		connector: adapter,
+		notifyCh:  make(chan []byte, 10),
 	}, nil
 }
 
@@ -61,7 +68,7 @@ func (t *tinyGoBLETransmitter) Connect(ctx context.Context, address string) erro
 	// Connection with timeout
 	done := make(chan error, 1)
 	go func() {
-		device, err := t.adapter.Connect(addr, params)
+		device, err := t.connector.Connect(addr, params)
 		if err != nil {
 			done <- errors.New("failed to connect: " + err.Error())
 			return

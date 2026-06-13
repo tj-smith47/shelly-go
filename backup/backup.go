@@ -26,6 +26,7 @@ const (
 	componentBLE   = "ble"
 	componentMQTT  = "mqtt"
 	componentWiFi  = "wifi"
+	componentCoIoT = "coiot"
 )
 
 // Common errors.

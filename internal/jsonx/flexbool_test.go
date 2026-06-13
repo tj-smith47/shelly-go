@@ -66,3 +66,34 @@ func TestFlexBool_RejectsGarbage(t *testing.T) {
 		t.Error("expected error for non-boolean string, got nil")
 	}
 }
+
+// TestFlexBool_UnmarshalJSON_ErrorBranches exercises the three internal error
+// paths by calling UnmarshalJSON directly with deliberately malformed bytes so
+// that json.Unmarshal inside each branch returns an error.
+func TestFlexBool_UnmarshalJSON_ErrorBranches(t *testing.T) {
+	t.Run("bool branch malformed", func(t *testing.T) {
+		// "t" starts with 't' but is not valid JSON — exercises the err path in
+		// the 't'/'f' case.
+		var b FlexBool
+		if err := b.UnmarshalJSON([]byte("t")); err == nil {
+			t.Error("expected error for bare 't' in bool branch")
+		}
+	})
+
+	t.Run("string branch malformed", func(t *testing.T) {
+		// An unclosed JSON string starts with '"' but json.Unmarshal fails.
+		var b FlexBool
+		if err := b.UnmarshalJSON([]byte(`"`)); err == nil {
+			t.Error("expected error for unclosed string in string branch")
+		}
+	})
+
+	t.Run("numeric branch malformed", func(t *testing.T) {
+		// "[1,2]" starts with '[', falls into the default numeric branch,
+		// and json.Unmarshal into float64 fails.
+		var b FlexBool
+		if err := b.UnmarshalJSON([]byte("[1,2]")); err == nil {
+			t.Error("expected error for array in numeric branch")
+		}
+	})
+}

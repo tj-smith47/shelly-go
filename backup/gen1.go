@@ -732,7 +732,7 @@ func RestoreGen1(ctx context.Context, dev *gen1.Device, bkp *Backup, opts *Gen1R
 		}},
 		{name: componentMQTT, probe: true, write: func() { restoreGen1MQTT(ctx, dev, &settings, result) }},
 		{name: componentCloud, probe: true, write: func() { restoreGen1Cloud(ctx, dev, &settings, result) }},
-		{name: "coiot", probe: true, write: func() { restoreGen1CoIoT(ctx, dev, &settings, result) }},
+		{name: componentCoIoT, probe: true, write: func() { restoreGen1CoIoT(ctx, dev, &settings, result) }},
 		{name: "sntp", probe: true, write: func() { restoreGen1SNTP(ctx, dev, &settings, result) }},
 		{name: "auth", skip: opts.SkipAuth, probe: true, write: func() {
 			restoreGen1Auth(ctx, dev, bkp, result)

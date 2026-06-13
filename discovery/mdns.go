@@ -31,11 +31,13 @@ const (
 // these advertisements and parses the TXT records to extract
 // device information.
 type MDNSDiscoverer struct {
-	devices   map[string]*DiscoveredDevice
-	devicesCh chan DiscoveredDevice
-	stopCh    chan struct{}
-	running   bool
-	mu        sync.RWMutex
+	devices         map[string]*DiscoveredDevice
+	devicesCh       chan DiscoveredDevice
+	stopCh          chan struct{}
+	running         bool
+	tickInterval    time.Duration // injectable for tests; 0 → 10s production default
+	discoverTimeout time.Duration // injectable for tests; 0 → 5s production default
+	mu              sync.RWMutex
 }
 
 // NewMDNSDiscoverer creates a new mDNS discoverer.
@@ -273,8 +275,9 @@ func (m *MDNSDiscoverer) processRecord(
 		m.parseTXTRecord(rdata, device)
 
 	case dnsTypeA:
-		// A record contains IPv4 address (4 bytes)
-		if len(rdata) == 4 {
+		// A record contains IPv4 address (4 bytes); guard requires >= 4 so the
+		// static analyser can prove indices 0-3 are in-bounds.
+		if len(rdata) >= 4 {
 			ip := net.IPv4(rdata[0], rdata[1], rdata[2], rdata[3])
 			if ip.IsPrivate() || ip.IsLoopback() {
 				device.Address = ip
@@ -438,7 +441,11 @@ func (m *MDNSDiscoverer) StartDiscovery() (<-chan DiscoveredDevice, error) {
 
 // continuousDiscovery runs continuous discovery.
 func (m *MDNSDiscoverer) continuousDiscovery() {
-	ticker := time.NewTicker(10 * time.Second)
+	interval := m.tickInterval
+	if interval == 0 {
+		interval = 10 * time.Second
+	}
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
@@ -446,7 +453,11 @@ func (m *MDNSDiscoverer) continuousDiscovery() {
 		case <-m.stopCh:
 			return
 		case <-ticker.C:
-			devices, err := m.Discover(5 * time.Second)
+			discTimeout := m.discoverTimeout
+			if discTimeout == 0 {
+				discTimeout = 5 * time.Second
+			}
+			devices, err := m.Discover(discTimeout)
 			if err != nil {
 				continue
 			}
