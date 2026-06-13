@@ -282,7 +282,7 @@ type Settings struct {
 	Cloud           *CloudSettings     `json:"cloud,omitempty"`
 	BuildInfo       *BuildInfo         `json:"build_info,omitempty"`
 	Device          *DeviceSettings    `json:"device,omitempty"`
-	Tz              string             `json:"tz,omitempty"`
+	Tz              string             `json:"timezone,omitempty"`
 	Name            string             `json:"name,omitempty"`
 	FW              string             `json:"fw,omitempty"`
 	Time            string             `json:"time,omitempty"`

@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -186,6 +187,95 @@ func TestCaptureGen1WhiteState_NoChannels(t *testing.T) {
 	t.Parallel()
 	if got := captureGen1WhiteState(t.Context(), nil, 0); got != nil {
 		t.Errorf("expected nil for 0 channels, got %s", got)
+	}
+}
+
+// TestGen1Settings_TimezoneRoundTrips guards the tag bug that dropped the timezone
+// from every Gen1 backup: the device's /settings key is "timezone", and Settings.Tz
+// must read AND re-marshal under that key. When it was tagged "tz", GetSettings read
+// nothing and the re-marshaled backup omitted the field, so restore never called
+// SetTimezone — leaving the device with no clock and silently dropping its
+// astronomical (sunrise/sunset) light schedule rules.
+func TestGen1Settings_TimezoneRoundTrips(t *testing.T) {
+	t.Parallel()
+	var s gen1.Settings
+	if err := json.Unmarshal([]byte(`{"timezone":"America/Los_Angeles"}`), &s); err != nil {
+		t.Fatalf("unmarshal device settings: %v", err)
+	}
+	if s.Tz != "America/Los_Angeles" {
+		t.Fatalf("device 'timezone' not read into Tz; got %q", s.Tz)
+	}
+	out, err := json.Marshal(&s)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(out), `"timezone":"America/Los_Angeles"`) {
+		t.Errorf("re-marshaled backup dropped timezone: %s", out)
+	}
+}
+
+func TestGen1SettingsHaveScheduleRules(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		settings *gen1.Settings
+		want     bool
+	}{
+		{name: "none", settings: &gen1.Settings{}, want: false},
+		{
+			name:     "light rule",
+			settings: &gen1.Settings{Lights: []gen1.LightSettings{{ScheduleRules: []string{"0000asr-0123456-0;101;off"}}}},
+			want:     true,
+		},
+		{
+			name:     "relay rule",
+			settings: &gen1.Settings{Relays: []gen1.RelaySettings{{ScheduleRules: []string{"0800-7F-0-on"}}}},
+			want:     true,
+		},
+		{
+			name:     "empty rule slice",
+			settings: &gen1.Settings{Lights: []gen1.LightSettings{{ScheduleRules: []string{}}}},
+			want:     false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := gen1SettingsHaveScheduleRules(tt.settings); got != tt.want {
+				t.Errorf("gen1SettingsHaveScheduleRules() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestWaitGen1ClockSettle_ReturnsWhenClockSet asserts the wait returns without a
+// warning as soon as the device reports a non-zero clock.
+func TestWaitGen1ClockSettle_ReturnsWhenClockSet(t *testing.T) {
+	t.Parallel()
+	dev, _ := gen1ColorDevice(t, `{"unixtime":1781366055}`)
+	result := &RestoreResult{Success: true}
+	waitGen1ClockSettle(t.Context(), dev, result)
+	if len(result.Warnings) != 0 {
+		t.Errorf("expected no warning when clock is set, got %v", result.Warnings)
+	}
+}
+
+// TestWaitGen1ClockSettle_WarnsWhenClockNeverSets asserts that a device whose clock
+// never appears records a warning (rather than failing the restore) and does not
+// block past the deadline. A canceled context makes the bounded wait return at
+// once without sleeping the full timeout.
+func TestWaitGen1ClockSettle_WarnsWhenClockNeverSets(t *testing.T) {
+	t.Parallel()
+	dev, _ := gen1ColorDevice(t, `{"unixtime":0}`)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	result := &RestoreResult{Success: true}
+	waitGen1ClockSettle(ctx, dev, result)
+	if len(result.Warnings) != 1 {
+		t.Fatalf("expected exactly one clock warning, got %v", result.Warnings)
+	}
+	if !strings.Contains(result.Warnings[0], "clock not set") {
+		t.Errorf("warning = %q, want it to mention the clock", result.Warnings[0])
 	}
 }
 

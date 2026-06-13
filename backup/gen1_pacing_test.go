@@ -228,7 +228,7 @@ func TestRestoreGen1_ClockDependentOnly(t *testing.T) {
 	dev, writes := gen1ColorDevice(t, `{"fw":"20230913-111821/v1.14.0","uptime":9000}`)
 
 	bkp := &Backup{
-		Config: json.RawMessage(`{"name":"FR","tz":"America/Chicago","mqtt":{"enable":true,"server":"x:1883"},` +
+		Config: json.RawMessage(`{"name":"FR","timezone":"America/Chicago","mqtt":{"enable":true,"server":"x:1883"},` +
 			`"lights":[{"name":"Bath","default_state":"on","schedule_rules":["0000asr-0123456-0;101;off"]}]}`),
 		Components: map[string]json.RawMessage{
 			lightStateKey: json.RawMessage(`[{"id":0,"temp":6500,"brightness":50}]`),

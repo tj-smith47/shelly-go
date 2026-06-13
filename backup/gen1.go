@@ -96,6 +96,12 @@ type Gen1RestoreOptions struct {
 	// restored credentials, after which the device — now reachable and updatable —
 	// receives its firmware update and full configuration on the LAN.
 	NetworkOnly bool
+	// SkipClockWait disables the bounded wait for the device clock that otherwise
+	// precedes writing time-based schedule rules. Set it for a restore run at a
+	// clockless factory AP, where the device can never obtain NTP time: waiting
+	// there is pointless (the LAN ClockDependentOnly pass re-applies those rules
+	// once the device has joined the network and synced its clock).
+	SkipClockWait bool
 }
 
 // gen1IPv4ModeStatic is the value used to request static IPv4 addressing on Gen1
@@ -239,6 +245,58 @@ func gen1SettleFor(fw string) time.Duration {
 		return gen1SettleLegacy
 	}
 	return gen1SettleModern
+}
+
+// gen1ClockSettleTimeout bounds the wait for a Gen1 device to obtain NTP time
+// before its time-based schedule rules are written, and gen1ClockPollInterval is
+// the gap between status polls. The device refuses schedule rules with no clock,
+// and on a fresh boot the sync can take a few seconds — longer than the inter-step
+// restore pacing — so the rules must not be written before the clock appears.
+const (
+	gen1ClockSettleTimeout = 30 * time.Second
+	gen1ClockPollInterval  = 2 * time.Second
+)
+
+// gen1SettingsHaveScheduleRules reports whether the backup carries any light or
+// relay schedule rules. Such rules are clock-gated — the device rejects them with
+// "Timezone and time should be set" until its clock is set — so their presence is
+// what makes the pre-write clock wait worthwhile; a backup without them skips it.
+func gen1SettingsHaveScheduleRules(settings *gen1.Settings) bool {
+	for i := range settings.Lights {
+		if len(settings.Lights[i].ScheduleRules) > 0 {
+			return true
+		}
+	}
+	for i := range settings.Relays {
+		if len(settings.Relays[i].ScheduleRules) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// waitGen1ClockSettle polls the device until its clock is set (status unixtime
+// becomes non-zero) or gen1ClockSettleTimeout elapses. It is called before writing
+// time-based schedule rules so a freshly-booted device — whose NTP sync can lag the
+// short inter-step pacing — does not silently drop them. A clock that never arrives
+// (e.g. the device cannot reach NTP) records a warning and proceeds rather than
+// failing the restore, since the rest of the configuration still applies.
+func waitGen1ClockSettle(ctx context.Context, dev *gen1.Device, result *RestoreResult) {
+	waitCtx, cancel := context.WithTimeout(ctx, gen1ClockSettleTimeout)
+	defer cancel()
+	for {
+		if status, err := dev.GetFullStatus(waitCtx); err == nil && status.UnixTime > 0 {
+			return
+		}
+		select {
+		case <-waitCtx.Done():
+			addWarningf(result,
+				"device clock not set after %s; time-based schedule rules may not apply until it syncs NTP",
+				gen1ClockSettleTimeout)
+			return
+		case <-time.After(gen1ClockPollInterval):
+		}
+	}
 }
 
 // gen1FirmwareDowngrade reports whether applying a backup captured from backupFW
@@ -649,7 +707,9 @@ func RestoreGen1(ctx context.Context, dev *gen1.Device, bkp *Backup, opts *Gen1R
 		{name: "auth", skip: opts.SkipAuth, probe: true, write: func() {
 			restoreGen1Auth(ctx, dev, bkp, result)
 		}},
-		{name: "components", probe: true, write: func() { restoreGen1Components(ctx, dev, &settings, result) }},
+		{name: "components", probe: true, write: func() {
+			restoreGen1ComponentsAfterClock(ctx, dev, &settings, opts, result)
+		}},
 		// Captured live light state (color temperature, brightness, color, white
 		// channels) lives in /light, /color and /white, not /settings, so the
 		// component config above does not carry it. Each apply is a no-op when its
@@ -1260,6 +1320,27 @@ func restoreGen1Auth(ctx context.Context, dev *gen1.Device, bkp *Backup, result 
 	if err := dev.SetAuth(ctx, bkp.Auth.Enable, bkp.Auth.User, ""); err != nil {
 		addWarningf(result, "set auth: %v", err)
 	}
+}
+
+// restoreGen1ComponentsAfterClock waits (bounded) for the device clock before
+// writing component config when the backup carries time-based schedule rules, then
+// restores the components. A Gen1 device refuses such rules until its clock is set
+// ("Timezone and time should be set"); the timezone written in the device-settings
+// step lets it sync NTP, but on a freshly-booted device that sync can lag the short
+// inter-step pacing — without the wait the rules are silently dropped. The wait is
+// skipped at a clockless factory AP (SkipClockWait), where the LAN second pass
+// re-applies the clock-gated config once the device has joined the network.
+func restoreGen1ComponentsAfterClock(
+	ctx context.Context,
+	dev *gen1.Device,
+	settings *gen1.Settings,
+	opts *Gen1RestoreOptions,
+	result *RestoreResult,
+) {
+	if !opts.SkipClockWait && gen1SettingsHaveScheduleRules(settings) {
+		waitGen1ClockSettle(ctx, dev, result)
+	}
+	restoreGen1Components(ctx, dev, settings, result)
 }
 
 // restoreGen1Components restores component-specific configurations.
