@@ -7,6 +7,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseNmcliLine(t *testing.T) {
@@ -380,6 +381,66 @@ func TestForgetNetwork_ListFailureReturnsError(t *testing.T) {
 	}
 	if seqHas(seq, "remove_network") {
 		t.Errorf("must not attempt removal when the list could not be read, seq=%v", seq)
+	}
+}
+
+func TestConnectTimeout_ShellyAPGetsLongerDeadline(t *testing.T) {
+	tests := []struct {
+		name string
+		ssid string
+		want time.Duration
+	}{
+		{"gen1 bulb factory AP", "ShellyBulbDuo-D0DCFF", apConnectTimeout},
+		{"gen2 plus factory AP", "ShellyPlus1PM-A8032AB12345", apConnectTimeout},
+		{"home infrastructure network", "OnyxCheetah4.7", wifiConnectTimeout},
+		{"open guest network", "xfinitywifi", wifiConnectTimeout},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := connectTimeout(tt.ssid); got != tt.want {
+				t.Errorf("connectTimeout(%q) = %v, want %v", tt.ssid, got, tt.want)
+			}
+		})
+	}
+	if apConnectTimeout <= wifiConnectTimeout {
+		t.Errorf("apConnectTimeout (%v) must exceed wifiConnectTimeout (%v) to ride through a flapping AP",
+			apConnectTimeout, wifiConnectTimeout)
+	}
+}
+
+func TestWpaSupplicantManages_PongIsTrue(t *testing.T) {
+	var seq []string
+	s := &platformWiFiScanner{
+		iface:  "wlan0",
+		wpaRun: fakeWpa(&seq, map[string]string{"ping": "PONG"}, nil),
+	}
+	if !s.wpaSupplicantManages(context.Background()) {
+		t.Error("expected true when wpa_cli ping returns PONG")
+	}
+	if !seqHas(seq, "ping") {
+		t.Errorf("expected a ping probe, seq=%v", seq)
+	}
+}
+
+func TestWpaSupplicantManages_ErrorIsFalse(t *testing.T) {
+	var seq []string
+	s := &platformWiFiScanner{
+		iface:  "wlan0",
+		wpaRun: fakeWpa(&seq, nil, map[string]error{"ping": errors.New("no control interface")}),
+	}
+	if s.wpaSupplicantManages(context.Background()) {
+		t.Error("expected false when wpa_cli ping fails (no supplicant on this iface)")
+	}
+}
+
+func TestWpaSupplicantManages_NonPongIsFalse(t *testing.T) {
+	var seq []string
+	s := &platformWiFiScanner{
+		iface:  "wlan0",
+		wpaRun: fakeWpa(&seq, map[string]string{"ping": "Could not connect to wpa_supplicant"}, nil),
+	}
+	if s.wpaSupplicantManages(context.Background()) {
+		t.Error("expected false when ping does not return PONG")
 	}
 }
 

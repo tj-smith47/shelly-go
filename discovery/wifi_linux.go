@@ -30,6 +30,28 @@ const (
 // interface, used as the detection fallback when no interface is found.
 const defaultWiFiIface = "wlan0"
 
+// WiFi association deadlines. An infrastructure network associates within a few
+// seconds, so a tight deadline surfaces a real failure (wrong PSK, AP gone)
+// quickly. A Shelly factory AP is a low-power radio that is frequently weak or
+// only intermittently broadcasting; wpa_supplicant keeps scanning and
+// re-associating the selected network in the background, so a longer deadline
+// lets a connect ride through a flapping AP instead of failing the whole hop on
+// a single missed scan window.
+const (
+	wifiConnectTimeout = 15 * time.Second
+	apConnectTimeout   = 60 * time.Second
+)
+
+// connectTimeout returns the association deadline for ssid: the longer
+// apConnectTimeout for a Shelly factory AP, the tight wifiConnectTimeout for an
+// ordinary infrastructure network.
+func connectTimeout(ssid string) time.Duration {
+	if IsShellyAP(ssid) {
+		return apConnectTimeout
+	}
+	return wifiConnectTimeout
+}
+
 // platformWiFiScanner implements WiFiScanner for Linux.
 // Primary: nl80211 netlink (pure Go, zero external dependencies).
 // Fallback 1: NetworkManager D-Bus API.
@@ -569,58 +591,60 @@ func parseIwField(n *WiFiNetwork, line string) {
 
 // ─── Connect ─────────────────────────────────────────────────────────────────
 
+// connectMethod is one association strategy paired with the label used for it in
+// the aggregated "all methods tried" error.
+type connectMethod struct {
+	fn   func(context.Context, string, string) error
+	name string
+}
+
+// connectMethods returns the association strategies to attempt, in order.
+//
+// A raw nl80211 association fights a running wpa_supplicant for control of the
+// interface: the kernel rejects the second driver with EALREADY ("operation
+// already in progress"), and the half-issued netlink op then wedges the link so
+// even the cooperating wpa_cli path times out behind it. So when wpa_supplicant
+// owns the interface, wpa_cli leads and raw nl80211 is omitted entirely;
+// otherwise nl80211 (pure Go, zero dependencies) leads.
+func (s *platformWiFiScanner) connectMethods(viaSupplicant bool) []connectMethod {
+	var methods []connectMethod
+	if viaSupplicant {
+		methods = append(methods, connectMethod{s.connectWpaCli, "wpa_cli"})
+	} else {
+		methods = append(methods, connectMethod{s.connectViaNl80211, "nl80211"})
+	}
+	methods = append(methods, connectMethod{s.connectViaNM, "NetworkManager D-Bus"})
+	if hasCommand("nmcli") {
+		methods = append(methods, connectMethod{s.connectNmcli, "nmcli"})
+	}
+	if !viaSupplicant && hasCommand("wpa_cli") {
+		methods = append(methods, connectMethod{s.connectWpaCli, "wpa_cli"})
+	}
+	if hasCommand("iwconfig") {
+		methods = append(methods, connectMethod{s.connectIwconfig, "iwconfig"})
+	}
+	return methods
+}
+
 // Connect connects to a WiFi network on Linux.
 func (s *platformWiFiScanner) Connect(ctx context.Context, ssid, password string) error {
-	var errors []string
+	viaSupplicant := hasCommand("wpa_cli") && s.wpaSupplicantManages(ctx)
+
+	var errs []string
 	connected := false
-
-	// Primary: nl80211 netlink (pure Go).
-	if err := s.connectViaNl80211(ctx, ssid, password); err == nil {
-		connected = true
-	} else {
-		errors = append(errors, "nl80211: "+err.Error())
-	}
-
-	// Fallback 1: NetworkManager D-Bus.
-	if !connected {
-		if err := s.connectViaNM(ctx, ssid, password); err == nil {
+	for _, m := range s.connectMethods(viaSupplicant) {
+		if err := m.fn(ctx, ssid, password); err == nil {
 			connected = true
+			break
 		} else {
-			errors = append(errors, "NetworkManager D-Bus: "+err.Error())
-		}
-	}
-
-	// Fallback 2: nmcli CLI.
-	if !connected && hasCommand("nmcli") {
-		if err := s.connectNmcli(ctx, ssid, password); err == nil {
-			connected = true
-		} else {
-			errors = append(errors, "nmcli: "+err.Error())
-		}
-	}
-
-	// Fallback 3: wpa_cli.
-	if !connected && hasCommand("wpa_cli") {
-		if err := s.connectWpaCli(ctx, ssid, password); err == nil {
-			connected = true
-		} else {
-			errors = append(errors, "wpa_cli: "+err.Error())
-		}
-	}
-
-	// Fallback 4: iwconfig (deprecated).
-	if !connected && hasCommand("iwconfig") {
-		if err := s.connectIwconfig(ctx, ssid, password); err == nil {
-			connected = true
-		} else {
-			errors = append(errors, "iwconfig: "+err.Error())
+			errs = append(errs, m.name+": "+err.Error())
 		}
 	}
 
 	if !connected {
 		return &WiFiError{
 			Message: "WiFi connect failed, all methods tried: " +
-				strings.Join(errors, "; "),
+				strings.Join(errs, "; "),
 		}
 	}
 
@@ -954,7 +978,7 @@ func (s *platformWiFiScanner) connectViaNM(ctx context.Context, ssid, password s
 	}
 
 	// Wait for activation.
-	deadline := time.Now().Add(15 * time.Second)
+	deadline := time.Now().Add(connectTimeout(ssid))
 	for time.Now().Before(deadline) {
 		select {
 		case <-ctx.Done():
@@ -1002,7 +1026,7 @@ func (s *platformWiFiScanner) connectNmcli(ctx context.Context, ssid, password s
 		return &WiFiError{Message: "nmcli connect failed", Err: err}
 	}
 
-	return s.waitForConnection(ctx, ssid, 15*time.Second)
+	return s.waitForConnection(ctx, ssid, connectTimeout(ssid))
 }
 
 // wpa runs a single wpa_cli subcommand against this scanner's interface and
@@ -1087,13 +1111,26 @@ func parseWpaNetworkList(out string) []wpaNetwork {
 // the network it was on before — removing only a block it actually added and
 // re-enabling the prior networks — so a failed hop never strands the host with
 // every network disabled.
+// wpaSupplicantManages reports whether a live wpa_supplicant instance is driving
+// this scanner's interface. When it is, the interface must be associated through
+// wpa_cli rather than a raw nl80211 connect, which the kernel would reject with
+// EALREADY and leave wedged. Detected by a PONG on the per-interface wpa_cli
+// control channel (also respects the wpaRun test seam).
+func (s *platformWiFiScanner) wpaSupplicantManages(ctx context.Context) bool {
+	out, err := s.wpa(ctx, "ping")
+	if err != nil {
+		return false
+	}
+	return strings.Contains(strings.ToUpper(out), "PONG")
+}
+
 func (s *platformWiFiScanner) connectWpaCli(ctx context.Context, ssid, password string) error {
 	_, rollback, err := s.configureWpaNetwork(ctx, ssid, password)
 	if err != nil {
 		return err
 	}
 
-	if err := s.waitForConnection(ctx, ssid, 15*time.Second); err != nil {
+	if err := s.waitForConnection(ctx, ssid, connectTimeout(ssid)); err != nil {
 		rollback()
 		return err
 	}
@@ -1238,7 +1275,7 @@ func (s *platformWiFiScanner) connectIwconfig(ctx context.Context, ssid, passwor
 		}
 	}
 
-	return s.waitForConnection(ctx, ssid, 15*time.Second)
+	return s.waitForConnection(ctx, ssid, connectTimeout(ssid))
 }
 
 // ─── Disconnect ──────────────────────────────────────────────────────────────
