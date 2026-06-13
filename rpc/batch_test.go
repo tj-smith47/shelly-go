@@ -406,7 +406,6 @@ func TestClient_Batch(t *testing.T) {
 		Add("Switch.GetStatus", map[string]any{"id": 0}).
 		Add("Switch.GetStatus", map[string]any{"id": 1}).
 		Execute(context.Background())
-
 	if err != nil {
 		t.Fatalf("Batch().Execute() error = %v", err)
 	}

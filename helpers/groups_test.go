@@ -232,7 +232,6 @@ func TestGroupForEach(t *testing.T) {
 		addresses = append(addresses, d.Address())
 		return nil
 	})
-
 	if err != nil {
 		t.Errorf("ForEach() returned error: %v", err)
 	}

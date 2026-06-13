@@ -112,7 +112,6 @@ func TestDiscovery_Scanner(t *testing.T) {
 
 	scanner := discovery.NewScanner()
 	devices, err := scanner.Scan(10 * time.Second)
-
 	if err != nil {
 		t.Fatalf("Scanner.Scan() error = %v", err)
 	}

@@ -140,7 +140,6 @@ func TestShelly_GetStatus(t *testing.T) {
 	shelly := NewShelly(client)
 
 	status, err := shelly.GetStatus(context.Background())
-
 	if err != nil {
 		t.Fatalf("GetStatus() error = %v", err)
 	}
@@ -174,7 +173,6 @@ func TestShelly_GetConfig(t *testing.T) {
 	shelly := NewShelly(client)
 
 	config, err := shelly.GetConfig(context.Background())
-
 	if err != nil {
 		t.Fatalf("GetConfig() error = %v", err)
 	}
@@ -224,7 +222,6 @@ func TestShelly_SetConfig(t *testing.T) {
 			shelly := NewShelly(client)
 
 			err := shelly.SetConfig(context.Background(), tt.config)
-
 			if err != nil {
 				t.Fatalf("SetConfig() error = %v", err)
 			}
@@ -240,7 +237,6 @@ func TestShelly_ListMethods(t *testing.T) {
 	shelly := NewShelly(client)
 
 	methods, err := shelly.ListMethods(context.Background())
-
 	if err != nil {
 		t.Fatalf("ListMethods() error = %v", err)
 	}
@@ -281,7 +277,6 @@ func TestShelly_Reboot(t *testing.T) {
 			shelly := NewShelly(client)
 
 			err := shelly.Reboot(context.Background(), tt.delayMS)
-
 			if err != nil {
 				t.Fatalf("Reboot() error = %v", err)
 			}
@@ -304,7 +299,6 @@ func TestShelly_FactoryReset(t *testing.T) {
 	shelly := NewShelly(client)
 
 	err := shelly.FactoryReset(context.Background())
-
 	if err != nil {
 		t.Fatalf("FactoryReset() error = %v", err)
 	}
@@ -322,7 +316,6 @@ func TestShelly_ResetWiFiConfig(t *testing.T) {
 	shelly := NewShelly(client)
 
 	err := shelly.ResetWiFiConfig(context.Background())
-
 	if err != nil {
 		t.Fatalf("ResetWiFiConfig() error = %v", err)
 	}
@@ -438,7 +431,6 @@ func TestShelly_Update(t *testing.T) {
 			shelly := NewShelly(client)
 
 			err := shelly.Update(context.Background(), tt.params)
-
 			if err != nil {
 				t.Fatalf("Update() error = %v", err)
 			}
@@ -466,7 +458,6 @@ func TestShelly_SetAuth(t *testing.T) {
 	}
 
 	err := shelly.SetAuth(context.Background(), params)
-
 	if err != nil {
 		t.Fatalf("SetAuth() error = %v", err)
 	}
@@ -514,7 +505,6 @@ func TestShelly_GetComponents(t *testing.T) {
 			shelly := NewShelly(client)
 
 			components, err := shelly.GetComponents(context.Background(), tt.includeStatus, tt.includeConfig)
-
 			if err != nil {
 				t.Fatalf("GetComponents() error = %v", err)
 			}
@@ -536,7 +526,6 @@ func TestShelly_DetectLocation(t *testing.T) {
 	shelly := NewShelly(client)
 
 	location, err := shelly.DetectLocation(context.Background())
-
 	if err != nil {
 		t.Fatalf("DetectLocation() error = %v", err)
 	}
@@ -562,7 +551,6 @@ func TestShelly_ListProfiles(t *testing.T) {
 	shelly := NewShelly(client)
 
 	profiles, err := shelly.ListProfiles(context.Background())
-
 	if err != nil {
 		t.Fatalf("ListProfiles() error = %v", err)
 	}
@@ -587,7 +575,6 @@ func TestShelly_SetProfile(t *testing.T) {
 	shelly := NewShelly(client)
 
 	err := shelly.SetProfile(context.Background(), "cover")
-
 	if err != nil {
 		t.Fatalf("SetProfile() error = %v", err)
 	}
@@ -626,7 +613,6 @@ func TestShelly_PutUserCA(t *testing.T) {
 			shelly := NewShelly(client)
 
 			err := shelly.PutUserCA(context.Background(), tt.data, tt.append)
-
 			if err != nil {
 				t.Fatalf("PutUserCA() error = %v", err)
 			}
@@ -645,7 +631,6 @@ func TestShelly_PutTLSClientCert(t *testing.T) {
 
 	certData := "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----"
 	err := shelly.PutTLSClientCert(context.Background(), certData)
-
 	if err != nil {
 		t.Fatalf("PutTLSClientCert() error = %v", err)
 	}
@@ -666,7 +651,6 @@ func TestShelly_PutTLSClientKey(t *testing.T) {
 
 	keyData := "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----"
 	err := shelly.PutTLSClientKey(context.Background(), keyData)
-
 	if err != nil {
 		t.Fatalf("PutTLSClientKey() error = %v", err)
 	}

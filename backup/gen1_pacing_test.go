@@ -221,6 +221,34 @@ func TestAfterWrite_WaitsForRebootRecovery(t *testing.T) {
 	}
 }
 
+func TestGen1ConfirmStable_StableDeviceClearsImmediately(t *testing.T) {
+	t.Parallel()
+	dev := gen1PaceDevice(t, "20230913-111821/v1.14.0", []int{9000})
+	uptime, required, stable := Gen1ConfirmStable(context.Background(), dev)
+	if !stable {
+		t.Error("Gen1ConfirmStable reported unstable for a device up 9000s")
+	}
+	if uptime != 9000 {
+		t.Errorf("uptime = %d, want 9000", uptime)
+	}
+	if required != gen1StableUptime {
+		t.Errorf("requiredUptime = %d, want %d", required, gen1StableUptime)
+	}
+}
+
+func TestGen1ConfirmStable_RebootLoopNeverClears(t *testing.T) {
+	t.Parallel()
+	// A device whose uptime keeps resetting below the bar (a reboot loop) must be
+	// reported unstable. A short context bounds the wait so the test does not sit
+	// out the full recovery budget.
+	dev := gen1PaceDevice(t, "20191216-140245/v1.5.7", []int{1, 2, 3, 1, 2, 3})
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if _, _, stable := Gen1ConfirmStable(ctx, dev); stable {
+		t.Error("Gen1ConfirmStable reported stable for a device stuck below the uptime bar")
+	}
+}
+
 func TestRestoreGen1_ClockDependentOnly(t *testing.T) {
 	t.Parallel()
 	// A modern fw keeps the settle short, and a high uptime clears the stability

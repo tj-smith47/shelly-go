@@ -78,6 +78,52 @@ func TestGen1ColorState_CaptureAndApply(t *testing.T) {
 	}
 }
 
+func TestRestoreGen1DeviceSettings_RestoresTimezoneAutodetect(t *testing.T) {
+	t.Parallel()
+	dev, sets := gen1ColorDevice(t, `{}`)
+	settings := &gen1.Settings{
+		Tz:           "America/Los_Angeles",
+		Lat:          47.1443,
+		Lng:          -122.2545,
+		Tzautodetect: true,
+	}
+	result := &RestoreResult{Success: true}
+	restoreGen1DeviceSettings(t.Context(), dev, settings, false, result)
+	if len(result.Warnings) != 0 {
+		t.Errorf("unexpected warnings: %v", result.Warnings)
+	}
+	if !strings.Contains(strings.Join(*sets, " "), "tzautodetect=true") {
+		t.Errorf("tzautodetect not restored; calls=%v", *sets)
+	}
+	// Autodetect must be written AFTER the manual timezone — a SetTimezone write
+	// turns autodetect off, so writing it first would leave the device with it off.
+	tzIdx, autoIdx := -1, -1
+	for i, c := range *sets {
+		if strings.Contains(c, "timezone=") {
+			tzIdx = i
+		}
+		if strings.Contains(c, "tzautodetect=") {
+			autoIdx = i
+		}
+	}
+	if tzIdx == -1 || autoIdx == -1 || autoIdx < tzIdx {
+		t.Errorf("tzautodetect must be written after timezone; tzIdx=%d autoIdx=%d calls=%v", tzIdx, autoIdx, *sets)
+	}
+}
+
+func TestRestoreGen1DeviceSettings_SkipsAutodetectWhenSourceOff(t *testing.T) {
+	t.Parallel()
+	dev, sets := gen1ColorDevice(t, `{}`)
+	// Source had autodetect off (omitempty -> absent/false in the backup): the
+	// restore must keep the manual timezone and never write tzautodetect.
+	settings := &gen1.Settings{Tz: "America/Los_Angeles", Tzautodetect: false}
+	result := &RestoreResult{Success: true}
+	restoreGen1DeviceSettings(t.Context(), dev, settings, false, result)
+	if strings.Contains(strings.Join(*sets, " "), "tzautodetect") {
+		t.Errorf("must not write tzautodetect when source had it off; calls=%v", *sets)
+	}
+}
+
 func TestGen1WhiteState_CaptureAndApply(t *testing.T) {
 	t.Parallel()
 	dev, sets := gen1ColorDevice(t, `{"ison":true,"brightness":77}`)

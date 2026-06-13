@@ -521,9 +521,11 @@ func (c *mockClient) Disconnect(quiesce uint) {}
 func (c *mockClient) Publish(topic string, qos byte, retained bool, payload interface{}) mqtt.Token {
 	return &mockToken{}
 }
+
 func (c *mockClient) Subscribe(topic string, qos byte, callback mqtt.MessageHandler) mqtt.Token {
 	return &mockToken{}
 }
+
 func (c *mockClient) SubscribeMultiple(filters map[string]byte, callback mqtt.MessageHandler) mqtt.Token {
 	return &mockToken{}
 }

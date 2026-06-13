@@ -47,12 +47,18 @@ func TestBackupModel(t *testing.T) {
 	}
 }
 
-// gen1FirmwareUpdateDevice starts a fake Gen1 device that reports oldFW until its
-// /ota endpoint is hit, after which it reports newFW with a stable uptime — a
-// device that "updates" when told to. It records every request URI so the OTA
+// gen1FirmwareUpdateDeviceOldFW is the ancient (2019) build the fake update device
+// reports before its /ota endpoint is hit — old enough to be a downgrade against any
+// modern backup firmware the tests pass as newFW.
+const gen1FirmwareUpdateDeviceOldFW = "20191216-140245/???"
+
+// gen1FirmwareUpdateDevice starts a fake Gen1 device that reports an ancient build
+// until its /ota endpoint is hit, after which it reports newFW with a stable uptime —
+// a device that "updates" when told to. It records every request URI so the OTA
 // trigger and post-update writes can be asserted, and exposes the OTA call count.
-func gen1FirmwareUpdateDevice(t *testing.T, oldFW, newFW string) (*gen1.Device, *[]string, *int64) {
+func gen1FirmwareUpdateDevice(t *testing.T, newFW string) (*gen1.Device, *[]string, *int64) {
 	t.Helper()
+	const oldFW = gen1FirmwareUpdateDeviceOldFW
 	var (
 		mu       sync.Mutex
 		reqs     []string
@@ -126,22 +132,21 @@ func TestRestoreGen1_NetworkOnlyBypassesGateAndWritesOnlyWiFi(t *testing.T) {
 	}
 }
 
-func TestRestoreGen1_UpdateFirmwareResolvesDowngrade(t *testing.T) {
+func TestRestoreGen1_AutoUpdateResolvesDowngrade(t *testing.T) {
 	t.Parallel()
-	oldFW := "20191216-140245/???"
 	newFW := "20230913-111821/v1.14.0-gcb84623"
-	dev, reqs, otaCalls := gen1FirmwareUpdateDevice(t, oldFW, newFW)
+	dev, reqs, otaCalls := gen1FirmwareUpdateDevice(t, newFW)
 	bkp := &Backup{
 		DeviceInfo: &DeviceInfo{Model: "SHBDUO-1"},
 		Config:     json.RawMessage(`{"name":"FR","fw":"` + newFW + `"}`),
 	}
 
-	// UpdateFirmware turns a refused downgrade into: OTA the device to matched
-	// firmware, then restore — no error, and the config writes proceed.
+	// A detected downgrade is auto-resolved by default (no flag): OTA the device to
+	// matched firmware, then restore — no error, and the config writes proceed.
 	_, err := RestoreGen1(context.Background(), dev, bkp,
-		&Gen1RestoreOptions{UpdateFirmware: true, SkipNetwork: true, SkipAuth: true})
+		&Gen1RestoreOptions{SkipNetwork: true, SkipAuth: true})
 	if err != nil {
-		t.Fatalf("RestoreGen1 with UpdateFirmware: %v", err)
+		t.Fatalf("RestoreGen1 auto firmware update: %v", err)
 	}
 	if atomic.LoadInt64(otaCalls) == 0 {
 		t.Fatal("expected an OTA update to be triggered before the restore")
@@ -165,23 +170,53 @@ func TestRestoreGen1_UpdateFirmwareResolvesDowngrade(t *testing.T) {
 	}
 }
 
-func TestRestoreGen1_UpdateFirmwareWithoutModelErrors(t *testing.T) {
+func TestRestoreGen1_AutoUpdateWithoutModelErrors(t *testing.T) {
 	t.Parallel()
-	// UpdateFirmware on a downgrade with no model to derive a URL from (and no
-	// explicit FirmwareURL) must fail loudly, not POST a malformed URL.
+	// An auto firmware update on a downgrade with no model to derive a URL from (and
+	// no explicit FirmwareURL) must fail loudly, not POST a malformed URL.
 	dev, _ := gen1ColorDevice(t, `{"fw":"20191216-140245/???","uptime":9000}`)
 	bkp := &Backup{Config: json.RawMessage(`{"name":"FR","fw":"20230913-111821/v1.14.0"}`)}
 
-	_, err := RestoreGen1(context.Background(), dev, bkp, &Gen1RestoreOptions{UpdateFirmware: true})
-	if err == nil || !strings.Contains(err.Error(), "cannot update firmware") {
-		t.Fatalf("expected a no-model firmware-URL error, got: %v", err)
+	_, err := RestoreGen1(context.Background(), dev, bkp, &Gen1RestoreOptions{})
+	if err == nil || !strings.Contains(err.Error(), "predates") || !strings.Contains(err.Error(), "FirmwareURL") {
+		t.Fatalf("expected a no-model downgrade-refusal error, got: %v", err)
+	}
+}
+
+func TestRestoreGen1_AllowDowngradeForcesWriteSkippingUpdate(t *testing.T) {
+	t.Parallel()
+	// AllowFirmwareDowngrade opts out of the auto-update: a downgrade is force-written
+	// without any OTA, so config writes proceed and no /ota request is made.
+	newFW := "20230913-111821/v1.14.0-gcb84623"
+	dev, reqs, otaCalls := gen1FirmwareUpdateDevice(t, newFW)
+	bkp := &Backup{
+		DeviceInfo: &DeviceInfo{Model: "SHBDUO-1"},
+		Config:     json.RawMessage(`{"name":"FR","fw":"` + newFW + `"}`),
+	}
+
+	_, err := RestoreGen1(context.Background(), dev, bkp,
+		&Gen1RestoreOptions{AllowFirmwareDowngrade: true, SkipNetwork: true, SkipAuth: true})
+	if err != nil {
+		t.Fatalf("RestoreGen1 with AllowFirmwareDowngrade: %v", err)
+	}
+	if atomic.LoadInt64(otaCalls) != 0 {
+		t.Error("AllowFirmwareDowngrade must skip the OTA, but one was triggered")
+	}
+	var sawConfigWrite bool
+	for _, u := range *reqs {
+		if strings.HasPrefix(u, "/settings?") {
+			sawConfigWrite = true
+		}
+	}
+	if !sawConfigWrite {
+		t.Errorf("forced downgrade did not write config; requests=%v", *reqs)
 	}
 }
 
 func TestUpdateGen1FirmwareAndWait_ReturnsWhenBuildChanges(t *testing.T) {
 	t.Parallel()
 	oldFW, newFW := "20191216-140245/???", "20230913-111821/v1.14.0"
-	dev, _, otaCalls := gen1FirmwareUpdateDevice(t, oldFW, newFW)
+	dev, _, otaCalls := gen1FirmwareUpdateDevice(t, newFW)
 
 	if err := updateGen1FirmwareAndWait(context.Background(), dev, "http://x/fw.zip", oldFW); err != nil {
 		t.Fatalf("updateGen1FirmwareAndWait: %v", err)
@@ -199,7 +234,7 @@ func TestExportedFirmwareHelpers(t *testing.T) {
 	// The exported OTA wrapper drives the same flow the at-AP recovery uses: an
 	// image re-served at a local URL, the device reboots onto the new build.
 	oldFW, newFW := "20191216-140245/???", "20230913-111821/v1.14.0"
-	dev, _, otaCalls := gen1FirmwareUpdateDevice(t, oldFW, newFW)
+	dev, _, otaCalls := gen1FirmwareUpdateDevice(t, newFW)
 	if got := Gen1LiveFirmware(context.Background(), dev); got != oldFW {
 		t.Errorf("Gen1LiveFirmware = %q, want %q", got, oldFW)
 	}

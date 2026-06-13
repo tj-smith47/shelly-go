@@ -1515,7 +1515,6 @@ func TestMigrator_Migrate_RebootFailed(t *testing.T) {
 		IncludeCloud: true,
 	}
 	result, err := m.Migrate(context.Background(), opts)
-
 	// Should still succeed but have warning
 	if err != nil {
 		t.Errorf("Migrate() error = %v, want nil", err)
@@ -1910,7 +1909,6 @@ func TestManager_Restore_StopScriptsListError(t *testing.T) {
 		StopScripts: true,
 	}
 	result, err := mgr.Restore(context.Background(), backupData, opts)
-
 	// Should still succeed even if Script.List fails
 	if err != nil {
 		t.Errorf("Restore() error = %v, want nil", err)
@@ -1961,7 +1959,6 @@ func TestManager_Restore_StopScriptsUnmarshalError(t *testing.T) {
 		StopScripts: true,
 	}
 	result, err := mgr.Restore(context.Background(), backupData, opts)
-
 	// Should still succeed even if unmarshal fails
 	if err != nil {
 		t.Errorf("Restore() error = %v, want nil", err)

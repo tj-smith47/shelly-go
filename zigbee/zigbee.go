@@ -548,14 +548,22 @@ var ClusterMapping = map[uint16]ClusterCapability{
 		ClusterName:   clusterNameOnOff,
 		ComponentType: componentTypeSwitch,
 		Attributes: []ClusterAttribute{
-			{ID: 0x0000, Name: attrNameOnOff, Type: typeBool, Readable: true, Writable: false,
-				Reportable: true},
-			{ID: 0x4000, Name: "GlobalSceneControl", Type: typeBool, Readable: true,
-				Writable: false, Reportable: false},
-			{ID: 0x4001, Name: "OnTime", Type: typeUint16, Readable: true, Writable: true,
-				Reportable: false},
-			{ID: 0x4002, Name: "OffWaitTime", Type: typeUint16, Readable: true, Writable: true,
-				Reportable: false},
+			{
+				ID: 0x0000, Name: attrNameOnOff, Type: typeBool, Readable: true, Writable: false,
+				Reportable: true,
+			},
+			{
+				ID: 0x4000, Name: "GlobalSceneControl", Type: typeBool, Readable: true,
+				Writable: false, Reportable: false,
+			},
+			{
+				ID: 0x4001, Name: "OnTime", Type: typeUint16, Readable: true, Writable: true,
+				Reportable: false,
+			},
+			{
+				ID: 0x4002, Name: "OffWaitTime", Type: typeUint16, Readable: true, Writable: true,
+				Reportable: false,
+			},
 		},
 		Commands: []ClusterCommand{
 			{ID: 0x00, Name: "Off", Direction: directionClientToServer},
@@ -568,14 +576,22 @@ var ClusterMapping = map[uint16]ClusterCapability{
 		ClusterName:   "Level Control",
 		ComponentType: "light",
 		Attributes: []ClusterAttribute{
-			{ID: 0x0000, Name: "CurrentLevel", Type: typeUint8, Readable: true, Writable: false,
-				Reportable: true},
-			{ID: 0x0001, Name: "RemainingTime", Type: typeUint16, Readable: true, Writable: false,
-				Reportable: false},
-			{ID: 0x0010, Name: "OnOffTransitionTime", Type: typeUint16, Readable: true,
-				Writable: true, Reportable: false},
-			{ID: 0x0011, Name: "OnLevel", Type: typeUint8, Readable: true, Writable: true,
-				Reportable: false},
+			{
+				ID: 0x0000, Name: "CurrentLevel", Type: typeUint8, Readable: true, Writable: false,
+				Reportable: true,
+			},
+			{
+				ID: 0x0001, Name: "RemainingTime", Type: typeUint16, Readable: true, Writable: false,
+				Reportable: false,
+			},
+			{
+				ID: 0x0010, Name: "OnOffTransitionTime", Type: typeUint16, Readable: true,
+				Writable: true, Reportable: false,
+			},
+			{
+				ID: 0x0011, Name: "OnLevel", Type: typeUint8, Readable: true, Writable: true,
+				Reportable: false,
+			},
 		},
 		Commands: []ClusterCommand{
 			{ID: 0x00, Name: "MoveToLevel", Direction: directionClientToServer},
@@ -590,18 +606,30 @@ var ClusterMapping = map[uint16]ClusterCapability{
 		ClusterName:   "Color Control",
 		ComponentType: "rgb",
 		Attributes: []ClusterAttribute{
-			{ID: 0x0000, Name: "CurrentHue", Type: typeUint8, Readable: true, Writable: false,
-				Reportable: true},
-			{ID: 0x0001, Name: "CurrentSaturation", Type: typeUint8, Readable: true,
-				Writable: false, Reportable: true},
-			{ID: 0x0003, Name: "CurrentX", Type: typeUint16, Readable: true, Writable: false,
-				Reportable: true},
-			{ID: 0x0004, Name: "CurrentY", Type: typeUint16, Readable: true, Writable: false,
-				Reportable: true},
-			{ID: 0x0007, Name: "ColorTemperatureMireds", Type: typeUint16, Readable: true,
-				Writable: false, Reportable: true},
-			{ID: 0x0008, Name: "ColorMode", Type: typeEnum8, Readable: true, Writable: false,
-				Reportable: false},
+			{
+				ID: 0x0000, Name: "CurrentHue", Type: typeUint8, Readable: true, Writable: false,
+				Reportable: true,
+			},
+			{
+				ID: 0x0001, Name: "CurrentSaturation", Type: typeUint8, Readable: true,
+				Writable: false, Reportable: true,
+			},
+			{
+				ID: 0x0003, Name: "CurrentX", Type: typeUint16, Readable: true, Writable: false,
+				Reportable: true,
+			},
+			{
+				ID: 0x0004, Name: "CurrentY", Type: typeUint16, Readable: true, Writable: false,
+				Reportable: true,
+			},
+			{
+				ID: 0x0007, Name: "ColorTemperatureMireds", Type: typeUint16, Readable: true,
+				Writable: false, Reportable: true,
+			},
+			{
+				ID: 0x0008, Name: "ColorMode", Type: typeEnum8, Readable: true, Writable: false,
+				Reportable: false,
+			},
 		},
 		Commands: []ClusterCommand{
 			{ID: 0x00, Name: "MoveToHue", Direction: directionClientToServer},
@@ -618,16 +646,26 @@ var ClusterMapping = map[uint16]ClusterCapability{
 		ClusterName:   clusterNameWindowCovering,
 		ComponentType: "cover",
 		Attributes: []ClusterAttribute{
-			{ID: 0x0000, Name: "Type", Type: typeEnum8, Readable: true, Writable: false,
-				Reportable: false},
-			{ID: 0x0003, Name: "CurrentPositionLiftPercent100ths", Type: typeUint16,
-				Readable: true, Writable: false, Reportable: true},
-			{ID: 0x0007, Name: "ConfigStatus", Type: typeBitmap8, Readable: true, Writable: false,
-				Reportable: false},
-			{ID: 0x0008, Name: "CurrentPositionLiftPercentage", Type: typeUint8, Readable: true,
-				Writable: false, Reportable: true},
-			{ID: 0x000A, Name: "OperationalStatus", Type: typeBitmap8, Readable: true,
-				Writable: false, Reportable: true},
+			{
+				ID: 0x0000, Name: "Type", Type: typeEnum8, Readable: true, Writable: false,
+				Reportable: false,
+			},
+			{
+				ID: 0x0003, Name: "CurrentPositionLiftPercent100ths", Type: typeUint16,
+				Readable: true, Writable: false, Reportable: true,
+			},
+			{
+				ID: 0x0007, Name: "ConfigStatus", Type: typeBitmap8, Readable: true, Writable: false,
+				Reportable: false,
+			},
+			{
+				ID: 0x0008, Name: "CurrentPositionLiftPercentage", Type: typeUint8, Readable: true,
+				Writable: false, Reportable: true,
+			},
+			{
+				ID: 0x000A, Name: "OperationalStatus", Type: typeBitmap8, Readable: true,
+				Writable: false, Reportable: true,
+			},
 		},
 		Commands: []ClusterCommand{
 			{ID: 0x00, Name: "UpOrOpen", Direction: directionClientToServer},
@@ -641,14 +679,22 @@ var ClusterMapping = map[uint16]ClusterCapability{
 		ClusterName:   "Temperature Measurement",
 		ComponentType: "temperature",
 		Attributes: []ClusterAttribute{
-			{ID: 0x0000, Name: attrNameMeasuredValue, Type: typeInt16, Readable: true, Writable: false,
-				Reportable: true},
-			{ID: 0x0001, Name: attrNameMinMeasuredValue, Type: typeInt16, Readable: true, Writable: false,
-				Reportable: false},
-			{ID: 0x0002, Name: attrNameMaxMeasuredValue, Type: typeInt16, Readable: true, Writable: false,
-				Reportable: false},
-			{ID: 0x0003, Name: "Tolerance", Type: typeUint16, Readable: true, Writable: false,
-				Reportable: false},
+			{
+				ID: 0x0000, Name: attrNameMeasuredValue, Type: typeInt16, Readable: true, Writable: false,
+				Reportable: true,
+			},
+			{
+				ID: 0x0001, Name: attrNameMinMeasuredValue, Type: typeInt16, Readable: true, Writable: false,
+				Reportable: false,
+			},
+			{
+				ID: 0x0002, Name: attrNameMaxMeasuredValue, Type: typeInt16, Readable: true, Writable: false,
+				Reportable: false,
+			},
+			{
+				ID: 0x0003, Name: "Tolerance", Type: typeUint16, Readable: true, Writable: false,
+				Reportable: false,
+			},
 		},
 	},
 	ClusterHumidityMeasurement: {
@@ -656,14 +702,22 @@ var ClusterMapping = map[uint16]ClusterCapability{
 		ClusterName:   "Humidity Measurement",
 		ComponentType: "humidity",
 		Attributes: []ClusterAttribute{
-			{ID: 0x0000, Name: attrNameMeasuredValue, Type: typeUint16, Readable: true, Writable: false,
-				Reportable: true},
-			{ID: 0x0001, Name: attrNameMinMeasuredValue, Type: typeUint16, Readable: true, Writable: false,
-				Reportable: false},
-			{ID: 0x0002, Name: attrNameMaxMeasuredValue, Type: typeUint16, Readable: true, Writable: false,
-				Reportable: false},
-			{ID: 0x0003, Name: "Tolerance", Type: typeUint16, Readable: true, Writable: false,
-				Reportable: false},
+			{
+				ID: 0x0000, Name: attrNameMeasuredValue, Type: typeUint16, Readable: true, Writable: false,
+				Reportable: true,
+			},
+			{
+				ID: 0x0001, Name: attrNameMinMeasuredValue, Type: typeUint16, Readable: true, Writable: false,
+				Reportable: false,
+			},
+			{
+				ID: 0x0002, Name: attrNameMaxMeasuredValue, Type: typeUint16, Readable: true, Writable: false,
+				Reportable: false,
+			},
+			{
+				ID: 0x0003, Name: "Tolerance", Type: typeUint16, Readable: true, Writable: false,
+				Reportable: false,
+			},
 		},
 	},
 	ClusterIlluminanceMeasurement: {
@@ -671,12 +725,18 @@ var ClusterMapping = map[uint16]ClusterCapability{
 		ClusterName:   "Illuminance Measurement",
 		ComponentType: "illuminance",
 		Attributes: []ClusterAttribute{
-			{ID: 0x0000, Name: attrNameMeasuredValue, Type: typeUint16, Readable: true, Writable: false,
-				Reportable: true},
-			{ID: 0x0001, Name: attrNameMinMeasuredValue, Type: typeUint16, Readable: true, Writable: false,
-				Reportable: false},
-			{ID: 0x0002, Name: attrNameMaxMeasuredValue, Type: typeUint16, Readable: true, Writable: false,
-				Reportable: false},
+			{
+				ID: 0x0000, Name: attrNameMeasuredValue, Type: typeUint16, Readable: true, Writable: false,
+				Reportable: true,
+			},
+			{
+				ID: 0x0001, Name: attrNameMinMeasuredValue, Type: typeUint16, Readable: true, Writable: false,
+				Reportable: false,
+			},
+			{
+				ID: 0x0002, Name: attrNameMaxMeasuredValue, Type: typeUint16, Readable: true, Writable: false,
+				Reportable: false,
+			},
 		},
 	},
 	ClusterElectricalMeasurement: {
@@ -684,20 +744,34 @@ var ClusterMapping = map[uint16]ClusterCapability{
 		ClusterName:   "Electrical Measurement",
 		ComponentType: "em",
 		Attributes: []ClusterAttribute{
-			{ID: 0x0000, Name: "MeasurementType", Type: "bitmap32", Readable: true, Writable: false,
-				Reportable: false},
-			{ID: 0x0505, Name: "RMSVoltage", Type: typeUint16, Readable: true, Writable: false,
-				Reportable: true},
-			{ID: 0x0508, Name: "RMSCurrent", Type: typeUint16, Readable: true, Writable: false,
-				Reportable: true},
-			{ID: 0x050B, Name: "ActivePower", Type: typeInt16, Readable: true, Writable: false,
-				Reportable: true},
-			{ID: 0x050E, Name: "ReactivePower", Type: typeInt16, Readable: true, Writable: false,
-				Reportable: true},
-			{ID: 0x050F, Name: "ApparentPower", Type: typeUint16, Readable: true, Writable: false,
-				Reportable: true},
-			{ID: 0x0510, Name: "PowerFactor", Type: "int8", Readable: true, Writable: false,
-				Reportable: true},
+			{
+				ID: 0x0000, Name: "MeasurementType", Type: "bitmap32", Readable: true, Writable: false,
+				Reportable: false,
+			},
+			{
+				ID: 0x0505, Name: "RMSVoltage", Type: typeUint16, Readable: true, Writable: false,
+				Reportable: true,
+			},
+			{
+				ID: 0x0508, Name: "RMSCurrent", Type: typeUint16, Readable: true, Writable: false,
+				Reportable: true,
+			},
+			{
+				ID: 0x050B, Name: "ActivePower", Type: typeInt16, Readable: true, Writable: false,
+				Reportable: true,
+			},
+			{
+				ID: 0x050E, Name: "ReactivePower", Type: typeInt16, Readable: true, Writable: false,
+				Reportable: true,
+			},
+			{
+				ID: 0x050F, Name: "ApparentPower", Type: typeUint16, Readable: true, Writable: false,
+				Reportable: true,
+			},
+			{
+				ID: 0x0510, Name: "PowerFactor", Type: "int8", Readable: true, Writable: false,
+				Reportable: true,
+			},
 		},
 	},
 	ClusterMetering: {
@@ -705,12 +779,18 @@ var ClusterMapping = map[uint16]ClusterCapability{
 		ClusterName:   "Metering",
 		ComponentType: "pm",
 		Attributes: []ClusterAttribute{
-			{ID: 0x0000, Name: "CurrentSummationDelivered", Type: "uint48", Readable: true,
-				Writable: false, Reportable: true},
-			{ID: 0x0001, Name: "CurrentSummationReceived", Type: "uint48", Readable: true,
-				Writable: false, Reportable: true},
-			{ID: 0x0400, Name: "InstantaneousDemand", Type: "int24", Readable: true,
-				Writable: false, Reportable: true},
+			{
+				ID: 0x0000, Name: "CurrentSummationDelivered", Type: "uint48", Readable: true,
+				Writable: false, Reportable: true,
+			},
+			{
+				ID: 0x0001, Name: "CurrentSummationReceived", Type: "uint48", Readable: true,
+				Writable: false, Reportable: true,
+			},
+			{
+				ID: 0x0400, Name: "InstantaneousDemand", Type: "int24", Readable: true,
+				Writable: false, Reportable: true,
+			},
 		},
 	},
 	//nolint:dupl // Zigbee cluster definitions have similar structure by design
@@ -719,16 +799,26 @@ var ClusterMapping = map[uint16]ClusterCapability{
 		ClusterName:   clusterNameThermostat,
 		ComponentType: "thermostat",
 		Attributes: []ClusterAttribute{
-			{ID: 0x0000, Name: "LocalTemperature", Type: typeInt16, Readable: true, Writable: false,
-				Reportable: true},
-			{ID: 0x0011, Name: "OccupiedCoolingSetpoint", Type: typeInt16, Readable: true,
-				Writable: true, Reportable: true},
-			{ID: 0x0012, Name: "OccupiedHeatingSetpoint", Type: typeInt16, Readable: true,
-				Writable: true, Reportable: true},
-			{ID: 0x001B, Name: "ControlSequenceOfOperation", Type: typeEnum8, Readable: true,
-				Writable: true, Reportable: false},
-			{ID: 0x001C, Name: "SystemMode", Type: typeEnum8, Readable: true, Writable: true,
-				Reportable: true},
+			{
+				ID: 0x0000, Name: "LocalTemperature", Type: typeInt16, Readable: true, Writable: false,
+				Reportable: true,
+			},
+			{
+				ID: 0x0011, Name: "OccupiedCoolingSetpoint", Type: typeInt16, Readable: true,
+				Writable: true, Reportable: true,
+			},
+			{
+				ID: 0x0012, Name: "OccupiedHeatingSetpoint", Type: typeInt16, Readable: true,
+				Writable: true, Reportable: true,
+			},
+			{
+				ID: 0x001B, Name: "ControlSequenceOfOperation", Type: typeEnum8, Readable: true,
+				Writable: true, Reportable: false,
+			},
+			{
+				ID: 0x001C, Name: "SystemMode", Type: typeEnum8, Readable: true, Writable: true,
+				Reportable: true,
+			},
 		},
 		Commands: []ClusterCommand{
 			{ID: 0x00, Name: "SetpointRaiseLower", Direction: directionClientToServer},
@@ -739,12 +829,18 @@ var ClusterMapping = map[uint16]ClusterCapability{
 		ClusterName:   "IAS Zone",
 		ComponentType: "input",
 		Attributes: []ClusterAttribute{
-			{ID: 0x0000, Name: "ZoneState", Type: typeEnum8, Readable: true, Writable: false,
-				Reportable: false},
-			{ID: 0x0001, Name: "ZoneType", Type: "enum16", Readable: true, Writable: false,
-				Reportable: false},
-			{ID: 0x0002, Name: "ZoneStatus", Type: "bitmap16", Readable: true, Writable: false,
-				Reportable: true},
+			{
+				ID: 0x0000, Name: "ZoneState", Type: typeEnum8, Readable: true, Writable: false,
+				Reportable: false,
+			},
+			{
+				ID: 0x0001, Name: "ZoneType", Type: "enum16", Readable: true, Writable: false,
+				Reportable: false,
+			},
+			{
+				ID: 0x0002, Name: "ZoneStatus", Type: "bitmap16", Readable: true, Writable: false,
+				Reportable: true,
+			},
 		},
 	},
 	ClusterOccupancySensing: {
@@ -752,10 +848,14 @@ var ClusterMapping = map[uint16]ClusterCapability{
 		ClusterName:   "Occupancy Sensing",
 		ComponentType: "input",
 		Attributes: []ClusterAttribute{
-			{ID: 0x0000, Name: "Occupancy", Type: typeBitmap8, Readable: true, Writable: false,
-				Reportable: true},
-			{ID: 0x0001, Name: "OccupancySensorType", Type: typeEnum8, Readable: true,
-				Writable: false, Reportable: false},
+			{
+				ID: 0x0000, Name: "Occupancy", Type: typeBitmap8, Readable: true, Writable: false,
+				Reportable: true,
+			},
+			{
+				ID: 0x0001, Name: "OccupancySensorType", Type: typeEnum8, Readable: true,
+				Writable: false, Reportable: false,
+			},
 		},
 	},
 }

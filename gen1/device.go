@@ -262,10 +262,12 @@ func (d *Device) Input(id int) *components.Input {
 
 // FactoryReset performs a factory reset on the device.
 //
-// This calls the /reset endpoint. All settings will be reset
-// to factory defaults and the device will restart.
+// This calls GET /settings?reset=true — the Gen1 factory-reset action documented
+// at https://shelly-api-docs.shelly.cloud/gen1/#settings. All settings are reset
+// to factory defaults and the device restarts into AP mode. (There is no /reset
+// endpoint on Gen1 firmware; it returns HTTP 404.)
 func (d *Device) FactoryReset(ctx context.Context) error {
-	_, err := d.restCall(ctx, "/reset")
+	_, err := d.restCall(ctx, "/settings?reset=true")
 	if err != nil {
 		return fmt.Errorf("failed to factory reset: %w", err)
 	}
@@ -332,6 +334,20 @@ func (d *Device) SetLocation(ctx context.Context, lat, lng float64) error {
 	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set location: %w", err)
+	}
+	return nil
+}
+
+// SetTimezoneAutodetect toggles automatic timezone detection. When enabled, the
+// device derives its timezone (and DST) from its geographic location rather than a
+// manually set timezone — so a caller restoring this must set the location first,
+// then enable autodetect last, since a manual SetTimezone write turns autodetect
+// off on the device.
+func (d *Device) SetTimezoneAutodetect(ctx context.Context, enabled bool) error {
+	endpoint := fmt.Sprintf("/settings?tzautodetect=%t", enabled)
+	_, err := d.restCall(ctx, endpoint)
+	if err != nil {
+		return fmt.Errorf("failed to set timezone autodetect: %w", err)
 	}
 	return nil
 }

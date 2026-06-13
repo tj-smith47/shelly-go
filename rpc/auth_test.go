@@ -55,7 +55,6 @@ func TestDigestAuth(t *testing.T) {
 		"/rpc",
 		"MD5",
 	)
-
 	if err != nil {
 		t.Fatalf("DigestAuth() error = %v", err)
 	}
@@ -103,7 +102,6 @@ func TestDigestAuth_SHA256(t *testing.T) {
 		"/rpc",
 		"SHA-256",
 	)
-
 	if err != nil {
 		t.Fatalf("DigestAuth() error = %v", err)
 	}
@@ -198,7 +196,6 @@ func TestDigestAuthFromHA1(t *testing.T) {
 		"/rpc",
 		"MD5",
 	)
-
 	if err != nil {
 		t.Fatalf("DigestAuthFromHA1() error = %v", err)
 	}

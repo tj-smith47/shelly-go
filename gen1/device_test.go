@@ -338,10 +338,12 @@ func TestClose(t *testing.T) {
 	}
 }
 
-// TestFactoryReset tests factory reset.
+// TestFactoryReset tests factory reset. It asserts the device hits the documented
+// Gen1 action GET /settings?reset=true — a real device returns HTTP 404 for /reset,
+// so the called path is the regression that matters here.
 func TestFactoryReset(t *testing.T) {
 	mt := newMockTransport()
-	mt.SetResponse("/reset", map[string]bool{"ok": true})
+	mt.SetResponse("/settings?reset=true", map[string]bool{"ok": true})
 
 	device := NewDevice(mt)
 	ctx := context.Background()
@@ -349,6 +351,10 @@ func TestFactoryReset(t *testing.T) {
 	err := device.FactoryReset(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	calls := mt.GetCalls()
+	if len(calls) != 1 || calls[0] != "/settings?reset=true" {
+		t.Errorf("FactoryReset called %v, want exactly [/settings?reset=true]", calls)
 	}
 }
 
@@ -438,6 +444,23 @@ func TestSetLocation(t *testing.T) {
 	err := device.SetLocation(ctx, 40.7128, -74.006)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestSetTimezoneAutodetect tests toggling automatic timezone detection.
+func TestSetTimezoneAutodetect(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetResponse("/settings?tzautodetect=true", map[string]bool{"ok": true})
+
+	device := NewDevice(mt)
+	ctx := context.Background()
+
+	if err := device.SetTimezoneAutodetect(ctx, true); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	calls := mt.GetCalls()
+	if len(calls) != 1 || calls[0] != "/settings?tzautodetect=true" {
+		t.Errorf("SetTimezoneAutodetect called %v, want [/settings?tzautodetect=true]", calls)
 	}
 }
 
@@ -652,7 +675,7 @@ func TestGetSettingsError(t *testing.T) {
 // TestFactoryResetError tests factory reset error handling.
 func TestFactoryResetError(t *testing.T) {
 	mt := newMockTransport()
-	mt.SetError("/reset", errors.New("device busy"))
+	mt.SetError("/settings?reset=true", errors.New("device busy"))
 
 	device := NewDevice(mt)
 	ctx := context.Background()

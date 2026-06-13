@@ -77,7 +77,6 @@ func TestDevice_GetDeviceInfo(t *testing.T) {
 		device := NewDevice(client)
 
 		info, err := device.GetDeviceInfo(context.Background())
-
 		if err != nil {
 			t.Fatalf("GetDeviceInfo() error = %v", err)
 		}
@@ -315,7 +314,6 @@ func TestDevice_Close(t *testing.T) {
 	device := NewDevice(client)
 
 	err := device.Close()
-
 	if err != nil {
 		t.Errorf("Close() error = %v", err)
 	}

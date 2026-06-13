@@ -82,7 +82,6 @@ func TestBaseComponent_GetConfig(t *testing.T) {
 
 	comp := NewBaseComponent(client, "switch", 0)
 	result, err := comp.GetConfig(context.Background())
-
 	if err != nil {
 		t.Fatalf("GetConfig() error = %v", err)
 	}
@@ -148,7 +147,6 @@ func TestBaseComponent_GetStatus(t *testing.T) {
 
 	comp := NewBaseComponent(client, "switch", 0)
 	result, err := comp.GetStatus(context.Background())
-
 	if err != nil {
 		t.Fatalf("GetStatus() error = %v", err)
 	}

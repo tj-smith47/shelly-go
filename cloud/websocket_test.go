@@ -827,7 +827,6 @@ func TestWebSocketAttemptConnectSuccess(t *testing.T) {
 
 	ctx := context.Background()
 	newInterval, shouldContinue, err := ws.attemptConnect(ctx, 500*time.Millisecond)
-
 	if err != nil {
 		t.Errorf("attemptConnect() error = %v, want nil", err)
 	}
@@ -893,7 +892,6 @@ func TestWebSocketAttemptConnectFailWithMaxBackoff(t *testing.T) {
 	ctx := context.Background()
 	// Start with interval already at max
 	newInterval, shouldContinue, err := ws.attemptConnect(ctx, 100*time.Millisecond)
-
 	if err != nil {
 		t.Errorf("attemptConnect() error = %v, want nil", err)
 	}
