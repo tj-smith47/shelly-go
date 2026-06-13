@@ -280,6 +280,40 @@ func backupModel(bkp *Backup) string {
 	return bkp.DeviceInfo.Model
 }
 
+// OfficialGen1FirmwareURL returns the public current-stable firmware URL for a
+// Gen1 model (e.g. "SHBDUO-1" → ".../gen1/SHBDUO-1.zip"), or "" for an empty
+// model. Exposed so a caller can pre-fetch the image and re-serve it from a local
+// address — the only way to flash a device that has no internet at its factory AP.
+func OfficialGen1FirmwareURL(model string) string {
+	return officialGen1FirmwareURL(model)
+}
+
+// Gen1FirmwareDowngrade reports whether applying a backup captured from backupFW
+// onto a device running liveFW would be a firmware downgrade (the device's build
+// predates the backup's). Exposed so an out-of-band updater — the at-AP recovery —
+// can decide whether a flash is needed before restoring.
+func Gen1FirmwareDowngrade(liveFW, backupFW string) bool {
+	return gen1FirmwareDowngrade(liveFW, backupFW)
+}
+
+// Gen1LiveFirmware reads the device's current firmware build string, or "" if it
+// cannot be read. Exposed so a caller driving an out-of-band OTA (e.g. at a factory
+// AP) can capture the prior build to detect when the flash has taken.
+func Gen1LiveFirmware(ctx context.Context, dev *gen1.Device) string {
+	return gen1LiveFirmware(ctx, dev)
+}
+
+// UpdateGen1FirmwareAndWait triggers an OTA on a Gen1 device to fwURL and blocks
+// until it reboots onto a build different from priorFW (proof the flash took) and
+// holds a stable uptime, or the budget elapses. The trigger call commonly errors as
+// the device drops the connection to flash; that is expected and only fatal if the
+// build never changes. fwURL must be reachable BY THE DEVICE — on the LAN the
+// official internet URL works, but a device at its isolated factory AP (no internet)
+// must be pointed at the image re-served from an address on the AP subnet.
+func UpdateGen1FirmwareAndWait(ctx context.Context, dev *gen1.Device, fwURL, priorFW string) error {
+	return updateGen1FirmwareAndWait(ctx, dev, fwURL, priorFW)
+}
+
 // Bounds for a pre-restore Gen1 OTA. A LAN OTA download+flash+reboot is ~1-2 min;
 // the budget is generous so a slow download is not cut short, and bounded so a
 // device that never returns fails loudly instead of hanging the restore.
@@ -290,9 +324,9 @@ const (
 
 // updateGen1FirmwareAndWait triggers an OTA to fwURL and blocks until the device
 // reboots onto a build different from priorFW (proof the flash took) and holds a
-// stable uptime, or the budget elapses. The device must reach the firmware host —
-// true on the LAN, never at an isolated factory AP — so callers run this only on a
-// LAN restore. The trigger call commonly errors as the device drops the connection
+// stable uptime, or the budget elapses. The device must be able to reach fwURL —
+// the official internet URL on the LAN, or an image re-served on the AP subnet at a
+// factory AP. The trigger call commonly errors as the device drops the connection
 // to begin flashing; that is expected, and only fatal if the device never leaves
 // priorFW, which the wait detects. Transient read errors during the download/reboot
 // window are tolerated; only a budget timeout (with no observed build change) fails.

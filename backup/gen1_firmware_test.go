@@ -191,6 +191,26 @@ func TestUpdateGen1FirmwareAndWait_ReturnsWhenBuildChanges(t *testing.T) {
 	}
 }
 
+func TestExportedFirmwareHelpers(t *testing.T) {
+	t.Parallel()
+	if got := OfficialGen1FirmwareURL("SHBDUO-1"); got != "http://firmware.shelly.cloud/gen1/SHBDUO-1.zip" {
+		t.Errorf("OfficialGen1FirmwareURL = %q", got)
+	}
+	// The exported OTA wrapper drives the same flow the at-AP recovery uses: an
+	// image re-served at a local URL, the device reboots onto the new build.
+	oldFW, newFW := "20191216-140245/???", "20230913-111821/v1.14.0"
+	dev, _, otaCalls := gen1FirmwareUpdateDevice(t, oldFW, newFW)
+	if got := Gen1LiveFirmware(context.Background(), dev); got != oldFW {
+		t.Errorf("Gen1LiveFirmware = %q, want %q", got, oldFW)
+	}
+	if err := UpdateGen1FirmwareAndWait(context.Background(), dev, "http://192.168.33.133:9999/fw.zip", oldFW); err != nil {
+		t.Fatalf("UpdateGen1FirmwareAndWait: %v", err)
+	}
+	if atomic.LoadInt64(otaCalls) == 0 {
+		t.Error("exported wrapper did not trigger the OTA")
+	}
+}
+
 func TestUpdateGen1FirmwareAndWait_TimesOutWhenFirmwareNeverChanges(t *testing.T) {
 	t.Parallel()
 	// The device never reports a new build; the wait must give up (bounded here by a
