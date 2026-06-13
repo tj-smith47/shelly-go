@@ -51,6 +51,9 @@ type Gen1RestoreOptions struct {
 	// Name overrides the device's stored display name. Empty leaves the name as
 	// the backup's. Used so a cloned device is named distinctly from its source.
 	Name string
+	// FirmwareURL overrides the firmware image UpdateFirmware flashes. Empty derives
+	// the official current-stable URL from the backup's device model.
+	FirmwareURL string
 	// SkipNetwork skips WiFi configuration.
 	SkipNetwork bool
 	// SkipAuth skips authentication configuration.
@@ -78,6 +81,21 @@ type Gen1RestoreOptions struct {
 	// onto older firmware can drive the device into a reboot loop. Set this only
 	// after updating the device firmware is not an option and the risk is accepted.
 	AllowFirmwareDowngrade bool
+	// UpdateFirmware resolves a firmware downgrade by updating the device instead of
+	// refusing: when the backup was captured from newer firmware than the device
+	// runs, the device is OTA-updated to current stable firmware (FirmwareURL, or
+	// derived from the backup's model) before any configuration is applied, so the
+	// full restore lands on matched firmware and cannot reboot-loop. The device must
+	// be able to reach the firmware host, which an isolated factory AP cannot — so
+	// this is honored only on a LAN restore, never paired with a factory-AP pass.
+	UpdateFirmware bool
+	// NetworkOnly writes only the WiFi station configuration and returns, skipping
+	// every other step and the firmware-downgrade gate (a station write is firmware
+	// agnostic and cannot trigger the config-storm loop). It is the bootstrap pass
+	// of a factory-AP restore: it moves a device from its AP onto the LAN with the
+	// restored credentials, after which the device — now reachable and updatable —
+	// receives its firmware update and full configuration on the LAN.
+	NetworkOnly bool
 }
 
 // gen1IPv4ModeStatic is the value used to request static IPv4 addressing on Gen1
@@ -234,6 +252,110 @@ func gen1FirmwareDowngrade(liveFW, backupFW string) bool {
 	live := parseGen1FirmwareDate(liveFW)
 	backup := parseGen1FirmwareDate(backupFW)
 	return live > 0 && backup > 0 && live < backup
+}
+
+// officialGen1FirmwareHost serves Shelly's public Gen1 firmware archive. Each
+// model's current stable build is at /gen1/<MODEL>.zip over plain HTTP — the
+// device fetches it itself, and HTTP avoids a TLS handshake a device with no clock
+// set (a just-reset Gen1) cannot complete.
+const officialGen1FirmwareHost = "http://firmware.shelly.cloud"
+
+// officialGen1FirmwareURL returns the public current-stable firmware URL for a
+// Gen1 model (e.g. "SHBDUO-1" → ".../gen1/SHBDUO-1.zip"). It returns "" for an
+// empty model so the caller fails loudly rather than POSTing a malformed URL.
+func officialGen1FirmwareURL(model string) string {
+	if model == "" {
+		return ""
+	}
+	return officialGen1FirmwareHost + "/gen1/" + model + ".zip"
+}
+
+// backupModel returns the device model recorded in a backup, or "" when the
+// backup carries no device info (so a derived firmware URL is skipped rather than
+// malformed).
+func backupModel(bkp *Backup) string {
+	if bkp == nil || bkp.DeviceInfo == nil {
+		return ""
+	}
+	return bkp.DeviceInfo.Model
+}
+
+// Bounds for a pre-restore Gen1 OTA. A LAN OTA download+flash+reboot is ~1-2 min;
+// the budget is generous so a slow download is not cut short, and bounded so a
+// device that never returns fails loudly instead of hanging the restore.
+const (
+	gen1FirmwareUpdateBudget = 5 * time.Minute
+	gen1FirmwareUpdatePoll   = 3 * time.Second
+)
+
+// updateGen1FirmwareAndWait triggers an OTA to fwURL and blocks until the device
+// reboots onto a build different from priorFW (proof the flash took) and holds a
+// stable uptime, or the budget elapses. The device must reach the firmware host —
+// true on the LAN, never at an isolated factory AP — so callers run this only on a
+// LAN restore. The trigger call commonly errors as the device drops the connection
+// to begin flashing; that is expected, and only fatal if the device never leaves
+// priorFW, which the wait detects. Transient read errors during the download/reboot
+// window are tolerated; only a budget timeout (with no observed build change) fails.
+func updateGen1FirmwareAndWait(ctx context.Context, dev *gen1.Device, fwURL, priorFW string) error {
+	triggerErr := dev.Update(ctx, fwURL)
+
+	deadline := time.Now().Add(gen1FirmwareUpdateBudget)
+	updated := false
+	for {
+		// The build string is the definitive signal the flash took; read it the same
+		// way the gate does. Once it changes, confirm a held uptime so the restore is
+		// not handed a device still mid-reboot from the flash.
+		if fw := gen1LiveFirmware(ctx, dev); fw != "" && fw != priorFW {
+			updated = true
+			if status, err := dev.GetFullStatus(ctx); err == nil && status.Uptime >= gen1StableUptime {
+				return nil
+			}
+		}
+		if time.Now().After(deadline) || !sleepCtx(ctx, gen1FirmwareUpdatePoll) {
+			if updated {
+				// New firmware booted; uptime just had not crossed the stability bar
+				// within the budget. The build changed, which is the success signal.
+				return nil
+			}
+			if triggerErr != nil {
+				return fmt.Errorf("firmware update to %q never started (device still on %q): %w",
+					fwURL, priorFW, triggerErr)
+			}
+			return fmt.Errorf("firmware update to %q did not complete within %s (device still on %q)",
+				fwURL, gen1FirmwareUpdateBudget, priorFW)
+		}
+	}
+}
+
+// maybeUpdateGen1Firmware brings the device up to the backup's firmware before a
+// restore when UpdateFirmware is set and the device runs older firmware than the
+// backup captured — the clean alternative to refusing the restore or forcing a
+// reboot-looping downgrade. It returns the device's firmware after the attempt
+// (the unchanged liveFW when no update was needed). The device must reach the
+// firmware host, so this only succeeds on a LAN restore, never at a factory AP.
+func maybeUpdateGen1Firmware(
+	ctx context.Context,
+	dev *gen1.Device,
+	bkp *Backup,
+	opts *Gen1RestoreOptions,
+	liveFW, backupFW string,
+) (string, error) {
+	if !opts.UpdateFirmware || !gen1FirmwareDowngrade(liveFW, backupFW) {
+		return liveFW, nil
+	}
+	fwURL := opts.FirmwareURL
+	if fwURL == "" {
+		fwURL = officialGen1FirmwareURL(backupModel(bkp))
+	}
+	if fwURL == "" {
+		return liveFW, fmt.Errorf(
+			"cannot update firmware: the backup carries no device model to derive a firmware " +
+				"URL from and none was supplied — set FirmwareURL")
+	}
+	if err := updateGen1FirmwareAndWait(ctx, dev, fwURL, liveFW); err != nil {
+		return liveFW, fmt.Errorf("pre-restore firmware update failed: %w", err)
+	}
+	return gen1LiveFirmware(ctx, dev), nil
 }
 
 // parseGen1FirmwareDate extracts the YYYYMMDD build date that prefixes a Gen1
@@ -423,6 +545,34 @@ func RestoreGen1(ctx context.Context, dev *gen1.Device, bkp *Backup, opts *Gen1R
 	liveFW := gen1LiveFirmware(ctx, dev)
 	pacer := gen1Pacer{settle: gen1SettleFor(liveFW)}
 
+	// NetworkOnly writes just the WiFi station config and returns — the firmware-
+	// agnostic bootstrap that moves a device from its factory AP onto the LAN
+	// without touching any firmware-sensitive configuration. It bypasses the
+	// downgrade gate (a station write cannot trigger the config-storm loop), so a
+	// device on older firmware can still be brought onto the LAN, where its firmware
+	// is then updated before the full restore.
+	if opts.NetworkOnly {
+		runGen1RestoreStep(ctx, dev, pacer, opts, gen1RestoreStep{
+			name: componentWiFi, probe: false, write: func() {
+				restoreGen1WiFi(ctx, dev, bkp, opts.NetworkOverride, result)
+			},
+		}, result)
+		return result, nil
+	}
+
+	// When a firmware update is permitted and the backup was captured from newer
+	// firmware than the device runs, bring the device up to date before restoring —
+	// the clean alternative to refusing, or to forcing a downgrade that reboot-loops.
+	// A changed firmware re-selects pacing so the gate below sees the new version.
+	updatedFW, err := maybeUpdateGen1Firmware(ctx, dev, bkp, opts, liveFW, settings.FW)
+	if err != nil {
+		return nil, err
+	}
+	if updatedFW != liveFW {
+		liveFW = updatedFW
+		pacer = gen1Pacer{settle: gen1SettleFor(liveFW)}
+	}
+
 	// Refuse a firmware downgrade before writing anything: applying a backup
 	// captured from newer firmware onto a device running older firmware is the
 	// proven trigger for the Gen1 reboot loop. The remedy is to update the
@@ -431,8 +581,8 @@ func RestoreGen1(ctx context.Context, dev *gen1.Device, bkp *Backup, opts *Gen1R
 		return nil, fmt.Errorf(
 			"refusing restore: device firmware %q predates the backup's firmware %q; "+
 				"applying a newer firmware's configuration onto older firmware can drive the "+
-				"device into a reboot loop — update the device firmware first, then restore "+
-				"(override with AllowFirmwareDowngrade)",
+				"device into a reboot loop — set UpdateFirmware to update the device first "+
+				"(recommended), or AllowFirmwareDowngrade to override and accept the risk",
 			liveFW, settings.FW)
 	}
 
@@ -440,18 +590,7 @@ func RestoreGen1(ctx context.Context, dev *gen1.Device, bkp *Backup, opts *Gen1R
 	// config (light component config + captured light state), now that the device
 	// has a clock, without re-writing settings that already took at the AP.
 	if opts.ClockDependentOnly {
-		if !runGen1Step(ctx, dev, pacer, opts, "light-config", result, func() {
-			restoreGen1Components(ctx, dev, &settings, result)
-		}) {
-			return result, nil
-		}
-		if !opts.SkipState {
-			runGen1Step(ctx, dev, pacer, opts, "light-state", result, func() {
-				applyGen1LightState(ctx, dev, bkp, result)
-				applyGen1ColorState(ctx, dev, bkp, result)
-				applyGen1WhiteState(ctx, dev, bkp, result)
-			})
-		}
+		restoreGen1ClockDependent(ctx, dev, pacer, opts, &settings, bkp, result)
 		return result, nil
 	}
 
@@ -509,6 +648,34 @@ func RestoreGen1(ctx context.Context, dev *gen1.Device, bkp *Backup, opts *Gen1R
 	}
 
 	return result, nil
+}
+
+// restoreGen1ClockDependent re-applies the clock-gated config — light component
+// config, then captured light/color/white state — during the LAN second pass of a
+// factory-AP restore, once the device has a clock. The light-state pass is skipped
+// when the component write destabilizes the device (it returns without applying).
+func restoreGen1ClockDependent(
+	ctx context.Context,
+	dev *gen1.Device,
+	pacer gen1Pacer,
+	opts *Gen1RestoreOptions,
+	settings *gen1.Settings,
+	bkp *Backup,
+	result *RestoreResult,
+) {
+	if !runGen1Step(ctx, dev, pacer, opts, "light-config", result, func() {
+		restoreGen1Components(ctx, dev, settings, result)
+	}) {
+		return
+	}
+	if opts.SkipState {
+		return
+	}
+	runGen1Step(ctx, dev, pacer, opts, "light-state", result, func() {
+		applyGen1LightState(ctx, dev, bkp, result)
+		applyGen1ColorState(ctx, dev, bkp, result)
+		applyGen1WhiteState(ctx, dev, bkp, result)
+	})
 }
 
 // Component map keys under which captured live state is stored, separate from the
