@@ -32,6 +32,9 @@ const (
 	methodNl80211 = "nl80211"
 )
 
+// nmcliDevice is the "device" object word shared by every nmcli invocation.
+const nmcliDevice = "device"
+
 // defaultWiFiIface is the conventional name for the primary WiFi
 // interface, used as the detection fallback when no interface is found.
 const defaultWiFiIface = "wlan0"
@@ -67,6 +70,17 @@ type platformWiFiScanner struct {
 	// exists so the connect/rollback command sequence can be exercised without a
 	// live wpa_supplicant; production code leaves it nil.
 	wpaRun func(ctx context.Context, args ...string) (string, error)
+
+	// hostCmd, when non-nil, replaces EVERY host-mutating exec this scanner issues
+	// — DHCP clients (dhcpcd/dhclient/udhcpc), interface state (ip link/addr,
+	// ifconfig), and association (nmcli/iwconfig connect, disconnect). It returns
+	// the command's trimmed combined output and its error. It exists so the
+	// discovery test suite never mutates real host network state; production code
+	// leaves it nil. The cardinal hazard it guards: a coverage test once ran a real
+	// dhcpcd against the host, which claimed the loopback interface, deleted the
+	// 127.0.0.0/8 route, and flushed 127.0.0.1 / the systemd-resolved 127.0.0.53
+	// stub — killing host-wide DNS. No test may shell out to these tools.
+	hostCmd func(ctx context.Context, name string, args ...string) (string, error)
 
 	iface    string
 	apHostIP string // static host IPv4 used on a Shelly AP subnet (no mask)
@@ -138,7 +152,7 @@ func (s *platformWiFiScanner) ensureInterfaceUp(ctx context.Context) {
 	}
 	// Interface is down — try to bring it up.
 	// Failure is non-fatal: scan will fail with a more descriptive error.
-	if err := exec.CommandContext(ctx, "ip", "link", "set", s.iface, "up").Run(); err != nil {
+	if _, err := s.runHostCmd(ctx, "ip", "link", "set", s.iface, "up"); err != nil {
 		return
 	}
 	// Brief pause for the interface to initialize.
@@ -440,7 +454,7 @@ func (s *platformWiFiScanner) scanViaNM(ctx context.Context) ([]WiFiNetwork, err
 // scanViaNmcli scans for WiFi networks using the nmcli command.
 func (s *platformWiFiScanner) scanViaNmcli(ctx context.Context) ([]WiFiNetwork, error) {
 	cmd := exec.CommandContext(ctx, "nmcli", "-t", "-f", "SSID,BSSID,SIGNAL,CHAN,SECURITY",
-		"device", "wifi", "list", "--rescan", "yes")
+		nmcliDevice, "wifi", "list", "--rescan", "yes")
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, &WiFiError{Message: "nmcli scan failed", Err: err}
@@ -680,26 +694,69 @@ func (s *platformWiFiScanner) Connect(ctx context.Context, ssid, password string
 // host — NetworkManager or systemd-networkd — already handled it), so it never
 // fights an existing manager. Best-effort: the first available DHCP client wins
 // and any failure is left for the caller's next operation to surface.
+//
+// It is deliberately constrained so it can NEVER disturb host networking:
+//   - dhcpEligibleIface refuses a missing or loopback interface, so a DHCP client
+//     is never pointed at lo (which would delete the 127.0.0.0/8 route and flush
+//     127.0.0.1 / the systemd-resolved 127.0.0.53 stub, killing all DNS);
+//   - every client is invoked in single-interface oneshot mode (dhcpcd -1, not
+//     -n) so none of them start or signal a system-wide daemon that manages every
+//     interface, including lo;
+//   - the exec is routed through s.runDHCPClient so tests never shell out to a
+//     real client.
 func (s *platformWiFiScanner) reacquireDHCP(ctx context.Context, iface string) {
+	if !dhcpEligibleIface(iface) {
+		return
+	}
 	if hasRoutableIPv4(iface) {
 		return
 	}
-	// Ordered by ubiquity; -1/-n/-q variants make a single bounded attempt and
-	// exit rather than daemonizing.
+	// Each client makes a single bounded, single-interface attempt and exits
+	// rather than daemonizing or touching any other interface.
 	clients := [][]string{
 		{"dhclient", "-1", iface},
-		{"dhcpcd", "-n", iface},
+		{"dhcpcd", "-1", iface},
 		{"udhcpc", "-i", iface, "-q", "-n"},
 	}
 	for _, c := range clients {
 		if !hasCommand(c[0]) {
 			continue
 		}
-		//nolint:gosec // G204: client name is a fixed literal; iface comes from the kernel
-		if err := exec.CommandContext(ctx, c[0], c[1:]...).Run(); err == nil {
+		if _, err := s.runHostCmd(ctx, c[0], c[1:]...); err == nil {
 			return
 		}
 	}
+}
+
+// dhcpEligibleIface reports whether iface is a real, non-loopback interface that
+// it is safe to run a DHCP client against. A missing interface or the loopback
+// interface must never be handed to a DHCP client — see reacquireDHCP.
+func dhcpEligibleIface(iface string) bool {
+	if iface == "" {
+		return false
+	}
+	ifi, err := net.InterfaceByName(iface)
+	if err != nil {
+		return false
+	}
+	return ifi.Flags&net.FlagLoopback == 0
+}
+
+// runHostCmd executes a host-mutating command, honoring the s.hostCmd test seam
+// so the suite never shells out against the real host. It returns the command's
+// trimmed combined output (stderr+stdout) and its error so callers that classify
+// failures by message (e.g. connectNmcli) keep working through the seam.
+func (s *platformWiFiScanner) runHostCmd(ctx context.Context, name string, args ...string) (string, error) {
+	if s.hostCmd != nil {
+		return s.hostCmd(ctx, name, args...)
+	}
+	var buf bytes.Buffer
+	//nolint:gosec // G204: command names are fixed literals; iface args are kernel-derived
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Stderr = &buf
+	cmd.Stdout = &buf
+	err := cmd.Run()
+	return strings.TrimSpace(buf.String()), err
 }
 
 // hasRoutableIPv4 reports whether iface carries an IPv4 address usable on a real
@@ -788,15 +845,13 @@ func (s *platformWiFiScanner) connectViaNl80211(ctx context.Context, ssid, passw
 // removeAPStaticIP removes any lingering Shelly AP static IP (192.168.33.10/24)
 // from the WiFi interface. This is safe to call even if the address was never
 // assigned — the error is silently ignored.
-//
-//nolint:gosec // G204: Interface name is from kernel, not user input
 func (s *platformWiFiScanner) removeAPStaticIP(ctx context.Context, ifaceName string) {
 	staticIP := s.apHostCIDR()
 	// The AP static IP is usually absent (exit 2, "RTNETLINK answers: Cannot assign
 	// requested address") when none was ever assigned — the normal case. The delete
 	// is best-effort: a failure here must not block returning to the home network,
 	// so the checked error is intentionally not propagated.
-	if err := exec.CommandContext(ctx, "ip", "addr", "del", staticIP, "dev", ifaceName).Run(); err != nil {
+	if _, err := s.runHostCmd(ctx, "ip", "addr", "del", staticIP, "dev", ifaceName); err != nil {
 		return
 	}
 }
@@ -809,11 +864,9 @@ func (s *platformWiFiScanner) removeAPStaticIP(ctx context.Context, ifaceName st
 // We intentionally avoid running dhclient/dhcpcd because DHCP from the Shelly
 // AP overwrites /etc/resolv.conf with nameserver 192.168.33.1, which breaks
 // DNS on the host and is never restored after disconnect.
-//
-//nolint:gosec // G204: Interface name is from kernel, not user input
 func (s *platformWiFiScanner) obtainIPAddress(ctx context.Context, ifaceName string) {
 	staticIP := s.apHostCIDR()
-	if err := exec.CommandContext(ctx, "ip", "addr", "add", staticIP, "dev", ifaceName).Run(); err != nil {
+	if _, err := s.runHostCmd(ctx, "ip", "addr", "add", staticIP, "dev", ifaceName); err != nil {
 		// May fail if address already assigned — that's fine.
 		return
 	}
@@ -1010,23 +1063,23 @@ func (s *platformWiFiScanner) connectViaNM(ctx context.Context, ssid, password s
 
 // connectNmcli connects using nmcli.
 func (s *platformWiFiScanner) connectNmcli(ctx context.Context, ssid, password string) error {
-	var cmd *exec.Cmd
-	if password == "" {
-		cmd = exec.CommandContext(ctx, "nmcli", "device", "wifi", "connect", ssid)
-	} else {
-		cmd = exec.CommandContext(ctx, "nmcli", "device", "wifi", "connect", ssid, "password", password)
+	// Bind the connect to this scanner's interface ("ifname <iface>") so it can
+	// never act on the host's default WiFi device — without it, nmcli associates
+	// the default radio, which is host-destructive on any machine with WiFi.
+	args := []string{nmcliDevice, "wifi", "connect", ssid}
+	if password != "" {
+		args = append(args, "password", password)
+	}
+	if s.iface != "" {
+		args = append(args, "ifname", s.iface)
 	}
 
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		errMsg := strings.TrimSpace(stderr.String())
-		if strings.Contains(errMsg, "No network with SSID") {
+	if out, err := s.runHostCmd(ctx, "nmcli", args...); err != nil {
+		if strings.Contains(out, "No network with SSID") {
 			return ErrSSIDNotFound
 		}
-		if strings.Contains(errMsg, "Secrets were required") ||
-			strings.Contains(errMsg, "password") {
+		if strings.Contains(out, "Secrets were required") ||
+			strings.Contains(out, "password") {
 			return ErrAuthFailed
 		}
 		return &WiFiError{Message: "nmcli connect failed", Err: err}
@@ -1258,25 +1311,19 @@ func (s *platformWiFiScanner) setNewWpaNetwork(ctx context.Context, id, ssid, pa
 }
 
 // connectIwconfig connects using iwconfig (deprecated).
-//
-//nolint:gosec // G204: Interface name is auto-detected, not user input
 func (s *platformWiFiScanner) connectIwconfig(ctx context.Context, ssid, password string) error {
-	essidCmd := exec.CommandContext(ctx, "iwconfig", s.iface, "essid", ssid)
-	if err := essidCmd.Run(); err != nil {
+	if _, err := s.runHostCmd(ctx, "iwconfig", s.iface, "essid", ssid); err != nil {
 		return &WiFiError{Message: "iwconfig essid failed", Err: err}
 	}
 
 	if password != "" {
-		keyCmd := exec.CommandContext(ctx, "iwconfig", s.iface, "key", "s:"+password)
-		if err := keyCmd.Run(); err != nil {
+		if _, err := s.runHostCmd(ctx, "iwconfig", s.iface, "key", "s:"+password); err != nil {
 			return &WiFiError{Message: "iwconfig key failed", Err: err}
 		}
 	}
 
-	upCmd := exec.CommandContext(ctx, "ip", "link", "set", s.iface, "up")
-	if err := upCmd.Run(); err != nil {
-		upCmd = exec.CommandContext(ctx, "ifconfig", s.iface, "up")
-		if err := upCmd.Run(); err != nil {
+	if _, err := s.runHostCmd(ctx, "ip", "link", "set", s.iface, "up"); err != nil {
+		if _, err := s.runHostCmd(ctx, "ifconfig", s.iface, "up"); err != nil {
 			return &WiFiError{Message: "failed to bring interface up", Err: err}
 		}
 	}
@@ -1287,8 +1334,6 @@ func (s *platformWiFiScanner) connectIwconfig(ctx context.Context, ssid, passwor
 // ─── Disconnect ──────────────────────────────────────────────────────────────
 
 // Disconnect disconnects from the current WiFi network.
-//
-//nolint:gosec // G204: Interface name is auto-detected, not user input
 func (s *platformWiFiScanner) Disconnect(ctx context.Context) error {
 	// Primary: nl80211 netlink.
 	if client, err := wifi.New(); err == nil {
@@ -1310,22 +1355,19 @@ func (s *platformWiFiScanner) Disconnect(ctx context.Context) error {
 	}
 
 	if hasCommand("nmcli") {
-		cmd := exec.CommandContext(ctx, "nmcli", "device", "disconnect", s.iface)
-		if err := cmd.Run(); err == nil {
+		if _, err := s.runHostCmd(ctx, "nmcli", nmcliDevice, "disconnect", s.iface); err == nil {
 			return nil
 		}
 	}
 
 	if hasCommand(methodWpaCli) {
-		cmd := exec.CommandContext(ctx, methodWpaCli, "-i", s.iface, "disconnect")
-		if err := cmd.Run(); err == nil {
+		if _, err := s.runHostCmd(ctx, methodWpaCli, "-i", s.iface, "disconnect"); err == nil {
 			return nil
 		}
 	}
 
 	if hasCommand("iwconfig") {
-		cmd := exec.CommandContext(ctx, "iwconfig", s.iface, "essid", "off")
-		if err := cmd.Run(); err == nil {
+		if _, err := s.runHostCmd(ctx, "iwconfig", s.iface, "essid", "off"); err == nil {
 			return nil
 		}
 	}
@@ -1393,7 +1435,7 @@ func (s *platformWiFiScanner) CurrentNetwork(ctx context.Context) (*WiFiNetwork,
 
 // currentNetworkNmcli gets current network using nmcli.
 func (s *platformWiFiScanner) currentNetworkNmcli(ctx context.Context) (*WiFiNetwork, error) {
-	cmd := exec.CommandContext(ctx, "nmcli", "-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY", "device", "wifi", "list")
+	cmd := exec.CommandContext(ctx, "nmcli", "-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY", nmcliDevice, "wifi", "list")
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, &WiFiError{Message: "nmcli wifi list failed", Err: err}

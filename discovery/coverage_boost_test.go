@@ -556,10 +556,11 @@ func TestParseWpaNetworkList_NoCURRENT(t *testing.T) {
 // ─── I. Disconnect — all-methods-fail path ────────────────────────────────────
 
 func TestDisconnect_NonExistentInterface(t *testing.T) {
-	s := &platformWiFiScanner{iface: "nonexistent99"}
+	// The hostCmd seam keeps every disconnect exec (nmcli/wpa_cli/iwconfig) off the
+	// real host; all methods fail and the function must not panic.
+	s := &platformWiFiScanner{iface: "nonexistent99", hostCmd: stubHostCmd("", errStubHostCmd)}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	// All methods should fail; function must not panic.
 	_ = s.Disconnect(ctx)
 }
 

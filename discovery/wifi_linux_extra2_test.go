@@ -4,12 +4,25 @@ package discovery
 
 import (
 	"context"
+	"errors"
 	"net"
 	"testing"
 	"time"
 
 	"github.com/mdlayher/wifi"
 )
+
+// errStubHostCmd is the canned failure a stubbed hostCmd seam returns so callers
+// take their command-failed branch without shelling out to the real host.
+var errStubHostCmd = errors.New("stub host command failed")
+
+// stubHostCmd returns a hostCmd seam that yields fixed output and error,
+// keeping every host-mutating command off the real machine.
+func stubHostCmd(out string, err error) func(context.Context, string, ...string) (string, error) {
+	return func(context.Context, string, ...string) (string, error) {
+		return out, err
+	}
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // rsnToSecurity — direct tests using real wifi.RSNInfo / wifi.RSNAKM values
@@ -216,21 +229,64 @@ func TestEnsureInterfaceUp_InterfaceUp(t *testing.T) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// reacquireDHCP — with no DHCP clients installed (best-effort path)
+// reacquireDHCP — host-isolation guarantees (NEVER shells out to a real client)
 // ────────────────────────────────────────────────────────────────────────────
 
-func TestReacquireDHCP_LoopbackIsRoutable(t *testing.T) {
-	// lo carries 127.0.0.1 (loopback) which hasRoutableIPv4 treats as NOT routable.
-	// So reacquireDHCP will attempt DHCP clients, find none, and return silently.
-	s := &platformWiFiScanner{iface: "lo"}
+// trippingHostCmd is a hostCmd seam that fails the test if it is ever invoked.
+// It guarantees a test path never reaches a real host-mutating command.
+func trippingHostCmd(t *testing.T) func(context.Context, string, ...string) (string, error) {
+	t.Helper()
+	return func(_ context.Context, name string, args ...string) (string, error) {
+		t.Fatalf("scanner shelled out to a host-mutating command (%s %v) — host-destructive", name, args)
+		return "", nil
+	}
+}
+
+func TestReacquireDHCP_LoopbackNeverRunsClient(t *testing.T) {
+	// Running a DHCP client against lo deletes the 127.0.0.0/8 route and kills
+	// host DNS. The loopback guard must short-circuit before any client runs.
+	s := &platformWiFiScanner{iface: "lo", hostCmd: trippingHostCmd(t)}
 	s.reacquireDHCP(context.Background(), "lo")
 }
 
-func TestReacquireDHCP_NonexistentIface(t *testing.T) {
-	// Interface doesn't exist — hasRoutableIPv4 returns false, then all DHCP
-	// client commands either fail or are absent. Must not panic.
-	s := &platformWiFiScanner{iface: "nonexistent99"}
+func TestReacquireDHCP_NonexistentIfaceNeverRunsClient(t *testing.T) {
+	// A missing interface must short-circuit before any client runs; it must not
+	// panic and must not shell out.
+	s := &platformWiFiScanner{iface: "nonexistent99", hostCmd: trippingHostCmd(t)}
 	s.reacquireDHCP(context.Background(), "nonexistent99")
+}
+
+func TestDhcpEligibleIface(t *testing.T) {
+	if dhcpEligibleIface("") {
+		t.Error("empty iface must be ineligible")
+	}
+	if dhcpEligibleIface("nonexistent99") {
+		t.Error("missing iface must be ineligible")
+	}
+	if dhcpEligibleIface("lo") {
+		t.Error("loopback iface must be ineligible")
+	}
+}
+
+func TestRunHostCmd_UsesSeam(t *testing.T) {
+	var gotName string
+	var gotArgs []string
+	s := &platformWiFiScanner{
+		hostCmd: func(_ context.Context, name string, args ...string) (string, error) {
+			gotName, gotArgs = name, args
+			return "stub-output", nil
+		},
+	}
+	out, err := s.runHostCmd(context.Background(), "dhcpcd", "-1", "wlan0")
+	if err != nil {
+		t.Fatalf("runHostCmd returned error: %v", err)
+	}
+	if out != "stub-output" {
+		t.Errorf("runHostCmd returned %q, want stub-output", out)
+	}
+	if gotName != "dhcpcd" || len(gotArgs) != 2 || gotArgs[0] != "-1" || gotArgs[1] != "wlan0" {
+		t.Errorf("seam received %q %v, want dhcpcd [-1 wlan0]", gotName, gotArgs)
+	}
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -238,42 +294,42 @@ func TestReacquireDHCP_NonexistentIface(t *testing.T) {
 // ────────────────────────────────────────────────────────────────────────────
 
 func TestRemoveAPStaticIP_NonexistentInterface(t *testing.T) {
-	s := &platformWiFiScanner{iface: "nonexistent99", apHostIP: DefaultAPHostIP}
-	// ip addr del on a nonexistent iface exits non-zero; function silently returns.
+	// The hostCmd seam keeps "ip addr del" off the real host; function silently returns.
+	s := &platformWiFiScanner{iface: "nonexistent99", apHostIP: DefaultAPHostIP, hostCmd: stubHostCmd("", errStubHostCmd)}
 	s.removeAPStaticIP(context.Background(), "nonexistent99")
 }
 
 func TestObtainIPAddress_NonexistentInterface(t *testing.T) {
-	s := &platformWiFiScanner{iface: "nonexistent99", apHostIP: DefaultAPHostIP}
-	// ip addr add on nonexistent iface exits non-zero; function silently returns.
+	// The hostCmd seam keeps "ip addr add" off the real host; function silently returns.
+	s := &platformWiFiScanner{iface: "nonexistent99", apHostIP: DefaultAPHostIP, hostCmd: stubHostCmd("", errStubHostCmd)}
 	s.obtainIPAddress(context.Background(), "nonexistent99")
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// connectIwconfig — exec paths (always available via "iwconfig" check)
+// connectIwconfig — exec paths, fully hermetic via the hostCmd seam
 // ────────────────────────────────────────────────────────────────────────────
 
 func TestConnectIwconfig_ExecPath(t *testing.T) {
-	s := &platformWiFiScanner{iface: "nonexistent99"}
+	s := &platformWiFiScanner{iface: "wlan0", hostCmd: stubHostCmd("", errStubHostCmd)}
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
-	// iwconfig may or may not be installed; connectIwconfig returns an error either way.
-	err := s.connectIwconfig(ctx, "SomeSSID", "")
-	// We only assert no panic; error is expected.
-	_ = err
+	// First iwconfig invocation fails via the seam → WiFiError, no host mutation.
+	if err := s.connectIwconfig(ctx, "SomeSSID", ""); err == nil {
+		t.Error("connectIwconfig should fail when the seam returns an error")
+	}
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// connectNmcli — exec path
+// connectNmcli — exec path, fully hermetic via the hostCmd seam
 // ────────────────────────────────────────────────────────────────────────────
 
 func TestConnectNmcli_ExecPath(t *testing.T) {
-	s := &platformWiFiScanner{iface: "nonexistent99"}
+	s := &platformWiFiScanner{iface: "wlan0", hostCmd: stubHostCmd("Error: generic", errStubHostCmd)}
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
-	err := s.connectNmcli(ctx, "SomeSSID", "")
-	// Expected to fail (no nmcli or wrong credentials) — assert no panic.
-	_ = err
+	if err := s.connectNmcli(ctx, "SomeSSID", ""); err == nil {
+		t.Error("connectNmcli should fail when the seam returns an error")
+	}
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -281,7 +337,9 @@ func TestConnectNmcli_ExecPath(t *testing.T) {
 // ────────────────────────────────────────────────────────────────────────────
 
 func TestPlatformScanner_Connect_AllMethodsFail(t *testing.T) {
-	s := &platformWiFiScanner{iface: "nonexistent99"}
+	// The hostCmd seam keeps every exec fallback (nmcli/iwconfig/ip/dhcp) off the
+	// real host; on a no-WiFi test host the nl80211/NM paths fail by hardware absence.
+	s := &platformWiFiScanner{iface: "nonexistent99", hostCmd: stubHostCmd("", errStubHostCmd)}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	// All sub-methods will fail; expect a WiFiError.

@@ -689,7 +689,8 @@ func TestParseNmcliScanOutput_OnlyBlanks(t *testing.T) {
 // ────────────────────────────────────────────────────────────────────────────
 
 func TestPlatformDisconnect_DoesNotPanic(t *testing.T) {
-	s := &platformWiFiScanner{iface: "nonexistent99"}
+	// The hostCmd seam keeps every disconnect exec off the real host.
+	s := &platformWiFiScanner{iface: "nonexistent99", hostCmd: stubHostCmd("", errStubHostCmd)}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	// We expect either nil (some method works) or ErrToolNotFound / WiFiError.

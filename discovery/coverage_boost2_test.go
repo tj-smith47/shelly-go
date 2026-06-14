@@ -116,8 +116,10 @@ func TestConnect_ShellyAP_ObtainsIPBranch(t *testing.T) {
 		t.Errorf("select_network 7 not called; seq: %v", seq)
 	}
 	// Directly exercise the IsShellyAP → obtainIPAddress branch of Connect().
+	// The hostCmd seam keeps "ip addr add" off the real host.
+	s.hostCmd = stubHostCmd("", errStubHostCmd)
 	if IsShellyAP(ssid) {
-		s.obtainIPAddress(ctx, s.iface) // exec "ip addr add" fails on nonexistent99 — non-fatal
+		s.obtainIPAddress(ctx, s.iface)
 	}
 }
 
@@ -141,40 +143,66 @@ func TestConnect_HomeNetwork_RemovesAPIPBranch(t *testing.T) {
 	if !seqHas(seq, "select_network 7") {
 		t.Errorf("select_network 7 not called; seq: %v", seq)
 	}
-	// Directly exercise the non-Shelly IP branch.
+	// Directly exercise the non-Shelly IP branch. The hostCmd seam keeps
+	// "ip addr del" and the DHCP client off the real host.
+	s.hostCmd = stubHostCmd("", errStubHostCmd)
 	if !IsShellyAP(ssid) {
-		s.removeAPStaticIP(ctx, s.iface) // exec fails on nonexistent99 — non-fatal
-		s.reacquireDHCP(ctx, s.iface)    // exec fails on nonexistent99 — non-fatal
+		s.removeAPStaticIP(ctx, s.iface)
+		s.reacquireDHCP(ctx, s.iface)
 	}
 }
 
 // ─── C. connectNmcli error-message branches ───────────────────────────────────
 
-// connectNmcli reads stderr — we can't easily inject fake nmcli output.
-// Instead call with a nonexistent interface; nmcli (if installed) fails.
-// The error branches (ErrSSIDNotFound, ErrAuthFailed, generic) can be reached
-// by crafting a stderr via a mock. Since nmcli stderr injection is exec-level,
-// these tests cover the error-propagation path via nonexistent iface.
-func TestConnectNmcli_ExecFail_NonexistentIface(t *testing.T) {
-	s := &platformWiFiScanner{iface: "nonexistent99"}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	err := s.connectNmcli(ctx, "AnySSID", "")
-	// Either ErrSSIDNotFound/ErrAuthFailed/generic WiFiError — must not panic.
-	if err == nil {
-		t.Log("connectNmcli succeeded unexpectedly — nmcli connected")
+// connectNmcli classifies failures by the command's output. The hostCmd seam
+// injects each diagnostic deterministically — no real nmcli, no host mutation.
+func TestConnectNmcli_ErrorBranches(t *testing.T) {
+	cases := []struct {
+		name   string
+		output string
+		want   error
+	}{
+		{"ssid not found", "Error: No network with SSID 'X' found.", ErrSSIDNotFound},
+		{"auth failed (secrets)", "Error: Secrets were required, but not provided.", ErrAuthFailed},
+		{"auth failed (password)", "Error: 802-11-wireless-security.psk: invalid password.", ErrAuthFailed},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &platformWiFiScanner{iface: "wlan0", hostCmd: stubHostCmd(tc.output, errStubHostCmd)}
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			if err := s.connectNmcli(ctx, "AnySSID", ""); !errors.Is(err, tc.want) {
+				t.Errorf("connectNmcli error = %v, want %v", err, tc.want)
+			}
+		})
 	}
 }
 
-// TestConnectNmcli_WithPassword covers the password != "" branch in connectNmcli.
-func TestConnectNmcli_WithPassword(t *testing.T) {
-	s := &platformWiFiScanner{iface: "nonexistent99"}
+// TestConnectNmcli_GenericError covers the fall-through (unclassified) branch and
+// confirms the interface is bound via "ifname" so nmcli can never touch the
+// host's default radio.
+func TestConnectNmcli_GenericError(t *testing.T) {
+	var gotArgs []string
+	s := &platformWiFiScanner{
+		iface: "wlan0",
+		hostCmd: func(_ context.Context, _ string, args ...string) (string, error) {
+			gotArgs = args
+			return "Error: some other failure", errStubHostCmd
+		},
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	// Non-empty password → takes the else branch in connectNmcli.
+	// Non-empty password → exercises the password-append branch too.
 	err := s.connectNmcli(ctx, "AnySSID", "mypassword")
-	if err == nil {
-		t.Log("connectNmcli succeeded unexpectedly")
+	var wifiErr *WiFiError
+	if !errors.As(err, &wifiErr) {
+		t.Fatalf("connectNmcli error = %v, want *WiFiError", err)
+	}
+	if !seqHas(gotArgs, "ifname") || !seqHas(gotArgs, "wlan0") {
+		t.Errorf("nmcli args %v missing 'ifname wlan0' binding", gotArgs)
+	}
+	if !seqHas(gotArgs, "password") || !seqHas(gotArgs, "mypassword") {
+		t.Errorf("nmcli args %v missing password", gotArgs)
 	}
 }
 

@@ -122,11 +122,25 @@ func TestCurrentNetworkNmcli_ExecPath(t *testing.T) {
 // ────────────────────────────────────────────────────────────────────────────
 
 func TestConnectIwconfig_WithPassword_ExecPath(t *testing.T) {
-	s := &platformWiFiScanner{iface: "nonexistent99"}
+	// Seam the host command so the essid/key/up sequence never touches the host;
+	// the seam returns success for essid+key, then fails the "up" step.
+	calls := 0
+	s := &platformWiFiScanner{
+		iface: "wlan0",
+		hostCmd: func(_ context.Context, _ string, _ ...string) (string, error) {
+			calls++
+			if calls <= 2 { // iwconfig essid, iwconfig key
+				return "", nil
+			}
+			return "", errStubHostCmd // ip link set up / ifconfig up both fail
+		},
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
-	// Exercises the password branch; iwconfig will fail but not panic.
-	_ = s.connectIwconfig(ctx, "SomeSSID", "password123")
+	// Exercises the password (key-set) branch and the bring-up failure path.
+	if err := s.connectIwconfig(ctx, "SomeSSID", "password123"); err == nil {
+		t.Error("connectIwconfig should fail when bring-up fails")
+	}
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -306,14 +320,14 @@ func TestPlatformScanner_Connect_ShellyAPIPAssignment(t *testing.T) {
 	// via the connectWpaCli → configureWpaNetwork → waitForConnection path.
 	// Since we can't easily fake a "success" without a real NIC,
 	// we just verify the exec-path fallback doesn't panic for a Shelly AP SSID.
-	s := &platformWiFiScanner{iface: "nonexistent99", apHostIP: DefaultAPHostIP}
+	s := &platformWiFiScanner{iface: "nonexistent99", apHostIP: DefaultAPHostIP, hostCmd: stubHostCmd("", errStubHostCmd)}
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 	_ = s.Connect(ctx, "ShellyPlus1PM-AABBCC", "")
 }
 
 func TestPlatformScanner_Connect_NonShellyPostConnect(t *testing.T) {
-	s := &platformWiFiScanner{iface: "nonexistent99", apHostIP: DefaultAPHostIP}
+	s := &platformWiFiScanner{iface: "nonexistent99", apHostIP: DefaultAPHostIP, hostCmd: stubHostCmd("", errStubHostCmd)}
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 	_ = s.Connect(ctx, "HomeNetwork", "password")
