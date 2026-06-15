@@ -19,19 +19,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           path: .
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: 1.26.4
           cache: true
 
       - name: Get PR
-        uses: 8BitJonny/gh-get-current-pr@3.0.0
+        uses: 8BitJonny/gh-get-current-pr@4.0.0
         id: pr
 
       - name: Check Run Conditions
@@ -51,7 +51,7 @@ jobs:
           echo "should_run=${should_run}" >>$GITHUB_OUTPUT
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         if: ${{ steps.release.outputs.should_run == 'true' }}
         with:
           distribution: goreleaser
