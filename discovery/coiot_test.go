@@ -90,6 +90,20 @@ func TestNewCoIoTDiscoverer(t *testing.T) {
 	}
 }
 
+func TestWithCoIoTInterface(t *testing.T) {
+	ifi := &net.Interface{Index: 7, Name: "ifbind-coiot"}
+	d := NewCoIoTDiscoverer(WithCoIoTInterface(ifi))
+	if d.iface != ifi {
+		t.Fatalf("WithCoIoTInterface did not set iface: got %v, want %v", d.iface, ifi)
+	}
+
+	// No option leaves the kernel-default (nil) interface.
+	def := NewCoIoTDiscoverer()
+	if def.iface != nil {
+		t.Errorf("default iface should be nil, got %v", def.iface)
+	}
+}
+
 func TestCoIoTConstants(t *testing.T) {
 	if CoIoTMulticastAddr != "224.0.1.187" {
 		t.Errorf("CoIoTMulticastAddr = %v, want '224.0.1.187'", CoIoTMulticastAddr)

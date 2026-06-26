@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"net"
 	"os"
 	"strings"
 	"testing"
@@ -101,6 +102,20 @@ func TestNewMDNSDiscoverer(t *testing.T) {
 
 	if d.devices == nil {
 		t.Error("devices map should be initialized")
+	}
+}
+
+func TestWithMDNSInterface(t *testing.T) {
+	ifi := &net.Interface{Index: 7, Name: "ifbind-mdns"}
+	d := NewMDNSDiscoverer(WithMDNSInterface(ifi))
+	if d.iface != ifi {
+		t.Fatalf("WithMDNSInterface did not set iface: got %v, want %v", d.iface, ifi)
+	}
+
+	// No option leaves the kernel-default (nil) interface.
+	def := NewMDNSDiscoverer()
+	if def.iface != nil {
+		t.Errorf("default iface should be nil, got %v", def.iface)
 	}
 }
 

@@ -28,15 +28,31 @@ type CoIoTDiscoverer struct {
 	devicesCh chan DiscoveredDevice
 	conn      *net.UDPConn
 	stopCh    chan struct{}
-	running   bool
+	iface     *net.Interface
 	mu        sync.RWMutex
+	running   bool
+}
+
+// CoIoTOption configures a CoIoTDiscoverer.
+type CoIoTOption func(*CoIoTDiscoverer)
+
+// WithCoIoTInterface binds the discoverer's multicast listener to a specific
+// network interface, so a multi-homed host receives the CoIoT broadcasts arriving
+// on that interface's segment rather than only on the one the kernel selects by
+// default. A nil interface keeps the default (kernel-selected) behavior.
+func WithCoIoTInterface(ifi *net.Interface) CoIoTOption {
+	return func(c *CoIoTDiscoverer) { c.iface = ifi }
 }
 
 // NewCoIoTDiscoverer creates a new CoIoT discoverer.
-func NewCoIoTDiscoverer() *CoIoTDiscoverer {
-	return &CoIoTDiscoverer{
+func NewCoIoTDiscoverer(opts ...CoIoTOption) *CoIoTDiscoverer {
+	c := &CoIoTDiscoverer{
 		devices: make(map[string]*DiscoveredDevice),
 	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
 }
 
 // Discover scans for devices for the specified duration.
@@ -116,8 +132,9 @@ func (c *CoIoTDiscoverer) createMulticastConn() (*net.UDPConn, error) {
 		Port: CoIoTPort,
 	}
 
-	// Listen on all interfaces
-	conn, err := net.ListenMulticastUDP("udp4", nil, addr)
+	// Bind to the configured interface when set (multi-homed hosts), else let the
+	// kernel pick the default multicast interface.
+	conn, err := net.ListenMulticastUDP("udp4", c.iface, addr)
 	if err != nil {
 		// Fallback to regular UDP if multicast fails
 		conn, err = net.ListenUDP("udp4", &net.UDPAddr{Port: CoIoTPort})

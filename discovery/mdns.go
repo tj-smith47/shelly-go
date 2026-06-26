@@ -34,17 +34,33 @@ type MDNSDiscoverer struct {
 	devices         map[string]*DiscoveredDevice
 	devicesCh       chan DiscoveredDevice
 	stopCh          chan struct{}
-	running         bool
+	iface           *net.Interface
 	tickInterval    time.Duration // injectable for tests; 0 → 10s production default
 	discoverTimeout time.Duration // injectable for tests; 0 → 5s production default
 	mu              sync.RWMutex
+	running         bool
+}
+
+// MDNSOption configures an MDNSDiscoverer.
+type MDNSOption func(*MDNSDiscoverer)
+
+// WithMDNSInterface binds the discoverer's multicast listener to a specific
+// network interface, so a multi-homed host receives announcements arriving on
+// that interface's segment rather than only on the one the kernel selects by
+// default. A nil interface keeps the default (kernel-selected) behavior.
+func WithMDNSInterface(ifi *net.Interface) MDNSOption {
+	return func(m *MDNSDiscoverer) { m.iface = ifi }
 }
 
 // NewMDNSDiscoverer creates a new mDNS discoverer.
-func NewMDNSDiscoverer() *MDNSDiscoverer {
-	return &MDNSDiscoverer{
+func NewMDNSDiscoverer(opts ...MDNSOption) *MDNSDiscoverer {
+	m := &MDNSDiscoverer{
 		devices: make(map[string]*DiscoveredDevice),
 	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
 }
 
 // Discover scans for devices for the specified duration.
@@ -118,8 +134,9 @@ func (m *MDNSDiscoverer) createMulticastConn() (*net.UDPConn, error) {
 		Port: 5353,
 	}
 
-	// Listen on all interfaces for multicast
-	conn, err := net.ListenMulticastUDP("udp4", nil, addr)
+	// Bind to the configured interface when set (multi-homed hosts), else let the
+	// kernel pick the default multicast interface.
+	conn, err := net.ListenMulticastUDP("udp4", m.iface, addr)
 	if err != nil {
 		// Fallback to regular UDP if multicast fails (e.g., permissions)
 		// Some devices respond unicast to the query source, so this may work
