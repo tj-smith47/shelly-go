@@ -61,19 +61,7 @@ func (c *CoIoTDiscoverer) DiscoverWithContext(ctx context.Context) ([]Discovered
 	readCh := make(chan coiotMessage, 100)
 
 	// Start reader goroutine
-	go func() {
-		buf := make([]byte, 65536)
-		for {
-			n, addr, err := conn.ReadFromUDP(buf)
-			if err != nil {
-				return
-			}
-			select {
-			case readCh <- coiotMessage{data: buf[:n], addr: addr}:
-			default:
-			}
-		}
-	}()
+	go c.readPackets(conn, readCh)
 
 	// Process responses until timeout
 	for {
@@ -91,6 +79,27 @@ func (c *CoIoTDiscoverer) DiscoverWithContext(ctx context.Context) ([]Discovered
 			if device != nil && device.ID != "" {
 				devices[device.ID] = device
 			}
+		}
+	}
+}
+
+// readPackets reads UDP packets from conn and forwards each to readCh until conn
+// is closed. Each packet is copied into its own backing array: the read buffer is
+// reused on every ReadFromUDP, so forwarding a slice of it would let the processor
+// decode bytes being overwritten by the next read (a data race that panics
+// encoding/json with "data changing underfoot").
+func (c *CoIoTDiscoverer) readPackets(conn *net.UDPConn, readCh chan<- coiotMessage) {
+	buf := make([]byte, 65536)
+	for {
+		n, addr, err := conn.ReadFromUDP(buf)
+		if err != nil {
+			return
+		}
+		data := make([]byte, n)
+		copy(data, buf[:n])
+		select {
+		case readCh <- coiotMessage{data: data, addr: addr}:
+		default:
 		}
 	}
 }

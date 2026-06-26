@@ -4,11 +4,80 @@ import (
 	"context"
 	"encoding/json"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/tj-smith47/shelly-go/types"
 )
+
+// TestCoIoTDiscoverer_ReadPackets_NoBufferReuseRace is a regression test for a
+// data race where the reader goroutine forwarded a slice of its reused read
+// buffer: the processor decoded those bytes while the next ReadFromUDP overwrote
+// them, panicking encoding/json with "data changing underfoot". readPackets must
+// hand each packet its own backing array. Run under -race to detect a regression.
+func TestCoIoTDiscoverer_ReadPackets_NoBufferReuseRace(t *testing.T) {
+	d := NewCoIoTDiscoverer()
+
+	conn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: 0})
+	if err != nil {
+		t.Fatalf("ListenUDP: %v", err)
+	}
+	defer conn.Close()
+
+	sender, err := net.DialUDP("udp4", nil, conn.LocalAddr().(*net.UDPAddr))
+	if err != nil {
+		t.Fatalf("DialUDP: %v", err)
+	}
+	defer sender.Close()
+
+	readCh := make(chan coiotMessage, 100)
+	go d.readPackets(conn, readCh)
+
+	const packets = 500
+
+	// Consumer decodes each forwarded packet via the production parse path,
+	// concurrently with the reader's next ReadFromUDP. Best-effort count: UDP
+	// loopback and readPackets' non-blocking send may drop under burst, so the
+	// consumer stops on signal rather than waiting for an exact total.
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			select {
+			case <-stop:
+				return
+			case msg := <-readCh:
+				// Faithful to production: parseCoAPMessage → parsePayload → Unmarshal.
+				_ = d.parseCoAPMessage(msg.data, msg.addr)
+			}
+		}
+	}()
+
+	// Distinct payload lengths between consecutive packets so a stale buffer
+	// corrupts the decode instead of silently re-parsing identical bytes.
+	for i := range packets {
+		payload := map[string]any{
+			"id":     "AABBCCDDEEFF",
+			"mac":    "AA:BB:CC:DD:EE:FF",
+			"type":   "SHSW-1",
+			"fw_ver": "1.11.0",
+			"seq":    i,
+			"pad":    strings.Repeat("x", i%64),
+		}
+		pb, _ := json.Marshal(payload)
+		pkt := append([]byte{0x50, 0x00, 0x00, 0x01, 0xFF}, pb...)
+		if _, err := sender.Write(pkt); err != nil {
+			t.Fatalf("send packet %d: %v", i, err)
+		}
+	}
+
+	// Let the in-flight packets drain through the decoder, then stop cleanly.
+	time.Sleep(200 * time.Millisecond)
+	close(stop)
+	<-done
+}
 
 func TestNewCoIoTDiscoverer(t *testing.T) {
 	d := NewCoIoTDiscoverer()
