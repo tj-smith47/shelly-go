@@ -169,6 +169,27 @@ func TestLightTurnOnWithBrightness(t *testing.T) {
 	}
 }
 
+// TestLightTurnOnWithBrightnessAndTransition tests atomic turn-on at a brightness with a fade.
+func TestLightTurnOnWithBrightnessAndTransition(t *testing.T) {
+	mt := newMockTransport()
+	mt.SetResponse("/light/0?turn=on&brightness=30&transition=4000", map[string]any{"ison": true, "brightness": 30})
+
+	light := NewLight(mt, 0)
+	ctx := context.Background()
+
+	if err := light.TurnOnWithBrightnessAndTransition(ctx, 30, 4000); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// TestLightTurnOnWithBrightnessAndTransitionInvalid rejects out-of-range brightness.
+func TestLightTurnOnWithBrightnessAndTransitionInvalid(t *testing.T) {
+	light := NewLight(newMockTransport(), 0)
+	if err := light.TurnOnWithBrightnessAndTransition(context.Background(), 150, 500); err == nil {
+		t.Fatal("expected error for brightness 150, got nil")
+	}
+}
+
 // TestLightTurnOnForDuration tests timed on.
 func TestLightTurnOnForDuration(t *testing.T) {
 	mt := newMockTransport()

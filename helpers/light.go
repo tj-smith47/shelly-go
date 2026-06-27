@@ -81,13 +81,7 @@ func lightClosures(dev factory.Device, id int, t LightTarget) (confirm.Apply, co
 		}
 		light := d.Light(id)
 		apply := func(ctx context.Context) error {
-			if err := applyGen1Brightness(ctx, light, t); err != nil {
-				return err
-			}
-			if t.On != nil {
-				return light.Set(ctx, *t.On)
-			}
-			return nil
+			return applyGen1Light(ctx, light, t)
 		}
 		check := func(ctx context.Context) (bool, string, error) {
 			st, err := light.GetStatus(ctx)
@@ -133,6 +127,23 @@ func lightClosures(dev factory.Device, id int, t LightTarget) (confirm.Apply, co
 		}
 		return nil, nil, fmt.Errorf("helpers: unsupported device generation %v", dev.Generation())
 	}
+}
+
+// applyGen1Light issues a Gen1 light target. When on, a target brightness, and a
+// transition are all requested, it uses the single atomic turn=on&brightness&transition
+// request so the bulb fades from its current level rather than snapping on then fading;
+// otherwise it applies the brightness and on/off portions independently.
+func applyGen1Light(ctx context.Context, light *gen1components.Light, t LightTarget) error {
+	if t.On != nil && *t.On && t.Brightness != nil && t.TransitionMs > 0 {
+		return light.TurnOnWithBrightnessAndTransition(ctx, *t.Brightness, t.TransitionMs)
+	}
+	if err := applyGen1Brightness(ctx, light, t); err != nil {
+		return err
+	}
+	if t.On != nil {
+		return light.Set(ctx, *t.On)
+	}
+	return nil
 }
 
 // applyGen1Brightness issues the brightness portion of a target to a Gen1 light,

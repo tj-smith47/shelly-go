@@ -168,6 +168,27 @@ func (l *Light) TurnOnWithBrightness(ctx context.Context, brightness int) error 
 	return nil
 }
 
+// TurnOnWithBrightnessAndTransition turns the light on at a brightness over a transition,
+// in a single request. Unlike turning on and setting brightness separately, this lets the
+// device fade from its current level to the target instead of snapping on at full level
+// and only then fading.
+//
+// Parameters:
+//   - brightness: Brightness level (0-100)
+//   - transitionMs: Transition time in milliseconds
+func (l *Light) TurnOnWithBrightnessAndTransition(ctx context.Context, brightness, transitionMs int) error {
+	if brightness < 0 || brightness > 100 {
+		return fmt.Errorf("brightness must be 0-100, got %d", brightness)
+	}
+
+	path := fmt.Sprintf("/light/%d?turn=on&brightness=%d&transition=%d", l.id, brightness, transitionMs)
+	_, err := restCall(ctx, l.transport, path)
+	if err != nil {
+		return fmt.Errorf("failed to turn on with brightness and transition: %w", err)
+	}
+	return nil
+}
+
 // TurnOnForDuration turns the light on for a specified duration.
 //
 // Parameters:

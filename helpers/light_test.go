@@ -108,6 +108,37 @@ func TestSetLightConfirmed_Gen1StaleBrightness(t *testing.T) {
 	}
 }
 
+// TestSetLightConfirmed_Gen1AtomicTransition verifies that an On+Brightness+Transition
+// target drives the bulb through the single atomic /light/N?turn=on&brightness&transition
+// request (so the device fades from its current level) rather than separate set+turn calls,
+// and that a bulb reporting the target immediately converges on the first apply.
+func TestSetLightConfirmed_Gen1AtomicTransition(t *testing.T) {
+	var sawAtomic bool
+	dev, server := createMockGen1Device(t, func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("turn") == "on" && q.Has("brightness") && q.Has("transition") {
+			sawAtomic = true
+		}
+		mustWrite(w, []byte(`{"ison":true,"brightness":30}`))
+	})
+	defer server.Close()
+
+	target := LightTarget{On: boolPtr(true), Brightness: intPtr(30), TransitionMs: 4000}
+	res, err := SetLightConfirmed(context.Background(), dev, 0, target, fastOpts())
+	if err != nil {
+		t.Fatalf("SetLightConfirmed() error = %v, want nil", err)
+	}
+	if !sawAtomic {
+		t.Error("expected a single turn=on&brightness&transition request; atomic apply path not taken")
+	}
+	if !res.Converged {
+		t.Error("Result.Converged = false, want true")
+	}
+	if res.Applies != 1 {
+		t.Errorf("Result.Applies = %d, want 1", res.Applies)
+	}
+}
+
 // TestSetLightConfirmed_Tolerance verifies that the Tolerance field absorbs
 // small rounding differences. A device reporting brightness=21 for a target of
 // 20 should converge with Tolerance=1 but not with Tolerance=0.
