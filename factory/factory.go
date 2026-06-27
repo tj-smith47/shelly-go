@@ -66,7 +66,24 @@ type Options struct {
 	Username   string
 	Password   string
 	Timeout    time.Duration
+	RetryDelay time.Duration
 	Generation types.Generation
+	// MaxRetries controls transport-level retries on transient errors.
+	// -1 (default) defers to the transport default (3 retries with exponential backoff).
+	// 0 disables retries, causing connectivity failures to surface immediately rather
+	// than burning the caller's deadline — use for confirmed-brightness paths where
+	// the caller wants to classify Offline vs Failed without waiting out the backoff.
+	MaxRetries int
+}
+
+// newOptions returns an Options with defaults applied.
+// MaxRetries is -1 so callers that do not call WithRetry get transport-default retries.
+func newOptions() *Options {
+	return &Options{
+		Context:    context.Background(),
+		Timeout:    5 * time.Second,
+		MaxRetries: -1,
+	}
 }
 
 // Option configures device creation.
@@ -108,6 +125,17 @@ func WithGeneration(gen types.Generation) Option {
 	}
 }
 
+// WithRetry configures transport-level retry behavior.
+// maxRetries=0 disables retries so connectivity errors surface immediately;
+// maxRetries=N retries up to N times with initialDelay between attempts (exponential backoff).
+// Without this option the transport uses its built-in default (3 retries, 1 s initial delay).
+func WithRetry(maxRetries int, initialDelay time.Duration) Option {
+	return func(o *Options) {
+		o.MaxRetries = maxRetries
+		o.RetryDelay = initialDelay
+	}
+}
+
 // Errors returned by the factory.
 var (
 	ErrUnknownGeneration = errors.New("unknown device generation")
@@ -120,10 +148,7 @@ var (
 // If no generation is specified via WithGeneration, the factory
 // will probe the device to auto-detect its generation.
 func FromAddress(address string, opts ...Option) (Device, error) {
-	options := &Options{
-		Context: context.Background(),
-		Timeout: 5 * time.Second,
-	}
+	options := newOptions()
 	for _, opt := range opts {
 		opt(options)
 	}
@@ -150,10 +175,7 @@ func FromAddress(address string, opts ...Option) (Device, error) {
 
 // FromDiscovery creates a device from a discovery result.
 func FromDiscovery(d *discovery.DiscoveredDevice, opts ...Option) (Device, error) {
-	options := &Options{
-		Context: context.Background(),
-		Timeout: 5 * time.Second,
-	}
+	options := newOptions()
 	for _, opt := range opts {
 		opt(options)
 	}
@@ -165,10 +187,7 @@ func FromDiscovery(d *discovery.DiscoveredDevice, opts ...Option) (Device, error
 
 // FromInfo creates a device from device info.
 func FromInfo(info *discovery.DeviceInfo, address string, opts ...Option) (Device, error) {
-	options := &Options{
-		Context: context.Background(),
-		Timeout: 5 * time.Second,
-	}
+	options := newOptions()
 	for _, opt := range opts {
 		opt(options)
 	}
@@ -205,6 +224,10 @@ func createGen1Device(address string, options *Options) *Gen1Device {
 		transportOpts = append(transportOpts, transport.WithAuth(options.Username, options.Password))
 	}
 
+	if options.MaxRetries >= 0 {
+		transportOpts = append(transportOpts, transport.WithRetry(options.MaxRetries, options.RetryDelay))
+	}
+
 	t := transport.NewHTTP(address, transportOpts...)
 	device := gen1.NewDevice(t)
 
@@ -221,6 +244,10 @@ func createGen2Device(address string, generation types.Generation, options *Opti
 
 	if options.Timeout > 0 {
 		transportOpts = append(transportOpts, transport.WithTimeout(options.Timeout))
+	}
+
+	if options.MaxRetries >= 0 {
+		transportOpts = append(transportOpts, transport.WithRetry(options.MaxRetries, options.RetryDelay))
 	}
 
 	t := transport.NewHTTP(address, transportOpts...)

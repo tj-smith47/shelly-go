@@ -192,6 +192,37 @@ func TestFromAddress_WithContext(t *testing.T) {
 	}
 }
 
+func TestWithRetry_Option(t *testing.T) {
+	o := newOptions()
+	if o.MaxRetries != -1 {
+		t.Fatalf("newOptions() MaxRetries = %d, want -1 (defer to transport default so unset callers keep retries)", o.MaxRetries)
+	}
+
+	WithRetry(0, 0)(o)
+	if o.MaxRetries != 0 {
+		t.Errorf("WithRetry(0,0) MaxRetries = %d, want 0 (disabled)", o.MaxRetries)
+	}
+
+	WithRetry(5, 250*time.Millisecond)(o)
+	if o.MaxRetries != 5 || o.RetryDelay != 250*time.Millisecond {
+		t.Errorf("WithRetry(5,250ms) = (%d,%v), want (5,250ms)", o.MaxRetries, o.RetryDelay)
+	}
+}
+
+func TestFromAddress_WithRetry(t *testing.T) {
+	// WithRetry(0) disables transport retries so a confirmed-path caller can
+	// classify a connectivity failure immediately instead of waiting out backoff.
+	device, err := FromAddress("192.168.1.100",
+		WithGeneration(types.Gen1),
+		WithRetry(0, 0))
+	if err != nil {
+		t.Fatalf("FromAddress() error = %v", err)
+	}
+	if device == nil {
+		t.Error("device should not be nil")
+	}
+}
+
 func TestFromAddress_NormalizeAddress(t *testing.T) {
 	tests := []string{
 		"192.168.1.100",
