@@ -8,6 +8,7 @@ import (
 	"github.com/tj-smith47/shelly-go/factory"
 	gen1components "github.com/tj-smith47/shelly-go/gen1/components"
 	gen2components "github.com/tj-smith47/shelly-go/gen2/components"
+	"github.com/tj-smith47/shelly-go/types"
 )
 
 // LightTarget is the desired light state to apply and confirm. A nil pointer field
@@ -75,6 +76,9 @@ func SetLightsConfirmed(
 func lightClosures(dev factory.Device, id int, t LightTarget) (confirm.Apply, confirm.Check, error) {
 	switch d := dev.(type) {
 	case *factory.Gen1Device:
+		if d.Device == nil {
+			return nil, nil, types.ErrNilDevice
+		}
 		light := d.Light(id)
 		apply := func(ctx context.Context) error {
 			if err := applyGen1Brightness(ctx, light, t); err != nil {
@@ -96,6 +100,9 @@ func lightClosures(dev factory.Device, id int, t LightTarget) (confirm.Apply, co
 		return apply, check, nil
 
 	case *factory.Gen2Device:
+		if d.Device == nil {
+			return nil, nil, types.ErrNilDevice
+		}
 		light := gen2components.NewLight(d.Client(), id)
 		apply := func(ctx context.Context) error {
 			params := &gen2components.LightSetParams{ID: id, On: t.On, Brightness: t.Brightness}
@@ -121,6 +128,9 @@ func lightClosures(dev factory.Device, id int, t LightTarget) (confirm.Apply, co
 		return apply, check, nil
 
 	default:
+		if dev == nil {
+			return nil, nil, types.ErrNilDevice
+		}
 		return nil, nil, fmt.Errorf("helpers: unsupported device generation %v", dev.Generation())
 	}
 }

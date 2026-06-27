@@ -136,6 +136,18 @@ func TestUntil_ContextCancel(t *testing.T) {
 	}
 }
 
+func TestUntil_ContextCanceledDuringApply(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // canceled before Until runs
+	apply := func(ctx context.Context) error { return ctx.Err() }
+	check := func(context.Context) (bool, string, error) { return false, "", nil }
+
+	_, err := Until(ctx, apply, check, fastOpts())
+	if !errors.Is(err, ErrNotConverged) {
+		t.Fatalf("expected ErrNotConverged when apply fails due to context, got %v", err)
+	}
+}
+
 func TestOptions_Defaults(t *testing.T) {
 	o := Options{}.withDefaults()
 	if o.Timeout != DefaultTimeout || o.PollInterval != DefaultPollInterval || o.MaxApplies != DefaultMaxApplies {

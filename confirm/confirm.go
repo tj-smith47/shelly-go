@@ -108,7 +108,9 @@ type Result struct {
 // treated as unreachable; the caller classifies it). If the deadline passes without
 // convergence it returns an error wrapping [ErrNotConverged] annotated with the last
 // observation. Context cancellation is honored throughout and is reported as a
-// canceled [ErrNotConverged].
+// canceled [ErrNotConverged]. A device that becomes unreachable only after its last
+// apply is surfaced as ErrNotConverged rather than a terminal error, since offline is
+// classified only when it coincides with an apply.
 func Until(ctx context.Context, apply Apply, check Check, o Options) (Result, error) {
 	o = o.withDefaults()
 	start := time.Now()
@@ -128,7 +130,7 @@ func Until(ctx context.Context, apply Apply, check Check, o Options) (Result, er
 
 	if err := doApply(); err != nil {
 		res.Elapsed = time.Since(start)
-		return res, err // terminal: fail fast so the caller can classify (e.g. offline)
+		return res, ctxOrErr(ctx, res, err)
 	}
 	attemptStart := time.Now()
 	if err := wait(ctx, o.Settle); err != nil {
@@ -152,7 +154,7 @@ func Until(ctx context.Context, apply Apply, check Check, o Options) (Result, er
 		if res.Applies < o.MaxApplies && time.Since(attemptStart) >= reapplyAfter {
 			if err := doApply(); err != nil {
 				res.Elapsed = time.Since(start)
-				return res, err
+				return res, ctxOrErr(ctx, res, err)
 			}
 			attemptStart = time.Now()
 			if err := wait(ctx, o.Settle); err != nil {
@@ -183,6 +185,16 @@ func wait(ctx context.Context, d time.Duration) error {
 	case <-timer.C:
 		return nil
 	}
+}
+
+// ctxOrErr returns notConverged when ctx ended while an Apply was in flight, and err
+// otherwise. Using it at apply sites keeps the call-site flat (no extra if nesting)
+// while honoring the promise that context cancellation is reported as ErrNotConverged.
+func ctxOrErr(ctx context.Context, res Result, err error) error {
+	if ctx.Err() != nil {
+		return notConverged(ctx, res)
+	}
+	return err // genuine terminal transport error (e.g. offline) — fail fast
 }
 
 // notConverged builds the terminal failure error, distinguishing an explicit caller

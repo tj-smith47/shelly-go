@@ -10,6 +10,7 @@ import (
 
 	"github.com/tj-smith47/shelly-go/confirm"
 	"github.com/tj-smith47/shelly-go/factory"
+	"github.com/tj-smith47/shelly-go/types"
 )
 
 // fastOpts returns a confirm.Options tuned for fast, non-flaky unit tests.
@@ -207,6 +208,16 @@ func TestSetLightsConfirmed_BatchPartialFailure(t *testing.T) {
 	}
 	if len(failures) == 1 && !errors.Is(failures[0].Error, confirm.ErrNotConverged) {
 		t.Errorf("failure error = %v, want errors.Is(confirm.ErrNotConverged)", failures[0].Error)
+	}
+}
+
+// TestSetLightConfirmed_NilEmbeddedDevice verifies that a device whose embedded
+// pointer is nil returns types.ErrNilDevice instead of panicking on deref.
+func TestSetLightConfirmed_NilEmbeddedDevice(t *testing.T) {
+	dev := &factory.Gen1Device{} // embedded *gen1.Device is nil
+	_, err := SetLightConfirmed(context.Background(), dev, 0, LightTarget{On: boolPtr(true)}, fastOpts())
+	if !errors.Is(err, types.ErrNilDevice) {
+		t.Errorf("SetLightConfirmed() error = %v, want types.ErrNilDevice", err)
 	}
 }
 
