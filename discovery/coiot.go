@@ -350,25 +350,31 @@ func (c *CoIoTDiscoverer) StartDiscovery() (<-chan DiscoveredDevice, error) {
 	c.stopCh = make(chan struct{})
 	c.running = true
 
-	go c.continuousDiscovery()
+	// The goroutine owns conn, stopCh and devicesCh by value so it never reads the
+	// c.conn / c.stopCh / c.devicesCh fields, which Start/StopDiscovery mutate under
+	// the lock — reading them unsynchronized from here would race with those writes.
+	go c.continuousDiscovery(conn, c.stopCh, c.devicesCh)
 
 	return c.devicesCh, nil
 }
 
-// continuousDiscovery runs continuous discovery.
-func (c *CoIoTDiscoverer) continuousDiscovery() {
+// continuousDiscovery runs continuous discovery against the connection, stop
+// signal and output channel captured when discovery started.
+func (c *CoIoTDiscoverer) continuousDiscovery(
+	conn *net.UDPConn, stopCh <-chan struct{}, devicesCh chan<- DiscoveredDevice,
+) {
 	buf := make([]byte, 65536)
 
 	for {
 		select {
-		case <-c.stopCh:
+		case <-stopCh:
 			return
 		default:
 		}
 
 		//nolint:errcheck // SetReadDeadline errors are non-fatal for discovery
-		c.conn.SetReadDeadline(time.Now().Add(1 * time.Second))
-		n, addr, err := c.conn.ReadFromUDP(buf)
+		conn.SetReadDeadline(time.Now().Add(1 * time.Second))
+		n, addr, err := conn.ReadFromUDP(buf)
 		if err != nil {
 			continue
 		}
@@ -376,7 +382,7 @@ func (c *CoIoTDiscoverer) continuousDiscovery() {
 		device := c.parseCoAPMessage(buf[:n], addr)
 		if device != nil && device.ID != "" {
 			select {
-			case c.devicesCh <- *device:
+			case devicesCh <- *device:
 			default:
 			}
 		}

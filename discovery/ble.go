@@ -559,16 +559,20 @@ func (b *BLEDiscoverer) StartDiscovery() (<-chan DiscoveredDevice, error) {
 	b.stopCh = make(chan struct{})
 	b.running = true
 
-	go b.continuousDiscovery()
+	// The goroutine owns stopCh by value so it never reads the b.stopCh field,
+	// which Start/StopDiscovery mutate under the lock — reading it unsynchronized
+	// from here would race with those writes.
+	go b.continuousDiscovery(b.stopCh)
 
 	return b.devicesCh, nil
 }
 
-// continuousDiscovery runs continuous BLE discovery.
-func (b *BLEDiscoverer) continuousDiscovery() {
+// continuousDiscovery runs continuous BLE discovery against the stop signal
+// captured when discovery started.
+func (b *BLEDiscoverer) continuousDiscovery(stopCh <-chan struct{}) {
 	for {
 		select {
-		case <-b.stopCh:
+		case <-stopCh:
 			return
 		default:
 		}

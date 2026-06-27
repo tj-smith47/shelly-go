@@ -140,7 +140,7 @@ func TestMDNSContinuousDiscovery_TickerFires(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		d.continuousDiscovery()
+		d.continuousDiscovery(d.stopCh, d.devicesCh)
 		close(done)
 	}()
 
@@ -173,7 +173,7 @@ func TestWiFiContinuousDiscovery_TickerFires(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		d.continuousDiscovery()
+		d.continuousDiscovery(d.stopCh, d.devicesCh)
 		close(done)
 	}()
 

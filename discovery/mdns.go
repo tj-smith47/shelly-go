@@ -451,13 +451,17 @@ func (m *MDNSDiscoverer) StartDiscovery() (<-chan DiscoveredDevice, error) {
 	m.stopCh = make(chan struct{})
 	m.running = true
 
-	go m.continuousDiscovery()
+	// The goroutine owns stopCh and devicesCh by value so it never reads the
+	// m.stopCh / m.devicesCh fields, which Start/StopDiscovery mutate under
+	// the lock — reading them unsynchronized from here would race with those writes.
+	go m.continuousDiscovery(m.stopCh, m.devicesCh)
 
 	return m.devicesCh, nil
 }
 
-// continuousDiscovery runs continuous discovery.
-func (m *MDNSDiscoverer) continuousDiscovery() {
+// continuousDiscovery runs continuous discovery against the stop signal and
+// output channel captured when discovery started.
+func (m *MDNSDiscoverer) continuousDiscovery(stopCh <-chan struct{}, devicesCh chan<- DiscoveredDevice) {
 	interval := m.tickInterval
 	if interval == 0 {
 		interval = 10 * time.Second
@@ -467,7 +471,7 @@ func (m *MDNSDiscoverer) continuousDiscovery() {
 
 	for {
 		select {
-		case <-m.stopCh:
+		case <-stopCh:
 			return
 		case <-ticker.C:
 			discTimeout := m.discoverTimeout
@@ -480,7 +484,7 @@ func (m *MDNSDiscoverer) continuousDiscovery() {
 			}
 			for i := range devices {
 				select {
-				case m.devicesCh <- devices[i]:
+				case devicesCh <- devices[i]:
 				default:
 				}
 			}

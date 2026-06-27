@@ -452,13 +452,17 @@ func (w *WiFiDiscoverer) StartDiscovery() (<-chan DiscoveredDevice, error) {
 	w.stopCh = make(chan struct{})
 	w.running = true
 
-	go w.continuousDiscovery()
+	// The goroutine owns stopCh and devicesCh by value so it never reads the
+	// w.stopCh / w.devicesCh fields, which Start/StopDiscovery mutate under
+	// the lock — reading them unsynchronized from here would race with those writes.
+	go w.continuousDiscovery(w.stopCh, w.devicesCh)
 
 	return w.devicesCh, nil
 }
 
-// continuousDiscovery runs continuous WiFi AP discovery.
-func (w *WiFiDiscoverer) continuousDiscovery() {
+// continuousDiscovery runs continuous WiFi AP discovery against the stop signal
+// and output channel captured when discovery started.
+func (w *WiFiDiscoverer) continuousDiscovery(stopCh <-chan struct{}, devicesCh chan<- DiscoveredDevice) {
 	interval := w.tickInterval
 	if interval == 0 {
 		interval = 10 * time.Second
@@ -468,7 +472,7 @@ func (w *WiFiDiscoverer) continuousDiscovery() {
 
 	for {
 		select {
-		case <-w.stopCh:
+		case <-stopCh:
 			return
 		case <-ticker.C:
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -478,7 +482,7 @@ func (w *WiFiDiscoverer) continuousDiscovery() {
 
 			for i := range devices {
 				select {
-				case w.devicesCh <- devices[i]:
+				case devicesCh <- devices[i]:
 				default:
 				}
 			}
