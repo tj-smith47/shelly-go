@@ -93,11 +93,11 @@ func (o Options) withDefaults() Options {
 // Result describes how an [Until] call resolved, for logging and diagnostics. It is
 // returned on both success and failure so callers can record the effort spent.
 type Result struct {
-	Converged bool          // whether the device reached the desired state
+	Observed  string        // last non-empty observation from Check
+	Elapsed   time.Duration // wall-clock spent
 	Applies   int           // number of Apply calls made
 	Polls     int           // number of Check calls made
-	Elapsed   time.Duration // wall-clock spent
-	Observed  string        // last non-empty observation from Check
+	Converged bool          // whether the device reached the desired state
 }
 
 // Until applies the desired state and polls until the device converges to it,

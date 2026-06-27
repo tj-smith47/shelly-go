@@ -37,7 +37,6 @@ func TestSetLightConfirmed_Gen1Converges(t *testing.T) {
 
 	target := LightTarget{On: boolPtr(true), Brightness: intPtr(20)}
 	res, err := SetLightConfirmed(context.Background(), dev, 0, target, fastOpts())
-
 	if err != nil {
 		t.Fatalf("SetLightConfirmed() error = %v, want nil", err)
 	}
@@ -65,7 +64,6 @@ func TestSetLightConfirmed_Gen2Converges(t *testing.T) {
 
 	target := LightTarget{On: boolPtr(true), Brightness: intPtr(20)}
 	res, err := SetLightConfirmed(context.Background(), dev, 0, target, fastOpts())
-
 	if err != nil {
 		t.Fatalf("SetLightConfirmed() error = %v, want nil", err)
 	}
@@ -165,7 +163,6 @@ func TestSetLightConfirmed_OnOnlyTarget(t *testing.T) {
 
 	target := LightTarget{On: boolPtr(true)} // Brightness intentionally nil
 	res, err := SetLightConfirmed(context.Background(), dev, 0, target, fastOpts())
-
 	if err != nil {
 		t.Fatalf("SetLightConfirmed() error = %v, want nil", err)
 	}

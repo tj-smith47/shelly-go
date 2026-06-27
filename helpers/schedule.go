@@ -23,6 +23,9 @@ const (
 // methodSwitchSet is the RPC method name for setting a switch state.
 const methodSwitchSet = "Switch.Set"
 
+// methodLightSet is the RPC method name for setting a light state.
+const methodLightSet = "Light.Set"
+
 // keyMethod is the map key naming the RPC method in a schedule call.
 const keyMethod = "method"
 
@@ -289,7 +292,7 @@ func CreateSchedule(ctx context.Context, dev *factory.Gen2Device, entry *Schedul
 		}
 	case ActionTypeBrightness:
 		calls = []map[string]any{
-			{keyMethod: "Light.Set", keyParams: map[string]any{"id": 0, "brightness": entry.Action.Brightness}},
+			{keyMethod: methodLightSet, keyParams: map[string]any{"id": 0, "brightness": entry.Action.Brightness}},
 		}
 	}
 

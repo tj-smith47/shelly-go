@@ -6,6 +6,7 @@ import (
 
 	"github.com/tj-smith47/shelly-go/confirm"
 	"github.com/tj-smith47/shelly-go/factory"
+	gen1components "github.com/tj-smith47/shelly-go/gen1/components"
 	gen2components "github.com/tj-smith47/shelly-go/gen2/components"
 )
 
@@ -38,7 +39,13 @@ type LightTarget struct {
 // configuration — so a silently dropped transition is detected and surfaced as a
 // wrapped [confirm.ErrNotConverged]. An unreachable device fails fast with the
 // underlying transport error so the caller can classify it.
-func SetLightConfirmed(ctx context.Context, dev factory.Device, id int, t LightTarget, o confirm.Options) (confirm.Result, error) {
+func SetLightConfirmed(
+	ctx context.Context,
+	dev factory.Device,
+	id int,
+	t LightTarget,
+	o confirm.Options,
+) (confirm.Result, error) {
 	apply, check, err := lightClosures(dev, id, t)
 	if err != nil {
 		return confirm.Result{}, err
@@ -50,7 +57,13 @@ func SetLightConfirmed(ctx context.Context, dev factory.Device, id int, t LightT
 // each independently. Because each device runs its own confirm loop, only the bulbs
 // that lag are re-applied — a healthy bulb is never re-commanded because a sibling
 // stalled. Results align by index with devices.
-func SetLightsConfirmed(ctx context.Context, devices []factory.Device, id int, t LightTarget, o confirm.Options) BatchResults {
+func SetLightsConfirmed(
+	ctx context.Context,
+	devices []factory.Device,
+	id int,
+	t LightTarget,
+	o confirm.Options,
+) BatchResults {
 	return batchExecute(ctx, devices, func(ctx context.Context, dev factory.Device) error {
 		_, err := SetLightConfirmed(ctx, dev, id, t, o)
 		return err
@@ -64,19 +77,11 @@ func lightClosures(dev factory.Device, id int, t LightTarget) (confirm.Apply, co
 	case *factory.Gen1Device:
 		light := d.Light(id)
 		apply := func(ctx context.Context) error {
-			if t.Brightness != nil {
-				if t.TransitionMs > 0 {
-					if err := light.SetBrightnessWithTransition(ctx, *t.Brightness, t.TransitionMs); err != nil {
-						return err
-					}
-				} else if err := light.SetBrightness(ctx, *t.Brightness); err != nil {
-					return err
-				}
+			if err := applyGen1Brightness(ctx, light, t); err != nil {
+				return err
 			}
 			if t.On != nil {
-				if err := light.Set(ctx, *t.On); err != nil {
-					return err
-				}
+				return light.Set(ctx, *t.On)
 			}
 			return nil
 		}
@@ -118,6 +123,19 @@ func lightClosures(dev factory.Device, id int, t LightTarget) (confirm.Apply, co
 	default:
 		return nil, nil, fmt.Errorf("helpers: unsupported device generation %v", dev.Generation())
 	}
+}
+
+// applyGen1Brightness issues the brightness portion of a target to a Gen1 light,
+// choosing the transition-aware setter when a fade was requested. A nil Brightness
+// leaves the level unchanged.
+func applyGen1Brightness(ctx context.Context, light *gen1components.Light, t LightTarget) error {
+	if t.Brightness == nil {
+		return nil
+	}
+	if t.TransitionMs > 0 {
+		return light.SetBrightnessWithTransition(ctx, *t.Brightness, t.TransitionMs)
+	}
+	return light.SetBrightness(ctx, *t.Brightness)
 }
 
 // lightConverged reports whether an observed (on, brightness) reading satisfies the

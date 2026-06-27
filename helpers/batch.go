@@ -211,6 +211,6 @@ func setGen2Brightness(ctx context.Context, dev *factory.Gen2Device, brightness 
 		return types.ErrUnsupportedDevice
 	}
 	params := map[string]any{"id": light.ID(), "brightness": brightness}
-	_, err := light.Client().Call(ctx, "Light.Set", params)
+	_, err := light.Client().Call(ctx, methodLightSet, params)
 	return err
 }
