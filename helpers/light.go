@@ -116,7 +116,7 @@ func lightClosures(dev factory.Device, id int, t LightTarget) (confirm.Apply, co
 		return apply, check, nil
 
 	default:
-		return nil, nil, fmt.Errorf("confirm: unsupported device generation %v", dev.Generation())
+		return nil, nil, fmt.Errorf("helpers: unsupported device generation %v", dev.Generation())
 	}
 }
 

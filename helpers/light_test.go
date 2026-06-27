@@ -72,6 +72,9 @@ func TestSetLightConfirmed_Gen2Converges(t *testing.T) {
 	if !res.Converged {
 		t.Errorf("Result.Converged = false, want true")
 	}
+	if res.Applies != 1 {
+		t.Errorf("Applies = %d, want 1 (a bulb already at target must not be re-applied)", res.Applies)
+	}
 }
 
 // TestSetLightConfirmed_Gen1StaleBrightness is the core regression test: a Gen1
