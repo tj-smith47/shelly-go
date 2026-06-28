@@ -103,6 +103,9 @@ func TestGetModelCategory(t *testing.T) {
 		// Bulbs
 		{"SHBLB-1", "bulb"},
 		{"SHBDUO-1", "bulb"},
+		{"SHVIN-1", "bulb"},
+		{"SHCL-255", "bulb"},
+		{"SHCB-1", "bulb"},
 
 		// Unknown
 		{"UNKNOWN", "unknown"},

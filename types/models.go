@@ -155,7 +155,8 @@ func GetModelCategory(model string) string {
 		return string(DeviceTypeSensor)
 	case hasPrefix(model, "SBDW-"), hasPrefix(model, "SBMO-"), hasPrefix(model, "SBHT-"):
 		return string(DeviceTypeSensor)
-	case hasPrefix(model, "SHBLB-"), hasPrefix(model, "SHBDUO-"), hasPrefix(model, "SHVIN-"), hasPrefix(model, "SHCL-"):
+	case hasPrefix(model, "SHBLB-"), hasPrefix(model, "SHBDUO-"), hasPrefix(model, "SHVIN-"),
+		hasPrefix(model, "SHCL-"), hasPrefix(model, "SHCB-"):
 		return categoryBulb
 	case hasPrefix(model, "SHTRV-"), hasPrefix(model, "SBTR-"):
 		return "trv"
