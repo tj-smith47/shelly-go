@@ -152,6 +152,12 @@ func (h *HTTP) doCall(ctx context.Context, rpcReq RPCRequest) (json.RawMessage, 
 		return nil, h.parseHTTPError(resp.StatusCode, body)
 	}
 
+	// Record the verbatim device response for any caller that installed a
+	// RawCapture sink on the context (see WithRawCapture); a no-op otherwise.
+	// This is the single choke point for both Gen1 (REST) and Gen2+ (RPC), so
+	// one hook here surfaces the exact device response for every call.
+	captureRaw(ctx, body)
+
 	// Return raw body for both RPC and REST
 	// The RPC client will handle parsing RPC responses
 	return body, nil
