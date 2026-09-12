@@ -3,8 +3,8 @@ package transport
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -13,15 +13,58 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-// skipContainerTest skips tests that require Docker containers on platforms
-// where Docker is not available (macOS ARM64 GitHub Actions runners).
+var (
+	dockerProbeOnce sync.Once
+	dockerProbeErr  error
+)
+
+// probeDockerRunnable checks that Docker can actually start a container,
+// not just that a daemon is reachable. Some sandboxed/nested Docker hosts
+// (no reachable systemd for the cgroup driver) accept the API call but hang
+// or fail on container start, which a plain daemon ping would miss.
+func probeDockerRunnable() error {
+	dockerProbeOnce.Do(func() {
+		resultCh := make(chan error, 1)
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+				ContainerRequest: testcontainers.ContainerRequest{
+					Image:      "alpine:3",
+					Cmd:        []string{"true"},
+					WaitingFor: wait.ForExit(),
+				},
+				Started: true,
+			})
+			if container != nil {
+				container.Terminate(context.Background()) //nolint:errcheck // best-effort cleanup of the probe container
+			}
+			resultCh <- err
+		}()
+
+		// testcontainers' own start-failure cleanup can block past our
+		// context's deadline on a broken Docker host (e.g. no reachable
+		// systemd for the cgroup driver), so bound the wait independently
+		// of that goroutine rather than trusting it to return promptly.
+		select {
+		case dockerProbeErr = <-resultCh:
+		case <-time.After(20 * time.Second):
+			dockerProbeErr = errors.New("timed out waiting for Docker to start a probe container")
+		}
+	})
+	return dockerProbeErr
+}
+
+// skipContainerTest skips tests that require Docker containers when Docker
+// cannot actually run a container in this environment.
 func skipContainerTest(t *testing.T) {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("Skipping container test in short mode")
 	}
-	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
-		t.Skip("Skipping container test on macOS ARM64 (Docker not available in CI)")
+	if err := probeDockerRunnable(); err != nil {
+		t.Skipf("Skipping container test: Docker cannot start containers here: %v", err)
 	}
 }
 
