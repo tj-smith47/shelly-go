@@ -20,6 +20,10 @@ var (
 
 	// ErrWebSocketNotConnected indicates the WebSocket is not connected.
 	ErrWebSocketNotConnected = errors.New("websocket not connected")
+
+	// ErrWebSocketAlreadyListening indicates Listen was called while another
+	// Listen call is still running on the same WebSocket.
+	ErrWebSocketAlreadyListening = errors.New("websocket already listening")
 )
 
 // WebSocketDialer is an interface for establishing WebSocket connections.
@@ -50,17 +54,40 @@ type WebSocketConn interface {
 
 // WebSocket manages a WebSocket connection to the Shelly Cloud.
 type WebSocket struct {
-	dialer               WebSocketDialer
-	conn                 WebSocketConn
-	client               *Client
-	handlers             *EventHandlers
-	stopCh               chan struct{}
+	dialer   WebSocketDialer
+	conn     WebSocketConn
+	client   *Client
+	handlers *EventHandlers
+
+	// stopCh is closed by Close. A Connect that follows replaces it, so a
+	// Listen loop holding the closed channel still stops.
+	stopCh chan struct{}
+
+	// listening is the stop channel of the running Listen loop, nil when
+	// none runs.
+	listening chan struct{}
+
 	reconnectInterval    time.Duration
 	maxReconnectInterval time.Duration
 	pingInterval         time.Duration
 	readTimeout          time.Duration
-	mu                   sync.RWMutex
-	connected            bool
+
+	// connID counts successful connects, so a Listen loop can tell whether
+	// the current conn is still the one it was reading.
+	connID uint64
+
+	mu sync.RWMutex
+
+	// writeMu serializes writes. WebSocket connections allow one writer at a
+	// time.
+	writeMu sync.Mutex
+
+	// dialMu serializes dialing. The dialer is caller-supplied and must not
+	// run under mu, where it could not call back into the WebSocket.
+	dialMu sync.Mutex
+
+	connected bool
+	stopped   bool
 }
 
 // WebSocketOption is a functional option for configuring the WebSocket.
@@ -130,11 +157,30 @@ func (c *Client) ConnectWebSocket(ctx context.Context, opts ...WebSocketOption) 
 }
 
 // Connect establishes the WebSocket connection.
+//
+// Calling Connect after Close makes the WebSocket usable again: Listen can be
+// called anew.
 func (ws *WebSocket) Connect(ctx context.Context) error {
-	ws.mu.Lock()
-	defer ws.mu.Unlock()
+	return ws.connect(ctx, nil)
+}
 
-	if ws.connected {
+// connect dials unless already connected. A nil stop is a caller's Connect,
+// which revives a closed WebSocket. A non-nil stop is a Listen loop's
+// reconnect, which fails with ErrWebSocketClosed once that loop was stopped.
+func (ws *WebSocket) connect(ctx context.Context, stop chan struct{}) error {
+	ws.dialMu.Lock()
+	defer ws.dialMu.Unlock()
+
+	ws.mu.RLock()
+	stale := ws.staleLocked(stop)
+	connected := ws.connected
+	dialer := ws.dialer
+	ws.mu.RUnlock()
+
+	if stale {
+		return ErrWebSocketClosed
+	}
+	if connected {
 		return nil
 	}
 
@@ -145,20 +191,38 @@ func (ws *WebSocket) Connect(ctx context.Context) error {
 	}
 
 	// Connect
-	if ws.dialer == nil {
+	if dialer == nil {
 		return errors.New("no WebSocket dialer configured - external WebSocket library required")
 	}
 
-	conn, err := ws.dialer.Dial(ctx, wsURL, nil)
+	conn, err := dialer.Dial(ctx, wsURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to connect: %w", err)
 	}
 
+	ws.mu.Lock()
+	// Close may have run during the dial.
+	if ws.staleLocked(stop) {
+		ws.mu.Unlock()
+		conn.Close()
+		return ErrWebSocketClosed
+	}
+	if ws.stopped {
+		ws.stopCh = make(chan struct{})
+		ws.stopped = false
+	}
 	ws.conn = conn
+	ws.connID++
 	ws.connected = true
-	ws.stopCh = make(chan struct{})
+	ws.mu.Unlock()
 
 	return nil
+}
+
+// staleLocked reports whether the Listen loop owning stop has been stopped.
+// A nil stop is never stale. The caller holds mu.
+func (ws *WebSocket) staleLocked(stop chan struct{}) bool {
+	return stop != nil && (ws.stopped || ws.stopCh != stop)
 }
 
 // buildWebSocketURL builds the WebSocket URL for the Cloud API.
@@ -191,24 +255,22 @@ func (ws *WebSocket) buildWebSocketURL() (string, error) {
 	return wsURL, nil
 }
 
-// Close closes the WebSocket connection.
+// Close closes the WebSocket connection and stops a running Listen, whether
+// it is reading or waiting to reconnect. Calling Close again is a no-op.
 func (ws *WebSocket) Close() error {
 	ws.mu.Lock()
-	defer ws.mu.Unlock()
-
-	if !ws.connected {
-		return nil
+	if !ws.stopped {
+		close(ws.stopCh)
+		ws.stopped = true
 	}
-
-	// Signal stop
-	close(ws.stopCh)
-
-	// Close connection
-	if ws.conn != nil {
-		ws.conn.Close()
-	}
-
+	conn := ws.conn
+	ws.conn = nil
 	ws.connected = false
+	ws.mu.Unlock()
+
+	if conn != nil {
+		conn.Close()
+	}
 	return nil
 }
 
@@ -221,45 +283,97 @@ func (ws *WebSocket) IsConnected() bool {
 
 // Listen starts listening for events on the WebSocket connection.
 // This method blocks until the connection is closed or an error occurs.
-// It automatically reconnects on connection loss with exponential backoff.
+// It automatically reconnects on connection loss with exponential backoff:
+// every lost connection is followed by a wait, which starts at the reconnect
+// interval and doubles while connections keep dropping without delivering a
+// message.
+//
+// Only one Listen runs at a time: a call made while another is running returns
+// ErrWebSocketAlreadyListening. Close makes Listen return nil.
 func (ws *WebSocket) Listen(ctx context.Context) error {
+	ws.mu.Lock()
+	stop := ws.stopCh
+	if ws.listening == stop {
+		ws.mu.Unlock()
+		return ErrWebSocketAlreadyListening
+	}
+	ws.listening = stop
+	ws.mu.Unlock()
+
+	defer func() {
+		ws.mu.Lock()
+		// A loop stopped by Close may outlive a Connect and the Listen that
+		// follows; it must not clear that newer loop's mark.
+		if ws.listening == stop {
+			ws.listening = nil
+		}
+		ws.mu.Unlock()
+	}()
+
 	reconnectInterval := ws.reconnectInterval
+	// A server that accepts the connection and then drops it would otherwise
+	// be redialed in a tight loop.
+	dropInterval := ws.reconnectInterval
 
 	for {
-		if done, err := ws.checkStopConditions(ctx); done {
+		if done, err := checkStopConditions(ctx, stop); done {
 			return err
 		}
 
-		// Ensure connected
-		if !ws.IsConnected() {
-			newInterval, shouldContinue, err := ws.attemptConnect(ctx, reconnectInterval)
-			reconnectInterval = newInterval
-			if err != nil {
-				return err
-			}
-			if shouldContinue {
-				continue
-			}
+		newInterval, shouldContinue, err := ws.attemptConnect(ctx, stop, reconnectInterval)
+		reconnectInterval = newInterval
+		if err != nil {
+			return err
+		}
+		if shouldContinue {
+			continue
 		}
 
-		// Read and process messages
-		if err := ws.readLoop(ctx); err != nil {
-			ws.handleDisconnection()
-
-			if done, stopErr := ws.checkStopConditions(ctx); done {
-				return stopErr
-			}
+		// A failed read has already dropped the connection; the next pass
+		// reconnects or stops.
+		received, err := ws.readLoop(ctx, stop)
+		if err == nil {
+			continue
 		}
+		// A connection that delivered something starts the backoff over, but
+		// is still waited for: a server that sends one message, such as an
+		// authentication error, and hangs up would otherwise be redialed
+		// without pause.
+		if received {
+			dropInterval = ws.reconnectInterval
+		}
+		next, stopped, err := ws.waitBackoff(ctx, stop, dropInterval)
+		if stopped {
+			return err
+		}
+		dropInterval = next
+	}
+}
+
+// waitBackoff waits out interval and returns the doubled interval to use next
+// time, capped at the maximum. stopped is true when ctx or stop ended the wait.
+func (ws *WebSocket) waitBackoff(
+	ctx context.Context,
+	stop <-chan struct{},
+	interval time.Duration,
+) (next time.Duration, stopped bool, err error) {
+	select {
+	case <-time.After(interval):
+		return min(interval*2, ws.maxReconnectInterval), false, nil
+	case <-ctx.Done():
+		return interval, true, ctx.Err()
+	case <-stop:
+		return interval, true, nil
 	}
 }
 
 // checkStopConditions checks if the listener should stop.
 // Returns (true, error) if should stop, (false, nil) otherwise.
-func (ws *WebSocket) checkStopConditions(ctx context.Context) (bool, error) {
+func checkStopConditions(ctx context.Context, stop <-chan struct{}) (bool, error) {
 	select {
 	case <-ctx.Done():
 		return true, ctx.Err()
-	case <-ws.stopCh:
+	case <-stop:
 		return true, nil
 	default:
 		return false, nil
@@ -270,70 +384,83 @@ func (ws *WebSocket) checkStopConditions(ctx context.Context) (bool, error) {
 // Returns (newInterval, shouldContinue, error).
 func (ws *WebSocket) attemptConnect(
 	ctx context.Context,
+	stop chan struct{},
 	currentInterval time.Duration,
 ) (time.Duration, bool, error) {
-	if err := ws.Connect(ctx); err != nil {
-		// Wait before retry with exponential backoff
-		select {
-		case <-time.After(currentInterval):
-			newInterval := currentInterval * 2
-			if newInterval > ws.maxReconnectInterval {
-				newInterval = ws.maxReconnectInterval
-			}
-			return newInterval, true, nil
-		case <-ctx.Done():
-			return currentInterval, false, ctx.Err()
-		case <-ws.stopCh:
-			return currentInterval, false, nil
-		}
+	if err := ws.connect(ctx, stop); err != nil {
+		next, stopped, err := ws.waitBackoff(ctx, stop, currentInterval)
+		return next, !stopped, err
 	}
 	// Reset reconnect interval on successful connect
 	return ws.reconnectInterval, false, nil
 }
 
-// handleDisconnection cleans up after a connection loss.
-func (ws *WebSocket) handleDisconnection() {
+// handleDisconnection cleans up after the connection identified by connID was
+// lost. A connection made since then belongs to someone else and is left alone.
+func (ws *WebSocket) handleDisconnection(connID uint64) {
 	ws.mu.Lock()
-	ws.connected = false
-	if ws.conn != nil {
-		ws.conn.Close()
+	var conn WebSocketConn
+	if ws.connID == connID {
+		conn = ws.conn
 		ws.conn = nil
+		ws.connected = false
 	}
 	ws.mu.Unlock()
+
+	if conn != nil {
+		conn.Close()
+	}
 }
 
-// readLoop reads messages from the WebSocket connection.
-func (ws *WebSocket) readLoop(ctx context.Context) error {
+// readLoop reads messages from the WebSocket connection until it fails or the
+// Listen loop owning stop is stopped, then releases the connection it read.
+// received reports whether the connection delivered at least one message.
+func (ws *WebSocket) readLoop(ctx context.Context, stop chan struct{}) (received bool, err error) {
 	ws.mu.RLock()
+	stale := ws.staleLocked(stop)
 	conn := ws.conn
+	connID := ws.connID
 	ws.mu.RUnlock()
 
+	if stale {
+		return false, nil
+	}
 	if conn == nil {
-		return ErrWebSocketNotConnected
+		return false, ErrWebSocketNotConnected
 	}
 
+	received, err = ws.readMessages(ctx, stop, conn)
+	if err != nil {
+		ws.handleDisconnection(connID)
+	}
+	return received, err
+}
+
+// readMessages dispatches messages read from conn.
+func (ws *WebSocket) readMessages(
+	ctx context.Context,
+	stop <-chan struct{},
+	conn WebSocketConn,
+) (received bool, err error) {
 	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ws.stopCh:
-			return nil
-		default:
+		if done, err := checkStopConditions(ctx, stop); done {
+			return received, err
 		}
 
 		// Set read deadline
 		if err := conn.SetReadDeadline(time.Now().Add(ws.readTimeout)); err != nil {
-			return fmt.Errorf("failed to set read deadline: %w", err)
+			return received, fmt.Errorf("failed to set read deadline: %w", err)
 		}
 
 		// Read message
 		_, data, err := conn.ReadMessage()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				return ErrWebSocketClosed
+				return received, ErrWebSocketClosed
 			}
-			return fmt.Errorf("failed to read message: %w", err)
+			return received, fmt.Errorf("failed to read message: %w", err)
 		}
+		received = true
 
 		// Parse and dispatch message
 		ws.handleMessage(data)
@@ -387,7 +514,8 @@ func (ws *WebSocket) OnMessage(handler func(msg *WebSocketMessage)) {
 	ws.handlers.OnMessage(handler)
 }
 
-// SendMessage sends a message over the WebSocket connection.
+// SendMessage sends a message over the WebSocket connection. It is safe to
+// call from several goroutines; the writes happen one at a time.
 func (ws *WebSocket) SendMessage(ctx context.Context, msg any) error {
 	ws.mu.RLock()
 	conn := ws.conn
@@ -404,7 +532,9 @@ func (ws *WebSocket) SendMessage(ctx context.Context, msg any) error {
 		return fmt.Errorf("failed to marshal message: %w", err)
 	}
 
-	// Set write deadline
+	ws.writeMu.Lock()
+	defer ws.writeMu.Unlock()
+
 	if err := conn.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
 		return fmt.Errorf("failed to set write deadline: %w", err)
 	}

@@ -162,11 +162,11 @@ func (g *Group) SetBrightness(ctx context.Context, brightness int) BatchResults 
 
 // ForEach executes a function for each device in the group.
 // The function receives the device and can return an error to stop iteration.
+//
+// It iterates over the devices present when ForEach was called, so fn may add
+// to or remove from the group.
 func (g *Group) ForEach(fn func(factory.Device) error) error {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-
-	for _, d := range g.devices {
+	for _, d := range g.Devices() {
 		if err := fn(d); err != nil {
 			return err
 		}
@@ -175,12 +175,12 @@ func (g *Group) ForEach(fn func(factory.Device) error) error {
 }
 
 // Filter returns a new group containing only devices that match the predicate.
+//
+// It tests the devices present when Filter was called, so the predicate may
+// read or change the group.
 func (g *Group) Filter(predicate func(factory.Device) bool) *Group {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-
-	result := NewGroup(g.name + " (filtered)")
-	for _, d := range g.devices {
+	result := NewGroup(g.Name() + " (filtered)")
+	for _, d := range g.Devices() {
 		if predicate(d) {
 			result.Add(d)
 		}

@@ -14,6 +14,7 @@ import (
 const (
 	provisioningStatusSuccess = "success"
 	provisioningStatusSkipped = "skipped"
+	provisioningStatusFailed  = "failed"
 )
 
 // ProvisioningManager handles bulk device provisioning and configuration deployment.
@@ -316,7 +317,7 @@ func (pm *ProvisioningManager) provisionDevice(
 	// Get device info
 	device, _, ok := pm.fleet.AccountManager().GetDevice(deviceID)
 	if !ok {
-		result.Status = "failed"
+		result.Status = provisioningStatusFailed
 		result.Error = "device not found"
 		now := time.Now()
 		result.CompletedAt = &now
@@ -346,14 +347,22 @@ func (pm *ProvisioningManager) provisionDevice(
 	// For now, we simulate success
 	for _, action := range template.Actions {
 		if err := pm.fleet.SendCommand(ctx, deviceID, action.Type, action.Params); err != nil {
-			result.Status = "failed"
+			result.Status = provisioningStatusFailed
 			result.Error = fmt.Sprintf("action %s failed: %v", action.Type, err)
 			now := time.Now()
 			result.CompletedAt = &now
 			return result
 		}
 		if action.DelayAfter > 0 {
-			time.Sleep(action.DelayAfter)
+			select {
+			case <-time.After(action.DelayAfter):
+			case <-ctx.Done():
+				result.Status = provisioningStatusFailed
+				result.Error = fmt.Sprintf("action %s: %v", action.Type, ctx.Err())
+				now := time.Now()
+				result.CompletedAt = &now
+				return result
+			}
 		}
 	}
 

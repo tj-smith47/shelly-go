@@ -148,11 +148,21 @@ var (
 // If no generation is specified via WithGeneration, the factory
 // will probe the device to auto-detect its generation.
 func FromAddress(address string, opts ...Option) (Device, error) {
+	return fromAddress(address, resolveOptions(opts))
+}
+
+// resolveOptions applies opts once, on the calling goroutine.
+func resolveOptions(opts []Option) *Options {
 	options := newOptions()
 	for _, opt := range opts {
 		opt(options)
 	}
+	return options
+}
 
+// fromAddress only reads options, so one resolved value can serve many
+// concurrent calls.
+func fromAddress(address string, options *Options) (Device, error) {
 	// Normalize address
 	if !strings.HasPrefix(address, "http://") && !strings.HasPrefix(address, "https://") {
 		address = "http://" + address
@@ -175,10 +185,7 @@ func FromAddress(address string, opts ...Option) (Device, error) {
 
 // FromDiscovery creates a device from a discovery result.
 func FromDiscovery(d *discovery.DiscoveredDevice, opts ...Option) (Device, error) {
-	options := newOptions()
-	for _, opt := range opts {
-		opt(options)
-	}
+	options := resolveOptions(opts)
 
 	address := d.URL()
 
@@ -187,10 +194,7 @@ func FromDiscovery(d *discovery.DiscoveredDevice, opts ...Option) (Device, error
 
 // FromInfo creates a device from device info.
 func FromInfo(info *discovery.DeviceInfo, address string, opts ...Option) (Device, error) {
-	options := newOptions()
-	for _, opt := range opts {
-		opt(options)
-	}
+	options := resolveOptions(opts)
 
 	// Normalize address
 	if !strings.HasPrefix(address, "http://") && !strings.HasPrefix(address, "https://") {
@@ -293,9 +297,8 @@ func MustFromDiscovery(d *discovery.DiscoveredDevice, opts ...Option) Device {
 
 // BatchFromAddresses creates devices from multiple addresses concurrently.
 //
-// Each address applies opts to its own Options value on its own goroutine, so
-// a custom Option that touches state outside the Options it is given must be
-// safe for concurrent use. The With* options in this package are.
+// The options are applied once, before any device is contacted, so a custom
+// Option is never run concurrently.
 func BatchFromAddresses(addresses []string, opts ...Option) ([]Device, []error) {
 	devices := make([]Device, len(addresses))
 	errs := make([]error, len(addresses))
@@ -308,9 +311,11 @@ func BatchFromAddresses(addresses []string, opts ...Option) ([]Device, []error) 
 
 	results := make(chan result, len(addresses))
 
+	options := resolveOptions(opts)
+
 	for i, addr := range addresses {
 		go func(index int, address string) {
-			device, err := FromAddress(address, opts...)
+			device, err := fromAddress(address, options)
 			results <- result{index: index, device: device, err: err}
 		}(i, addr)
 	}

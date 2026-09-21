@@ -286,6 +286,7 @@ func TestMQTT_onConnectionLostReconnect(t *testing.T) {
 
 func TestMQTT_onConnectionLostNoReconnect(t *testing.T) {
 	m := NewMQTT("tcp://192.168.1.10:1883", "shellyplus1pm-abc123", WithReconnect(false))
+	m.setState(StateConnected)
 
 	stateChanges := make([]ConnectionState, 0)
 	m.OnStateChange(func(state ConnectionState) {
@@ -297,7 +298,7 @@ func TestMQTT_onConnectionLostNoReconnect(t *testing.T) {
 
 	// Should be in disconnected state
 	if len(stateChanges) == 0 {
-		t.Error("state change callback not called")
+		t.Fatal("state change callback not called")
 	}
 	if stateChanges[len(stateChanges)-1] != StateDisconnected {
 		t.Errorf("expected StateDisconnected, got %v", stateChanges[len(stateChanges)-1])
@@ -387,8 +388,8 @@ func TestMQTT_isClosed(t *testing.T) {
 
 // mockMessage implements mqtt.Message interface for testing
 type mockMessage struct {
-	payload []byte
 	topic   string
+	payload []byte
 }
 
 func (m *mockMessage) Duplicate() bool   { return false }
@@ -470,9 +471,9 @@ func TestMQTT_handleResponseNoPending(t *testing.T) {
 func TestMQTT_handleNotificationWithMock(t *testing.T) {
 	m := NewMQTT("tcp://192.168.1.10:1883", "shellyplus1pm-abc123")
 
-	var received json.RawMessage
+	received := make(chan json.RawMessage, 1)
 	m.Subscribe(func(data json.RawMessage) {
-		received = data
+		received <- data
 	})
 
 	msg := &mockMessage{
@@ -482,7 +483,9 @@ func TestMQTT_handleNotificationWithMock(t *testing.T) {
 
 	m.handleNotification(nil, msg)
 
-	if received == nil {
+	select {
+	case <-received:
+	case <-time.After(5 * time.Second):
 		t.Error("notification handler not called")
 	}
 }
@@ -542,6 +545,7 @@ func TestMQTT_onConnectWithMock(t *testing.T) {
 	})
 
 	client := &mockClient{connected: true}
+	m.client = client
 	m.onConnect(client)
 
 	// Should be in connected state
@@ -560,6 +564,7 @@ func TestMQTT_onConnectWithNotificationHandler(t *testing.T) {
 	m.Subscribe(func(data json.RawMessage) {})
 
 	client := &mockClient{connected: true}
+	m.client = client
 	m.onConnect(client)
 
 	// Should be in connected state

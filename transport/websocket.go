@@ -2,14 +2,19 @@ package transport
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
+
+	"github.com/tj-smith47/shelly-go/internal/serial"
 )
 
 // WebSocket is a WebSocket transport for Shelly devices.
@@ -22,22 +27,41 @@ import (
 //   - Request/response correlation
 //   - Ping/pong keepalive
 type WebSocket struct {
-	opts           *options
-	conn           *websocket.Conn
-	notifyHandler  NotificationHandler
-	pending        map[int64]chan *rpcResponse
-	stopPing       chan struct{}
-	url            string
-	src            string
-	stateCallbacks []func(ConnectionState)
-	requestID      atomic.Int64
-	state          ConnectionState
-	mu             sync.RWMutex
-	notifyMu       sync.RWMutex
-	stateMu        sync.RWMutex
-	connMu         sync.Mutex
-	pendingMu      sync.Mutex
-	closed         bool
+	done          chan struct{}
+	opts          *options
+	session       *wsSession
+	notifyHandler NotificationHandler
+	pending       map[int64]chan *rpcResponse
+	url           string
+	src           string
+	notifications serial.Queue[[]byte]
+	connState
+	requestID atomic.Int64
+	mu        sync.RWMutex
+	notifyMu  sync.RWMutex
+	connMu    sync.Mutex
+	pendingMu sync.Mutex
+	closed    bool
+}
+
+// wsSession is one established connection. The read and ping loops are handed
+// the session they were started for and never look at the transport's current
+// one, so a loop left over from an earlier connection cannot tear down, read
+// from or keep alive its successor.
+type wsSession struct {
+	conn     *websocket.Conn
+	stopPing chan struct{}
+	writeMu  sync.Mutex
+	stopOnce sync.Once
+}
+
+// stop ends the session's ping loop and closes its connection. It is safe to
+// call from several goroutines.
+func (s *wsSession) stop() {
+	s.stopOnce.Do(func() {
+		close(s.stopPing)
+		s.conn.Close()
+	})
 }
 
 // rpcResponse represents a JSON-RPC response.
@@ -97,30 +121,42 @@ func NewWebSocket(url string, opts ...Option) *WebSocket {
 	applyOptions(options, opts)
 
 	return &WebSocket{
-		url:            url,
-		src:            fmt.Sprintf("shelly-go-%d", time.Now().UnixNano()),
-		opts:           options,
-		state:          StateDisconnected,
-		pending:        make(map[int64]chan *rpcResponse),
-		stateCallbacks: make([]func(ConnectionState), 0),
+		url:     url,
+		src:     fmt.Sprintf("shelly-go-%d", time.Now().UnixNano()),
+		opts:    options,
+		pending: make(map[int64]chan *rpcResponse),
+		done:    make(chan struct{}),
 	}
 }
 
 // Connect establishes the WebSocket connection.
 // This must be called before making any RPC calls.
 func (w *WebSocket) Connect(ctx context.Context) error {
+	_, err := w.connect(ctx)
+	return err
+}
+
+// connect returns the current session, dialing first when there is none.
+func (w *WebSocket) connect(ctx context.Context) (*wsSession, error) {
+	// Registered first so it runs last: state listeners are told only after
+	// connMu is released, and may therefore call Connect or Close themselves.
+	defer w.flushState()
+
 	w.connMu.Lock()
 	defer w.connMu.Unlock()
 
 	if w.isClosed() {
-		return fmt.Errorf("websocket is closed")
+		return nil, fmt.Errorf("websocket is closed")
 	}
 
-	if w.conn != nil {
-		return nil // already connected
+	if w.session != nil {
+		// A reconnect attempt that finds the connection already restored
+		// must not leave the state at reconnecting.
+		w.queueState(StateConnected)
+		return w.session, nil
 	}
 
-	w.setState(StateConnecting)
+	w.queueState(StateConnecting)
 
 	dialer := websocket.Dialer{
 		TLSClientConfig:  w.opts.tlsConfig,
@@ -138,23 +174,21 @@ func (w *WebSocket) Connect(ctx context.Context) error {
 		resp.Body.Close()
 	}
 	if err != nil {
-		w.setState(StateDisconnected)
-		return fmt.Errorf("websocket dial: %w", err)
+		w.queueState(StateDisconnected)
+		return nil, fmt.Errorf("websocket dial: %w", err)
 	}
 
-	w.conn = conn
-	w.stopPing = make(chan struct{})
-	w.setState(StateConnected)
+	session := &wsSession{conn: conn, stopPing: make(chan struct{})}
+	w.session = session
+	w.queueState(StateConnected)
 
-	// Start message reader
-	go w.readLoop()
+	go w.readLoop(session)
 
-	// Start ping loop if enabled
 	if w.opts.pingInterval > 0 {
-		go w.pingLoop()
+		go w.pingLoop(session)
 	}
 
-	return nil
+	return session, nil
 }
 
 // Call executes an RPC method call over WebSocket.
@@ -167,10 +201,9 @@ func (w *WebSocket) Call(ctx context.Context, rpcReq RPCRequest) (json.RawMessag
 	}
 
 	// Auto-connect if not connected
-	if w.conn == nil {
-		if err := w.Connect(ctx); err != nil {
-			return nil, err
-		}
+	session, err := w.connect(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	// Build request body from RPCRequest interface
@@ -183,8 +216,8 @@ func (w *WebSocket) Call(ctx context.Context, rpcReq RPCRequest) (json.RawMessag
 	// Unmarshal params from json.RawMessage and add to request
 	if params := rpcReq.GetParams(); len(params) > 0 {
 		var p any
-		if err := json.Unmarshal(params, &p); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal params: %w", err)
+		if unmarshalErr := json.Unmarshal(params, &p); unmarshalErr != nil {
+			return nil, fmt.Errorf("failed to unmarshal params: %w", unmarshalErr)
 		}
 		reqBody["params"] = p
 	}
@@ -219,9 +252,12 @@ func (w *WebSocket) Call(ctx context.Context, rpcReq RPCRequest) (json.RawMessag
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	w.connMu.Lock()
-	err = w.conn.WriteMessage(websocket.TextMessage, data)
-	w.connMu.Unlock()
+	// Written to the session this call started with: if the connection drops
+	// meanwhile the write fails, where the transport's current session could
+	// by now be nil.
+	session.writeMu.Lock()
+	err = session.conn.WriteMessage(websocket.TextMessage, data)
+	session.writeMu.Unlock()
 	if err != nil {
 		return nil, fmt.Errorf("write message: %w", err)
 	}
@@ -230,7 +266,12 @@ func (w *WebSocket) Call(ctx context.Context, rpcReq RPCRequest) (json.RawMessag
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
+	case <-w.done:
+		return nil, errors.New("WebSocket transport closed while waiting for response")
 	case resp := <-respChan:
+		if resp == nil {
+			return nil, errors.New("connection lost while waiting for response")
+		}
 		if resp.Error != nil {
 			return nil, fmt.Errorf("rpc error %d: %s", resp.Error.Code, resp.Error.Message)
 		}
@@ -238,29 +279,12 @@ func (w *WebSocket) Call(ctx context.Context, rpcReq RPCRequest) (json.RawMessag
 	}
 }
 
-// readLoop reads messages from the WebSocket connection.
-func (w *WebSocket) readLoop() {
+// readLoop reads messages from one session until it fails or is stopped.
+func (w *WebSocket) readLoop(session *wsSession) {
 	for {
-		if w.isClosed() {
-			return
-		}
-
-		w.connMu.Lock()
-		conn := w.conn
-		w.connMu.Unlock()
-
-		if conn == nil {
-			return
-		}
-
-		_, message, err := conn.ReadMessage()
+		_, message, err := session.conn.ReadMessage()
 		if err != nil {
-			if w.isClosed() {
-				return
-			}
-
-			// Handle reconnection
-			w.handleDisconnect(err)
+			w.handleDisconnect(session)
 			return
 		}
 
@@ -287,30 +311,41 @@ func (w *WebSocket) handleMessage(message []byte) {
 	// Try to parse as notification (has "method" but no "id")
 	var notif rpcNotification
 	if err := json.Unmarshal(message, &notif); err == nil && notif.Method != "" {
-		w.notifyMu.RLock()
-		handler := w.notifyHandler
-		w.notifyMu.RUnlock()
-
-		if handler != nil {
-			handler(message)
-		}
+		// Delivered off this goroutine: it is the only one that can hand a
+		// response to Call, so a handler that makes a call from here would
+		// wait for a reply nobody can deliver. The queue keeps notifications
+		// in arrival order and the handler from overlapping itself.
+		w.notifications.Add(message)
+		go w.notifications.Drain(w.notify)
 	}
 }
 
-// handleDisconnect handles a WebSocket disconnection.
-func (w *WebSocket) handleDisconnect(_ error) {
+// notify passes one notification to the handler subscribed at that moment.
+func (w *WebSocket) notify(message []byte) {
+	w.notifyMu.RLock()
+	handler := w.notifyHandler
+	w.notifyMu.RUnlock()
+
+	if handler != nil {
+		handler(message)
+	}
+}
+
+// handleDisconnect tears down a failed session. A session that has already
+// been replaced or closed is only stopped: its successor's pending calls and
+// state are not this loop's to touch.
+func (w *WebSocket) handleDisconnect(session *wsSession) {
+	session.stop()
+
 	w.connMu.Lock()
-	if w.conn != nil {
-		w.conn.Close()
-		w.conn = nil
+	current := w.session == session
+	if current {
+		w.session = nil
 	}
 	w.connMu.Unlock()
 
-	// Close stop ping channel
-	select {
-	case <-w.stopPing:
-	default:
-		close(w.stopPing)
+	if !current || w.isClosed() {
+		return
 	}
 
 	// Cancel all pending requests
@@ -323,8 +358,7 @@ func (w *WebSocket) handleDisconnect(_ error) {
 
 	w.setState(StateDisconnected)
 
-	// Attempt reconnection if enabled
-	if w.opts.reconnect && !w.isClosed() {
+	if w.opts.reconnect {
 		go w.reconnect()
 	}
 }
@@ -349,33 +383,31 @@ func (w *WebSocket) reconnect() {
 			return
 		}
 
-		// Exponential backoff
-		time.Sleep(delay)
+		// Close must not have to wait out the backoff.
+		select {
+		case <-w.done:
+			return
+		case <-time.After(delay):
+		}
 		delay = time.Duration(float64(delay) * w.opts.retryBackoff)
 	}
 
-	w.setState(StateDisconnected)
+	if !w.isClosed() {
+		w.setState(StateDisconnected)
+	}
 }
 
-// pingLoop sends periodic pings to keep the connection alive.
-func (w *WebSocket) pingLoop() {
+// pingLoop sends periodic pings to keep one session alive.
+func (w *WebSocket) pingLoop(session *wsSession) {
 	ticker := time.NewTicker(w.opts.pingInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-w.stopPing:
+		case <-session.stopPing:
 			return
 		case <-ticker.C:
-			w.connMu.Lock()
-			conn := w.conn
-			w.connMu.Unlock()
-
-			if conn == nil {
-				return
-			}
-
-			err := conn.WriteControl(
+			err := session.conn.WriteControl(
 				websocket.PingMessage,
 				[]byte{},
 				time.Now().Add(w.opts.pongTimeout),
@@ -408,40 +440,6 @@ func (w *WebSocket) Unsubscribe() error {
 	return nil
 }
 
-// State returns the current connection state.
-func (w *WebSocket) State() ConnectionState {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	return w.state
-}
-
-// OnStateChange registers a callback for connection state changes.
-//
-// Callbacks run on whichever goroutine changed the state (Connect, Close, or
-// the transport's background reconnect handling), so a callback can run
-// concurrently with itself and must be safe for concurrent use.
-func (w *WebSocket) OnStateChange(callback func(ConnectionState)) {
-	w.stateMu.Lock()
-	defer w.stateMu.Unlock()
-	w.stateCallbacks = append(w.stateCallbacks, callback)
-}
-
-// setState updates the connection state and notifies callbacks.
-func (w *WebSocket) setState(state ConnectionState) {
-	w.mu.Lock()
-	w.state = state
-	w.mu.Unlock()
-
-	w.stateMu.RLock()
-	callbacks := make([]func(ConnectionState), len(w.stateCallbacks))
-	copy(callbacks, w.stateCallbacks)
-	w.stateMu.RUnlock()
-
-	for _, cb := range callbacks {
-		cb(state)
-	}
-}
-
 // isClosed returns true if the transport is closed.
 func (w *WebSocket) isClosed() bool {
 	w.mu.RLock()
@@ -457,33 +455,31 @@ func (w *WebSocket) Close() error {
 		return nil
 	}
 	w.closed = true
+	close(w.done)
 	w.mu.Unlock()
 
-	// Stop ping loop (only if it was started)
-	if w.stopPing != nil {
-		select {
-		case <-w.stopPing:
-		default:
-			close(w.stopPing)
-		}
-	}
-
-	// Close connection
 	w.connMu.Lock()
-	if w.conn != nil {
-		err := w.conn.WriteControl(
+	session := w.session
+	w.session = nil
+	w.connMu.Unlock()
+
+	var closeErr error
+	if session != nil {
+		closeErr = session.conn.WriteControl(
 			websocket.CloseMessage,
 			websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
 			time.Now().Add(time.Second),
 		)
-		if err == nil {
-			w.conn.Close()
-		}
-		w.conn = nil
+		session.stop()
 	}
-	w.connMu.Unlock()
 
 	w.setState(StateClosed)
+
+	// A peer that has already gone away cannot be sent a close frame; the
+	// transport is closed all the same, so that is not a failure to report.
+	if closeErr != nil && !errors.Is(closeErr, net.ErrClosed) && !errors.Is(closeErr, websocket.ErrCloseSent) {
+		return fmt.Errorf("send close frame: %w", closeErr)
+	}
 	return nil
 }
 
@@ -495,23 +491,5 @@ func basicAuth(username, password string) string {
 
 // base64Encode encodes data as base64.
 func base64Encode(data []byte) string {
-	const encoding = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-	result := make([]byte, 0, (len(data)+2)/3*4)
-
-	for i := 0; i < len(data); i += 3 {
-		var n uint32
-		switch len(data) - i {
-		case 1:
-			n = uint32(data[i]) << 16
-			result = append(result, encoding[n>>18], encoding[(n>>12)&0x3f], '=', '=')
-		case 2:
-			n = uint32(data[i])<<16 | uint32(data[i+1])<<8
-			result = append(result, encoding[n>>18], encoding[(n>>12)&0x3f], encoding[(n>>6)&0x3f], '=')
-		default:
-			n = uint32(data[i])<<16 | uint32(data[i+1])<<8 | uint32(data[i+2])
-			result = append(result, encoding[n>>18], encoding[(n>>12)&0x3f], encoding[(n>>6)&0x3f], encoding[n&0x3f])
-		}
-	}
-
-	return string(result)
+	return base64.StdEncoding.EncodeToString(data)
 }

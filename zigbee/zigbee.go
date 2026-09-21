@@ -304,7 +304,7 @@ func (z *Zigbee) PairToNetwork(ctx context.Context, timeout, pollInterval time.D
 // Scanner provides methods to discover Zigbee-capable Shelly devices on the network.
 type Scanner struct {
 	// HTTPClient is the HTTP client to use for device probing.
-	// If nil, a default client with 5-second timeout is used.
+	// If nil, the HTTP transport's default client is used.
 	HTTPClient *http.Client
 
 	// Concurrency controls how many devices are probed in parallel.
@@ -340,10 +340,6 @@ func NewScanner() *Scanner {
 //	    }
 //	}
 func (s *Scanner) DiscoverDevices(ctx context.Context, addresses []string) ([]DiscoveredDevice, error) {
-	if s.HTTPClient == nil {
-		s.HTTPClient = &http.Client{Timeout: 5 * time.Second}
-	}
-
 	concurrency := s.Concurrency
 	if concurrency <= 0 {
 		concurrency = 10
@@ -356,19 +352,23 @@ func (s *Scanner) DiscoverDevices(ctx context.Context, addresses []string) ([]Di
 		wg      sync.WaitGroup
 	)
 
+probing:
 	for _, addr := range addresses {
+		// Checked on its own first: with a free slot and a canceled context
+		// both ready, select would pick either one.
+		if ctx.Err() != nil {
+			break
+		}
 		select {
 		case <-ctx.Done():
-			break
+			break probing
 		case sem <- struct{}{}:
 		}
 
-		wg.Add(1)
-		go func(address string) {
-			defer wg.Done()
+		wg.Go(func() {
 			defer func() { <-sem }()
 
-			device, err := s.probeDevice(ctx, address)
+			device, err := s.probeDevice(ctx, addr)
 			if err != nil {
 				return // Device unreachable or not a Shelly device
 			}
@@ -376,7 +376,7 @@ func (s *Scanner) DiscoverDevices(ctx context.Context, addresses []string) ([]Di
 			mu.Lock()
 			devices = append(devices, *device)
 			mu.Unlock()
-		}(addr)
+		})
 	}
 
 	wg.Wait()
@@ -403,7 +403,7 @@ func (s *Scanner) DiscoverZigbeeDevices(ctx context.Context, addresses []string)
 // probeDevice probes a single device to determine its Zigbee capabilities.
 func (s *Scanner) probeDevice(ctx context.Context, address string) (*DiscoveredDevice, error) {
 	// Create transport and client
-	httpTransport := transport.NewHTTP(address)
+	httpTransport := transport.NewHTTP(address, transport.WithClient(s.HTTPClient))
 	client := rpc.NewClient(httpTransport)
 	defer func() { _ = httpTransport.Close() }()
 

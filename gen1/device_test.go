@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -824,4 +825,39 @@ func TestCheckForUpdateInvalidJSON(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for invalid JSON")
 	}
+}
+
+// staticTransport answers every call with the same body and keeps no state,
+// so it is safe to share between goroutines.
+type staticTransport []byte
+
+func (s staticTransport) Call(context.Context, transport.RPCRequest) (json.RawMessage, error) {
+	return json.RawMessage(s), nil
+}
+
+func (s staticTransport) Close() error { return nil }
+
+func TestGetDeviceInfo_ConcurrentWithClearCache(t *testing.T) {
+	device := NewDevice(staticTransport(`{"type":"SHSW-1","mac":"AABBCCDDEEFF"}`))
+
+	// Reading the cache after releasing its lock is a nil dereference when
+	// ClearCache runs in between, and a data race either way.
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Go(func() {
+			for range 200 {
+				info, err := device.GetDeviceInfo(context.Background())
+				if err != nil || info == nil || info.MAC != "AABBCCDDEEFF" {
+					t.Errorf("GetDeviceInfo() = %+v, %v", info, err)
+					return
+				}
+			}
+		})
+		wg.Go(func() {
+			for range 200 {
+				device.ClearCache()
+			}
+		})
+	}
+	wg.Wait()
 }

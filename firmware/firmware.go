@@ -455,9 +455,14 @@ func (m *Manager) GetFirmwareURL(ctx context.Context, stage string) (string, err
 
 // StagedRollout manages percentage-based firmware rollouts across device fleets.
 type StagedRollout struct {
-	Options             *UpdateOptions
-	OnProgress          func(device Device, result *UpdateResult, completed, total int)
-	OnComplete          func(results []UpdateResult)
+	Options    *UpdateOptions
+	OnProgress func(device Device, result *UpdateResult, completed, total int)
+	OnComplete func(results []UpdateResult)
+
+	// cancelCh is made by Start and closed by Cancel, so that Cancel also ends
+	// the wait between batches.
+	cancelCh chan struct{}
+
 	Devices             []Device
 	Results             []UpdateResult
 	Percentage          int
@@ -489,6 +494,13 @@ func NewStagedRollout(devices []Device, percentage int, opts *UpdateOptions) *St
 
 // TargetDeviceCount returns the number of devices that will be updated based on percentage.
 func (s *StagedRollout) TargetDeviceCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.targetCount()
+}
+
+// targetCount is TargetDeviceCount for callers that already hold s.mu.
+func (s *StagedRollout) targetCount() int {
 	count := len(s.Devices) * s.Percentage / 100
 	if count == 0 && s.Percentage > 0 && len(s.Devices) > 0 {
 		count = 1 // At least one device if percentage > 0
@@ -525,6 +537,8 @@ func (s *StagedRollout) Start(ctx context.Context) ([]UpdateResult, error) {
 	}
 	s.inProgress = true
 	s.canceled = false
+	cancelCh := make(chan struct{})
+	s.cancelCh = cancelCh
 	s.Results = []UpdateResult{}
 	s.mu.Unlock()
 
@@ -543,8 +557,10 @@ func (s *StagedRollout) Start(ctx context.Context) ([]UpdateResult, error) {
 	total := len(selected)
 	completed := 0
 
-	// Process in batches
-	for i := 0; i < len(selected); i += s.BatchSize {
+	// A batch size below one would never advance through the devices.
+	batchSize := max(s.BatchSize, 1)
+
+	for i := 0; i < len(selected); i += batchSize {
 		// Check for cancellation or context done
 		select {
 		case <-ctx.Done():
@@ -560,10 +576,7 @@ func (s *StagedRollout) Start(ctx context.Context) ([]UpdateResult, error) {
 		s.mu.Unlock()
 
 		// Get batch
-		end := i + s.BatchSize
-		if end > len(selected) {
-			end = len(selected)
-		}
+		end := min(i+batchSize, len(selected))
 		batch := selected[i:end]
 
 		// Update batch
@@ -586,6 +599,8 @@ func (s *StagedRollout) Start(ctx context.Context) ([]UpdateResult, error) {
 			select {
 			case <-ctx.Done():
 				return s.Results, ctx.Err()
+			case <-cancelCh:
+				return s.Results, nil
 			case <-time.After(s.DelayBetweenBatches):
 			}
 		}
@@ -598,11 +613,20 @@ func (s *StagedRollout) Start(ctx context.Context) ([]UpdateResult, error) {
 	return s.Results, nil
 }
 
-// Cancel cancels the staged rollout.
+// Cancel cancels the staged rollout. A batch that is being updated finishes;
+// no further batch is started and a wait between batches ends at once, so
+// Start returns the results gathered so far. Calling Cancel again, or when no
+// rollout is running, does nothing.
 func (s *StagedRollout) Cancel() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.canceled {
+		return
+	}
 	s.canceled = true
+	if s.cancelCh != nil {
+		close(s.cancelCh)
+	}
 }
 
 // IsInProgress returns true if a rollout is in progress.
@@ -658,7 +682,7 @@ func (s *StagedRollout) GetStatus() RolloutStatus {
 	status := RolloutStatus{
 		InProgress:       s.inProgress,
 		TotalDevices:     len(s.Devices),
-		TargetDevices:    s.TargetDeviceCount(),
+		TargetDevices:    s.targetCount(),
 		CompletedDevices: len(s.Results),
 		Percentage:       s.Percentage,
 	}

@@ -119,6 +119,13 @@ go test -tags=integration ./...
 3. **Context propagation** - All operations should accept `context.Context`
 4. **Error handling** - Use error wrapping with `%w`, define sentinel errors
 5. **Thread safety** - Document concurrency guarantees, protect shared state
+   - A function the caller supplies (callback, handler, hook, option, func-typed field) is never run concurrently with itself and never while an SDK lock is held. Deliver through `internal/serial.Queue`, and add a test whose callback mutates unlocked state so `go test -race` guards the guarantee.
+   - A notification handler never runs on the goroutine that also delivers RPC responses (`queue.Add(msg); go queue.Drain(deliver)`), so a handler may make a `Call`.
+   - A background goroutine receives its connection and stop channel as arguments; it never reads them from struct fields that a later `Connect`/`Start` replaces.
+   - No waiting (timer, dial, I/O) while holding a mutex that other callers queue on, and every wait also selects on the stop/done channel so `Close`/`Stop`/`Cancel` ends it.
+   - Websocket writes go through one write mutex.
+   - Never change a slice, map or struct the caller passed in or an injected dependency returned; work on a copy.
+   - `StateClosed` is final: nothing is reported after it.
 6. **Future-proofing** - Use `RawFields map[string]json.RawMessage` for extensibility
 
 ### Code Style

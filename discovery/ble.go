@@ -9,6 +9,7 @@ import (
 
 	"tinygo.org/x/bluetooth"
 
+	"github.com/tj-smith47/shelly-go/internal/serial"
 	"github.com/tj-smith47/shelly-go/types"
 )
 
@@ -67,14 +68,23 @@ type BLEDiscoverer struct {
 	Scanner       BLEScanner
 	devices       map[string]*BLEDiscoveredDevice
 	devicesCh     chan DiscoveredDevice
-	stopCh        chan struct{}
+	cancel        context.CancelFunc
 	OnDeviceFound func(*BLEDiscoveredDevice)
 	FilterPrefix  string
+	found         serial.Queue[*BLEDiscoveredDevice]
 	ScanDuration  time.Duration
+	rescanDelay   time.Duration
 	mu            sync.RWMutex
 	running       bool
 	IncludeBTHome bool
 }
+
+// defaultBLEScanDuration is the length of one scan when ScanDuration is unset.
+const defaultBLEScanDuration = 10 * time.Second
+
+// defaultBLERescanDelay is how long continuous discovery waits before the
+// next scan when a scan failed or returned before its time was up.
+const defaultBLERescanDelay = time.Second
 
 // BLEScanner is the interface for platform-specific BLE scanning.
 // The default implementation uses tinygo.org/x/bluetooth.
@@ -86,14 +96,20 @@ type BLEScanner interface {
 	Stop() error
 }
 
+// bleScanAdapter is the part of *bluetooth.Adapter the scanner needs. Tests
+// supply a fake so no real Bluetooth hardware is touched.
+type bleScanAdapter interface {
+	Scan(callback func(*bluetooth.Adapter, bluetooth.ScanResult)) error
+	StopScan() error
+}
+
 // tinyGoBLEScanner implements BLEScanner using tinygo.org/x/bluetooth.
 // This is the default scanner used by BLEDiscoverer.
 type tinyGoBLEScanner struct {
-	adapter  *bluetooth.Adapter
-	callback func(*BLEAdvertisement)
-	stopCh   chan struct{}
-	mu       sync.Mutex
-	running  bool
+	adapter bleScanAdapter
+	stopCh  chan struct{}
+	mu      sync.Mutex
+	running bool
 }
 
 // newTinyGoBLEScanner creates a new BLE scanner using the TinyGo bluetooth library.
@@ -120,8 +136,10 @@ func (s *tinyGoBLEScanner) Start(ctx context.Context, callback func(*BLEAdvertis
 		s.mu.Unlock()
 		return nil
 	}
-	s.callback = callback
-	s.stopCh = make(chan struct{})
+	// Everything below works on this scan's own stop channel. A later Start
+	// replaces s.stopCh, and this call must not wait on or end that scan.
+	stop := make(chan struct{})
+	s.stopCh = stop
 	s.running = true
 	s.mu.Unlock()
 
@@ -130,19 +148,22 @@ func (s *tinyGoBLEScanner) Start(ctx context.Context, callback func(*BLEAdvertis
 	errCh := make(chan error, 1)
 
 	// Run scan in goroutine
-	go s.runScan(scanStarted, errCh)
+	go s.runScan(stop, callback, scanStarted, errCh)
 
 	// Wait for scan to start
-	if err := s.waitForScanStart(ctx, scanStarted, errCh); err != nil {
+	if err := s.waitForScanStart(ctx, stop, scanStarted, errCh); err != nil {
 		return err
 	}
 
 	// Scan started, now wait for completion
-	return s.waitForCompletion(ctx, errCh)
+	return s.waitForCompletion(ctx, stop, errCh)
 }
 
-// runScan runs the BLE scan in a goroutine.
-func (s *tinyGoBLEScanner) runScan(scanStarted chan<- struct{}, errCh chan<- error) {
+// runScan runs the BLE scan in a goroutine. Advertisements go to callback
+// until stop is closed.
+func (s *tinyGoBLEScanner) runScan(
+	stop <-chan struct{}, callback func(*BLEAdvertisement), scanStarted chan<- struct{}, errCh chan<- error,
+) {
 	// Signal that we're about to call Scan
 	select {
 	case scanStarted <- struct{}{}:
@@ -156,23 +177,26 @@ func (s *tinyGoBLEScanner) runScan(scanStarted chan<- struct{}, errCh chan<- err
 		default:
 		}
 
-		s.mu.Lock()
-		cb := s.callback
-		s.mu.Unlock()
-
-		if cb == nil {
+		if callback == nil {
 			return
 		}
 
-		adv := s.convertAdvertisement(device)
-		cb(adv)
+		// The adapter may still report results for a moment after this scan
+		// was stopped; the caller no longer expects them.
+		select {
+		case <-stop:
+			return
+		default:
+		}
+
+		callback(s.convertAdvertisement(device))
 	})
 	errCh <- err
 }
 
 // waitForScanStart waits for the scan to start or returns an error.
 func (s *tinyGoBLEScanner) waitForScanStart(
-	ctx context.Context, scanStarted <-chan struct{}, errCh <-chan error,
+	ctx context.Context, stop chan struct{}, scanStarted <-chan struct{}, errCh <-chan error,
 ) error {
 	startTimer := time.NewTimer(scanStartTimeout)
 	defer startTimer.Stop()
@@ -181,31 +205,27 @@ func (s *tinyGoBLEScanner) waitForScanStart(
 	case <-scanStarted:
 		return nil // Scan started successfully
 	case <-startTimer.C:
-		s.Stop() //nolint:errcheck // Best effort
+		s.stopScan(stop) //nolint:errcheck // Best effort
 		return &BLEError{Message: "BLE scan failed to start - Bluetooth may be busy or unavailable"}
 	case <-ctx.Done():
-		s.Stop() //nolint:errcheck // Best effort
+		s.stopScan(stop) //nolint:errcheck // Best effort
 		return ctx.Err()
 	case err := <-errCh:
-		s.mu.Lock()
-		s.running = false
-		s.mu.Unlock()
+		s.scanEnded(stop)
 		return err
 	}
 }
 
 // waitForCompletion waits for the scan to complete via context or stop signal.
-func (s *tinyGoBLEScanner) waitForCompletion(ctx context.Context, errCh <-chan error) error {
+func (s *tinyGoBLEScanner) waitForCompletion(ctx context.Context, stop chan struct{}, errCh <-chan error) error {
 	select {
 	case <-ctx.Done():
-		s.Stop() //nolint:errcheck // Best effort
+		s.stopScan(stop) //nolint:errcheck // Best effort
 		return nil
-	case <-s.stopCh:
+	case <-stop:
 		return nil
 	case err := <-errCh:
-		s.mu.Lock()
-		s.running = false
-		s.mu.Unlock()
+		s.scanEnded(stop)
 		if err != nil {
 			return &BLEError{Message: "BLE scan stopped unexpectedly", Err: err}
 		}
@@ -213,12 +233,30 @@ func (s *tinyGoBLEScanner) waitForCompletion(ctx context.Context, errCh <-chan e
 	}
 }
 
-// Stop stops BLE scanning.
-func (s *tinyGoBLEScanner) Stop() error {
+// scanEnded records that the scan owning stop finished by itself. A scan that
+// was already replaced by a newer one leaves the newer one marked as running.
+func (s *tinyGoBLEScanner) scanEnded(stop chan struct{}) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.running {
+	if s.running && s.stopCh == stop {
+		s.running = false
+		close(stop)
+	}
+}
+
+// Stop stops BLE scanning.
+func (s *tinyGoBLEScanner) Stop() error {
+	return s.stopScan(nil)
+}
+
+// stopScan stops the scan that owns stop, or whichever scan is running when
+// stop is nil. It does nothing if that scan is no longer the current one.
+func (s *tinyGoBLEScanner) stopScan(stop chan struct{}) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.running || (stop != nil && s.stopCh != stop) {
 		return nil
 	}
 
@@ -294,7 +332,7 @@ func NewBLEDiscoverer() (*BLEDiscoverer, error) {
 	return &BLEDiscoverer{
 		Scanner:       scanner,
 		devices:       make(map[string]*BLEDiscoveredDevice),
-		ScanDuration:  10 * time.Second,
+		ScanDuration:  defaultBLEScanDuration,
 		FilterPrefix:  ShellyBLEAdvertisementPrefix,
 		IncludeBTHome: true,
 	}, nil
@@ -306,7 +344,7 @@ func NewBLEDiscovererWithScanner(scanner BLEScanner) *BLEDiscoverer {
 	return &BLEDiscoverer{
 		Scanner:       scanner,
 		devices:       make(map[string]*BLEDiscoveredDevice),
-		ScanDuration:  10 * time.Second,
+		ScanDuration:  defaultBLEScanDuration,
 		FilterPrefix:  ShellyBLEAdvertisementPrefix,
 		IncludeBTHome: true,
 	}
@@ -363,19 +401,23 @@ func (b *BLEDiscoverer) handleAdvertisement(adv *BLEAdvertisement) {
 		return
 	}
 
+	// devicesCh is replaced by StartDiscovery under the same lock.
 	b.mu.Lock()
 	b.devices[device.ID] = device
+	devicesCh := b.devicesCh
 	b.mu.Unlock()
 
-	// Notify callback
-	if b.OnDeviceFound != nil {
-		b.OnDeviceFound(device)
-	}
+	// A scanner may report advertisements from several goroutines; the queue
+	// keeps OnDeviceFound from running concurrently with itself.
+	b.found.Push(device, func(d *BLEDiscoveredDevice) {
+		if b.OnDeviceFound != nil {
+			b.OnDeviceFound(d)
+		}
+	})
 
-	// Send to channel if running continuous discovery
-	if b.devicesCh != nil {
+	if devicesCh != nil {
 		select {
-		case b.devicesCh <- device.DiscoveredDevice:
+		case devicesCh <- device.DiscoveredDevice:
 		default:
 		}
 	}
@@ -555,50 +597,74 @@ func (b *BLEDiscoverer) StartDiscovery() (<-chan DiscoveredDevice, error) {
 		return nil, ErrBLENotSupported
 	}
 
+	scanDuration := b.ScanDuration
+	if scanDuration <= 0 {
+		scanDuration = defaultBLEScanDuration
+	}
+	rescanDelay := b.rescanDelay
+	if rescanDelay <= 0 {
+		rescanDelay = defaultBLERescanDelay
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
 	b.devicesCh = make(chan DiscoveredDevice, 100)
-	b.stopCh = make(chan struct{})
+	b.cancel = cancel
 	b.running = true
 
-	// The goroutine owns stopCh by value so it never reads the b.stopCh field,
-	// which Start/StopDiscovery mutate under the lock — reading it unsynchronized
-	// from here would race with those writes.
-	go b.continuousDiscovery(b.stopCh)
+	// The loop gets everything it needs as arguments: the fields are replaced
+	// by the next StartDiscovery and may be changed by the caller meanwhile.
+	go b.continuousDiscovery(ctx, b.Scanner, scanDuration, rescanDelay)
 
 	return b.devicesCh, nil
 }
 
-// continuousDiscovery runs continuous BLE discovery against the stop signal
-// captured when discovery started.
-func (b *BLEDiscoverer) continuousDiscovery(stopCh <-chan struct{}) {
-	for {
-		select {
-		case <-stopCh:
-			return
-		default:
+// continuousDiscovery scans repeatedly until ctx is canceled.
+func (b *BLEDiscoverer) continuousDiscovery(
+	ctx context.Context, scanner BLEScanner, scanDuration, rescanDelay time.Duration,
+) {
+	for ctx.Err() == nil {
+		// Deriving from ctx ends a scan in progress when discovery stops, even
+		// if the scanner's Stop was called just before this scan began.
+		scanCtx, cancel := context.WithTimeout(ctx, scanDuration)
+		err := scanner.Start(scanCtx, b.handleAdvertisement)
+		endedEarly := scanCtx.Err() == nil
+		cancel()
+
+		// A failed scan does not end discovery, but a scanner that fails or
+		// returns at once must not be restarted in a tight loop.
+		if err == nil && !endedEarly {
+			continue
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), b.ScanDuration)
-		//nolint:errcheck // Errors are handled per-scan, don't stop continuous discovery
-		b.Scanner.Start(ctx, b.handleAdvertisement)
-		cancel()
+		timer := time.NewTimer(rescanDelay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
 	}
 }
 
 // StopDiscovery stops continuous BLE discovery.
 func (b *BLEDiscoverer) StopDiscovery() error {
 	b.mu.Lock()
-	defer b.mu.Unlock()
-
 	if !b.running {
+		b.mu.Unlock()
 		return nil
 	}
-
-	close(b.stopCh)
-	if b.Scanner != nil {
-		//nolint:errcheck // Best-effort stop
-		b.Scanner.Stop()
-	}
 	b.running = false
+	b.cancel()
+	scanner := b.Scanner
+	b.mu.Unlock()
+
+	// The scanner reports advertisements through handleAdvertisement, which
+	// takes b.mu. A Stop that waits for those callbacks to return would never
+	// finish if it were called with the lock held.
+	if scanner != nil {
+		//nolint:errcheck // Best-effort stop
+		scanner.Stop()
+	}
 
 	return nil
 }
@@ -731,10 +797,25 @@ func ClearConnectabilityCache() {
 // Note: This is a basic implementation. For production use, consider
 // handling connection state more robustly.
 type tinyGoBLEConnector struct {
-	adapter   *bluetooth.Adapter
-	device    bluetooth.Device
-	connected bool
-	mu        sync.Mutex
+	adapter bleDialer
+	// dropDevice replaces device.Disconnect in tests, where a bluetooth.Device
+	// has no real connection behind it.
+	dropDevice func(bluetooth.Device) error
+	device     bluetooth.Device
+	connected  bool
+	mu         sync.Mutex
+}
+
+// bleDialer is the part of *bluetooth.Adapter the connector needs. Tests
+// supply a fake so no real Bluetooth hardware is touched.
+type bleDialer interface {
+	Connect(addr bluetooth.Address, params bluetooth.ConnectionParams) (bluetooth.Device, error)
+}
+
+// bleDialResult is what a connection attempt hands back to Connect.
+type bleDialResult struct {
+	err    error
+	device bluetooth.Device
 }
 
 // NewTinyGoBLEConnector creates a new BLE connector using the TinyGo bluetooth library.
@@ -766,25 +847,49 @@ func (c *tinyGoBLEConnector) Connect(ctx context.Context, address string) error 
 	// Create connection parameters
 	params := bluetooth.ConnectionParams{}
 
-	// Attempt connection with timeout
-	done := make(chan error, 1)
+	// The goroutine only reports its result. It may outlive this call, so it
+	// must not touch the connector's fields, which belong to whoever holds
+	// c.mu.
+	adapter := c.adapter
+	done := make(chan bleDialResult, 1)
 	go func() {
-		device, err := c.adapter.Connect(addr, params)
-		if err != nil {
-			done <- &BLEError{Message: "failed to connect", Err: err}
-			return
-		}
-		c.device = device
-		c.connected = true
-		done <- nil
+		device, err := adapter.Connect(addr, params)
+		done <- bleDialResult{device: device, err: err}
 	}()
 
 	select {
 	case <-ctx.Done():
+		go c.dropLate(done)
 		return ctx.Err()
-	case err := <-done:
-		return err
+	case res := <-done:
+		if res.err != nil {
+			return &BLEError{Message: "failed to connect", Err: res.err}
+		}
+		c.device = res.device
+		c.connected = true
+		return nil
 	}
+}
+
+// dropLate closes a connection that is made after Connect stopped waiting for
+// it. The adapter call cannot be interrupted, and nobody owns its result.
+func (c *tinyGoBLEConnector) dropLate(done <-chan bleDialResult) {
+	res := <-done
+	if res.err != nil {
+		return
+	}
+	// Connect has already returned, so a failed disconnect has no one to go to.
+	if err := c.drop(res.device); err != nil {
+		return
+	}
+}
+
+// drop closes the connection to device.
+func (c *tinyGoBLEConnector) drop(device bluetooth.Device) error {
+	if c.dropDevice != nil {
+		return c.dropDevice(device)
+	}
+	return device.Disconnect()
 }
 
 // Disconnect disconnects from the currently connected device.
@@ -796,7 +901,7 @@ func (c *tinyGoBLEConnector) Disconnect() error {
 		return nil
 	}
 
-	err := c.device.Disconnect()
+	err := c.drop(c.device)
 	c.connected = false
 	return err
 }

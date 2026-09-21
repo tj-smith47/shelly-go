@@ -23,13 +23,24 @@ type bleConnector interface {
 //
 //nolint:govet // Field order optimized for readability over alignment
 type tinyGoBLETransmitter struct {
-	connector  bleConnector
+	connector bleConnector
+	// dropDevice replaces device.Disconnect in tests, where a bluetooth.Device
+	// has no real connection behind it.
+	dropDevice func(bluetooth.Device) error
 	device     bluetooth.Device
 	rpcChar    bluetooth.DeviceCharacteristic
 	notifyChar bluetooth.DeviceCharacteristic
 	mu         sync.Mutex
 	notifyCh   chan []byte
-	connected  bool
+	// gone is closed by Disconnect so a blocked ReadNotification returns.
+	gone      chan struct{}
+	connected bool
+}
+
+// bleDialResult is what a connection attempt hands back to Connect.
+type bleDialResult struct {
+	err    error
+	device bluetooth.Device
 }
 
 // NewTinyGoBLETransmitter creates a new BLE transmitter using TinyGo bluetooth.
@@ -65,38 +76,38 @@ func (t *tinyGoBLETransmitter) Connect(ctx context.Context, address string) erro
 	// Connect to device
 	params := bluetooth.ConnectionParams{}
 
-	// Connection with timeout
-	done := make(chan error, 1)
+	// The goroutine only reports its result. It may outlive this call, so it
+	// must not touch the transmitter's fields, which belong to whoever holds
+	// t.mu.
+	connector := t.connector
+	done := make(chan bleDialResult, 1)
 	go func() {
-		device, err := t.connector.Connect(addr, params)
-		if err != nil {
-			done <- errors.New("failed to connect: " + err.Error())
-			return
-		}
-		t.device = device
-		done <- nil
+		device, err := connector.Connect(addr, params)
+		done <- bleDialResult{device: device, err: err}
 	}()
 
 	select {
 	case <-ctx.Done():
+		go t.dropLate(done)
 		return ctx.Err()
-	case err := <-done:
-		if err != nil {
-			return err
+	case res := <-done:
+		if res.err != nil {
+			return errors.New("failed to connect: " + res.err.Error())
 		}
+		t.device = res.device
 	}
 
 	// Discover services
 	services, err := t.device.DiscoverServices(nil)
 	if err != nil {
-		t.device.Disconnect() //nolint:errcheck // Best-effort cleanup on failure
+		t.drop(t.device) //nolint:errcheck // Best-effort cleanup on failure
 		return errors.New("failed to discover services: " + err.Error())
 	}
 
 	// Parse the Shelly service UUID
 	shellyServiceUUID, err := bluetooth.ParseUUID(ShellyBLEServiceUUID)
 	if err != nil {
-		t.device.Disconnect() //nolint:errcheck // Best-effort cleanup on failure
+		t.drop(t.device) //nolint:errcheck // Best-effort cleanup on failure
 		return errors.New("invalid service UUID: " + err.Error())
 	}
 
@@ -112,27 +123,27 @@ func (t *tinyGoBLETransmitter) Connect(ctx context.Context, address string) erro
 	}
 
 	if !found {
-		t.device.Disconnect() //nolint:errcheck // Best-effort cleanup on failure
+		t.drop(t.device) //nolint:errcheck // Best-effort cleanup on failure
 		return errors.New("shelly BLE service not found")
 	}
 
 	// Discover characteristics
 	chars, err := shellyService.DiscoverCharacteristics(nil)
 	if err != nil {
-		t.device.Disconnect() //nolint:errcheck // Best-effort cleanup on failure
+		t.drop(t.device) //nolint:errcheck // Best-effort cleanup on failure
 		return errors.New("failed to discover characteristics: " + err.Error())
 	}
 
 	// Parse characteristic UUIDs
 	rpcUUID, err := bluetooth.ParseUUID(ShellyBLERPCCharUUID)
 	if err != nil {
-		t.device.Disconnect() //nolint:errcheck // Best-effort cleanup on failure
+		t.drop(t.device) //nolint:errcheck // Best-effort cleanup on failure
 		return errors.New("invalid RPC characteristic UUID: " + err.Error())
 	}
 
 	notifyUUID, err := bluetooth.ParseUUID(ShellyBLENotifyCharUUID)
 	if err != nil {
-		t.device.Disconnect() //nolint:errcheck // Best-effort cleanup on failure
+		t.drop(t.device) //nolint:errcheck // Best-effort cleanup on failure
 		return errors.New("invalid notify characteristic UUID: " + err.Error())
 	}
 
@@ -151,40 +162,67 @@ func (t *tinyGoBLETransmitter) Connect(ctx context.Context, address string) erro
 	}
 
 	if !foundRPC {
-		t.device.Disconnect() //nolint:errcheck // Best-effort cleanup on failure
+		t.drop(t.device) //nolint:errcheck // Best-effort cleanup on failure
 		return errors.New("RPC characteristic not found")
 	}
 
 	if !foundNotify {
-		t.device.Disconnect() //nolint:errcheck // Best-effort cleanup on failure
+		t.drop(t.device) //nolint:errcheck // Best-effort cleanup on failure
 		return errors.New("notify characteristic not found")
 	}
 
 	// Enable notifications on the notify characteristic
-	err = t.notifyChar.EnableNotifications(func(data []byte) {
-		// Copy data to prevent race conditions
-		dataCopy := make([]byte, len(data))
-		copy(dataCopy, data)
-
-		// Non-blocking send to channel
-		select {
-		case t.notifyCh <- dataCopy:
-		default:
-			// Channel full, drop oldest
-			select {
-			case <-t.notifyCh:
-			default:
-			}
-			t.notifyCh <- dataCopy
-		}
-	})
+	err = t.notifyChar.EnableNotifications(t.queueNotification)
 	if err != nil {
-		t.device.Disconnect() //nolint:errcheck // Best-effort cleanup on failure
+		t.drop(t.device) //nolint:errcheck // Best-effort cleanup on failure
 		return errors.New("failed to enable notifications: " + err.Error())
 	}
 
+	t.gone = make(chan struct{})
 	t.connected = true
 	return nil
+}
+
+// queueNotification stores a copy of data for ReadNotification, discarding the
+// oldest stored notification when the buffer is full. It never blocks: it runs
+// on the Bluetooth stack's callback goroutine.
+func (t *tinyGoBLETransmitter) queueNotification(data []byte) {
+	// The stack may reuse data once this callback returns.
+	dataCopy := make([]byte, len(data))
+	copy(dataCopy, data)
+
+	for {
+		select {
+		case t.notifyCh <- dataCopy:
+			return
+		default:
+		}
+		select {
+		case <-t.notifyCh:
+		default:
+		}
+	}
+}
+
+// dropLate closes a connection that is made after Connect stopped waiting for
+// it. The adapter call cannot be interrupted, and nobody owns its result.
+func (t *tinyGoBLETransmitter) dropLate(done <-chan bleDialResult) {
+	res := <-done
+	if res.err != nil {
+		return
+	}
+	// Connect has already returned, so a failed disconnect has no one to go to.
+	if err := t.drop(res.device); err != nil {
+		return
+	}
+}
+
+// drop closes the connection to device.
+func (t *tinyGoBLETransmitter) drop(device bluetooth.Device) error {
+	if t.dropDevice != nil {
+		return t.dropDevice(device)
+	}
+	return device.Disconnect()
 }
 
 // Disconnect disconnects from the currently connected device.
@@ -196,12 +234,22 @@ func (t *tinyGoBLETransmitter) Disconnect() error {
 		return nil
 	}
 
-	err := t.device.Disconnect()
+	err := t.drop(t.device)
 	t.connected = false
+	if t.gone != nil {
+		close(t.gone)
+		t.gone = nil
+	}
 
-	// Drain notification channel
-	for len(t.notifyCh) > 0 {
-		<-t.notifyCh
+	// Discard notifications left over from this connection. A reader may be
+	// taking from the channel at the same time, so never block on it.
+	for {
+		select {
+		case <-t.notifyCh:
+			continue
+		default:
+		}
+		break
 	}
 
 	return err
@@ -216,10 +264,12 @@ func (t *tinyGoBLETransmitter) WriteCharacteristic(ctx context.Context, data []b
 		return errors.New("not connected")
 	}
 
-	// Write with timeout
+	// The goroutine may outlive this call, and a later Connect replaces
+	// t.rpcChar, so it works on a copy.
+	rpcChar := t.rpcChar
 	done := make(chan error, 1)
 	go func() {
-		_, err := t.rpcChar.WriteWithoutResponse(data)
+		_, err := rpcChar.WriteWithoutResponse(data)
 		done <- err
 	}()
 
@@ -235,15 +285,22 @@ func (t *tinyGoBLETransmitter) WriteCharacteristic(ctx context.Context, data []b
 }
 
 // ReadNotification reads a notification from the device.
-// This blocks until a notification is received or the context is canceled.
+// This blocks until a notification is received, the context is canceled, or
+// Disconnect is called, in which case it returns a "not connected" error.
 func (t *tinyGoBLETransmitter) ReadNotification(ctx context.Context) ([]byte, error) {
-	if !t.IsConnected() {
+	t.mu.Lock()
+	connected, gone := t.connected, t.gone
+	t.mu.Unlock()
+
+	if !connected {
 		return nil, errors.New("not connected")
 	}
 
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
+	case <-gone:
+		return nil, errors.New("not connected")
 	case data := <-t.notifyCh:
 		return data, nil
 	}

@@ -3,6 +3,8 @@ package events
 import (
 	"sync"
 	"sync/atomic"
+
+	"github.com/tj-smith47/shelly-go/internal/serial"
 )
 
 // Handler is a function that handles events.
@@ -12,6 +14,7 @@ type Handler func(Event)
 type Subscription struct {
 	handler Handler
 	filter  Filter
+	queue   serial.Queue[Event]
 	id      uint64
 }
 
@@ -98,46 +101,36 @@ func (bus *EventBus) Unsubscribe(id uint64) bool {
 
 // Publish dispatches an event to all matching subscribers.
 // Events are delivered synchronously in subscription order.
+//
+// A subscription's filter and handler never run concurrently with themselves,
+// whichever mix of Publish and PublishAsync callers is active, so they need no
+// locking of their own. When another goroutine is already delivering to a
+// subscription, or a handler publishes from inside itself, the event is queued
+// behind the one in progress and delivered in order.
 func (bus *EventBus) Publish(event Event) {
-	if bus.closed.Load() {
-		return
-	}
-
-	// Add to history if enabled
-	if bus.historySize > 0 {
-		bus.historyMu.Lock()
-		if len(bus.history) >= bus.historySize {
-			// Shift history (remove oldest)
-			copy(bus.history, bus.history[1:])
-			bus.history = bus.history[:len(bus.history)-1]
-		}
-		bus.history = append(bus.history, event)
-		bus.historyMu.Unlock()
-	}
-
-	bus.mu.RLock()
-	subs := make([]*Subscription, len(bus.subscriptions))
-	copy(subs, bus.subscriptions)
-	bus.mu.RUnlock()
-
-	for _, sub := range subs {
-		if sub.filter == nil || sub.filter(event) {
-			sub.handler(event)
-		}
+	for _, sub := range bus.record(event) {
+		sub.deliver(event)
 	}
 }
 
-// PublishAsync dispatches an event asynchronously.
-// Each subscriber's handler is invoked in a separate goroutine, so a handler
-// registered on more than one subscription, or reached by overlapping
-// PublishAsync calls, runs concurrently with itself and must be safe for that.
-// Publish delivers on the caller's goroutine, one handler at a time.
+// PublishAsync dispatches an event asynchronously, one goroutine per
+// subscriber, and returns once every subscriber has been handed the event.
+// The serialization described on Publish applies here too.
 func (bus *EventBus) PublishAsync(event Event) {
+	var wg sync.WaitGroup
+	for _, sub := range bus.record(event) {
+		wg.Go(func() { sub.deliver(event) })
+	}
+	wg.Wait()
+}
+
+// record adds the event to the history and returns the subscriptions to
+// offer it to. It returns nil once the bus is closed.
+func (bus *EventBus) record(event Event) []*Subscription {
 	if bus.closed.Load() {
-		return
+		return nil
 	}
 
-	// Add to history if enabled
 	if bus.historySize > 0 {
 		bus.historyMu.Lock()
 		if len(bus.history) >= bus.historySize {
@@ -149,21 +142,19 @@ func (bus *EventBus) PublishAsync(event Event) {
 	}
 
 	bus.mu.RLock()
+	defer bus.mu.RUnlock()
 	subs := make([]*Subscription, len(bus.subscriptions))
 	copy(subs, bus.subscriptions)
-	bus.mu.RUnlock()
+	return subs
+}
 
-	var wg sync.WaitGroup
-	for _, sub := range subs {
-		if sub.filter == nil || sub.filter(event) {
-			wg.Add(1)
-			go func(s *Subscription) {
-				defer wg.Done()
-				s.handler(event)
-			}(sub)
+// deliver offers the event to the subscription, in order and one at a time.
+func (s *Subscription) deliver(event Event) {
+	s.queue.Push(event, func(e Event) {
+		if s.filter == nil || s.filter(e) {
+			s.handler(e)
 		}
-	}
-	wg.Wait()
+	})
 }
 
 // SubscriberCount returns the number of active subscriptions.

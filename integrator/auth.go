@@ -27,9 +27,15 @@ const (
 
 // TokenManager handles automatic JWT token lifecycle management.
 type TokenManager struct {
-	lastRefresh    time.Time
-	client         *Client
-	refreshDone    chan struct{}
+	lastRefresh time.Time
+	refreshErr  error
+	client      *Client
+	refreshDone chan struct{}
+
+	// refreshCtxDone is the Done channel of the running loop's context. Once
+	// it is closed the loop is ending, whether or not it has noticed yet.
+	refreshCtxDone <-chan struct{}
+
 	refreshBuffer  time.Duration
 	mu             sync.RWMutex
 	refreshRunning bool
@@ -90,19 +96,43 @@ func (tm *TokenManager) EnsureValid(ctx context.Context) error {
 	return tm.client.Authenticate(ctx)
 }
 
+// LastRefreshError returns the outcome of the most recent background refresh
+// made by the auto-refresh loop: nil when it succeeded or none has run yet.
+// The loop keeps trying after a failure, so the error clears itself once a
+// later refresh succeeds.
+func (tm *TokenManager) LastRefreshError() error {
+	tm.mu.RLock()
+	defer tm.mu.RUnlock()
+	return tm.refreshErr
+}
+
 // StartAutoRefresh starts a background goroutine that automatically refreshes
-// the token before it expires.
+// the token before it expires. The goroutine ends when ctx ends or
+// StopAutoRefresh is called; StartAutoRefresh can then be called again. A call
+// made while a refresh goroutine is running does nothing.
 func (tm *TokenManager) StartAutoRefresh(ctx context.Context) {
 	tm.mu.Lock()
-	if tm.refreshRunning {
+	if tm.refreshRunning && !isClosed(tm.refreshCtxDone) {
 		tm.mu.Unlock()
 		return
 	}
 	tm.refreshRunning = true
-	tm.refreshDone = make(chan struct{})
+	done := make(chan struct{})
+	tm.refreshDone = done
+	tm.refreshCtxDone = ctx.Done()
 	tm.mu.Unlock()
 
-	go tm.autoRefreshLoop(ctx)
+	go tm.autoRefreshLoop(ctx, done)
+}
+
+// isClosed reports whether ch is closed. A nil channel is not.
+func isClosed(ch <-chan struct{}) bool {
+	select {
+	case <-ch:
+		return true
+	default:
+		return false
+	}
 }
 
 // StopAutoRefresh stops the automatic token refresh.
@@ -117,21 +147,30 @@ func (tm *TokenManager) StopAutoRefresh() {
 	tm.mu.Unlock()
 }
 
-func (tm *TokenManager) autoRefreshLoop(ctx context.Context) {
+// autoRefreshLoop refreshes the token until ctx or done ends. It takes done as
+// an argument because a later StartAutoRefresh replaces tm.refreshDone.
+func (tm *TokenManager) autoRefreshLoop(ctx context.Context, done chan struct{}) {
 	ticker := time.NewTicker(MinTokenRefreshInterval)
 	defer ticker.Stop()
+
+	// A loop ended by ctx must leave the manager startable again. A loop that
+	// was stopped and already replaced must not clear the newer loop's mark.
+	defer func() {
+		tm.mu.Lock()
+		if tm.refreshDone == done {
+			tm.refreshRunning = false
+		}
+		tm.mu.Unlock()
+	}()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-tm.refreshDone:
+		case <-done:
 			return
 		case <-ticker.C:
-			if tm.NeedsRefresh() {
-				//nolint:errcheck // Background refresh - errors are handled by next explicit call
-				tm.EnsureValid(ctx)
-			}
+			tm.refreshIfNeeded(ctx)
 		}
 	}
 }
@@ -488,4 +527,16 @@ func (v *CallbackTokenVerifier) VerifyCallbackToken(token string) (*CallbackToke
 		Token:     token,
 		ExpiresAt: claims.ExpiresTime(),
 	}, nil
+}
+
+// refreshIfNeeded is one pass of the auto-refresh loop. The outcome is kept
+// for LastRefreshError because the loop has nobody to return it to.
+func (tm *TokenManager) refreshIfNeeded(ctx context.Context) {
+	if !tm.NeedsRefresh() {
+		return
+	}
+	err := tm.EnsureValid(ctx)
+	tm.mu.Lock()
+	tm.refreshErr = err
+	tm.mu.Unlock()
 }

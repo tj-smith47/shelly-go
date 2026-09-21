@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tj-smith47/shelly-go/internal/serial"
 	"github.com/tj-smith47/shelly-go/types"
 )
 
@@ -271,7 +272,8 @@ func ProbeAddressesWithProgress(
 	callback ProbeProgressCallback,
 ) []DiscoveredDevice {
 	var devices []DiscoveredDevice
-	var mu, cbMu sync.Mutex
+	var mu sync.Mutex
+	var reports serial.Queue[ProbeProgress]
 	var wg sync.WaitGroup
 	var done int
 	var canceled bool
@@ -329,27 +331,27 @@ func ProbeAddressesWithProgress(
 
 			// Report progress
 			if callback != nil {
-				// A dedicated lock, held across the callback: callers count and
-				// print from it without their own locking, and Done must arrive
-				// in increasing order. mu stays free so probes keep recording.
-				cbMu.Lock()
-				defer cbMu.Unlock()
-
+				// Done is assigned and queued under one lock so reports
+				// reach the callback in counting order, one at a time.
+				mu.Lock()
 				done++
-				progress := ProbeProgress{
+				reports.Add(ProbeProgress{
 					Address: address,
 					Total:   total,
 					Done:    done,
 					Found:   device != nil,
 					Device:  device,
 					Error:   err,
-				}
+				})
+				mu.Unlock()
 
-				if !callback(progress) {
-					mu.Lock()
-					canceled = true
-					mu.Unlock()
-				}
+				reports.Drain(func(p ProbeProgress) {
+					if !callback(p) {
+						mu.Lock()
+						canceled = true
+						mu.Unlock()
+					}
+				})
 			}
 		}(addr)
 	}

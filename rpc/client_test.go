@@ -187,7 +187,7 @@ func TestNewClientWithAuth(t *testing.T) {
 		t.Fatal("NewClientWithAuth() returned nil")
 	}
 
-	if client.auth != auth {
+	if client.auth.Load() != auth {
 		t.Error("client auth not set correctly")
 	}
 }
@@ -489,7 +489,7 @@ func TestClient_SetAuth(t *testing.T) {
 	mt := &mockTransport{}
 	client := NewClient(mt)
 
-	if client.auth != nil {
+	if client.auth.Load() != nil {
 		t.Error("client should not have auth initially")
 	}
 
@@ -500,7 +500,7 @@ func TestClient_SetAuth(t *testing.T) {
 
 	client.SetAuth(auth)
 
-	if client.auth != auth {
+	if client.auth.Load() != auth {
 		t.Error("auth not set correctly")
 	}
 }
@@ -513,13 +513,13 @@ func TestClient_ClearAuth(t *testing.T) {
 	}
 	client := NewClientWithAuth(mt, auth)
 
-	if client.auth == nil {
+	if client.auth.Load() == nil {
 		t.Error("client should have auth")
 	}
 
 	client.ClearAuth()
 
-	if client.auth != nil {
+	if client.auth.Load() != nil {
 		t.Error("auth should be cleared")
 	}
 }
@@ -818,4 +818,32 @@ func TestDefaultClientOptions(t *testing.T) {
 	if options.password != "" {
 		t.Error("default password should be empty")
 	}
+}
+
+func TestClient_SetAuth_ConcurrentWithCall(t *testing.T) {
+	client := NewClient(&mockTransport{response: []byte(`{"id":1,"result":{}}`)})
+	auth := &AuthData{Username: "admin"}
+
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Go(func() {
+			for range 100 {
+				client.SetAuth(auth)
+				client.ClearAuth()
+			}
+		})
+		wg.Go(func() {
+			for range 100 {
+				// Only the auth access matters here; the race detector fails
+				// the test if Call or Notify reads it unguarded.
+				if _, err := client.Call(context.Background(), "Shelly.GetStatus", nil); err != nil {
+					continue
+				}
+				if err := client.Notify(context.Background(), "Shelly.Reboot", nil); err != nil {
+					continue
+				}
+			}
+		})
+	}
+	wg.Wait()
 }

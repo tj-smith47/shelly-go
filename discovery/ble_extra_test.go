@@ -59,7 +59,7 @@ func TestWaitForScanStart_ContextCancelled(t *testing.T) {
 	scanStarted := make(chan struct{})
 	errCh := make(chan error, 1)
 
-	err := s.waitForScanStart(ctx, scanStarted, errCh)
+	err := s.waitForScanStart(ctx, s.stopCh, scanStarted, errCh)
 	if err == nil {
 		t.Fatal("waitForScanStart must return an error for a canceled context")
 	}
@@ -79,7 +79,7 @@ func TestWaitForScanStart_ScanStarted(t *testing.T) {
 	scanStarted <- struct{}{} // pre-signal
 	errCh := make(chan error, 1)
 
-	err := s.waitForScanStart(ctx, scanStarted, errCh)
+	err := s.waitForScanStart(ctx, s.stopCh, scanStarted, errCh)
 	if err != nil {
 		t.Errorf("waitForScanStart should return nil when signal is ready, got %v", err)
 	}
@@ -96,7 +96,7 @@ func TestWaitForScanStart_ScanError(t *testing.T) {
 	errCh := make(chan error, 1)
 	errCh <- errors.New("adapter gone")
 
-	err := s.waitForScanStart(ctx, scanStarted, errCh)
+	err := s.waitForScanStart(ctx, s.stopCh, scanStarted, errCh)
 	if err == nil {
 		t.Fatal("waitForScanStart must propagate scan error")
 	}
@@ -120,7 +120,7 @@ func TestWaitForCompletion_ContextCancelled(t *testing.T) {
 	cancel()
 
 	errCh := make(chan error, 1)
-	err := s.waitForCompletion(ctx, errCh)
+	err := s.waitForCompletion(ctx, s.stopCh, errCh)
 	// Context cancel path returns nil (graceful stop).
 	if err != nil {
 		t.Errorf("waitForCompletion on canceled context must return nil, got %v", err)
@@ -136,7 +136,7 @@ func TestWaitForCompletion_StopCh(t *testing.T) {
 	}
 	ctx := context.Background()
 	errCh := make(chan error, 1)
-	err := s.waitForCompletion(ctx, errCh)
+	err := s.waitForCompletion(ctx, s.stopCh, errCh)
 	if err != nil {
 		t.Errorf("waitForCompletion via stopCh must return nil, got %v", err)
 	}
@@ -152,7 +152,7 @@ func TestWaitForCompletion_ErrCh_Nil(t *testing.T) {
 	errCh := make(chan error, 1)
 	errCh <- nil // nil error = clean stop
 
-	err := s.waitForCompletion(ctx, errCh)
+	err := s.waitForCompletion(ctx, s.stopCh, errCh)
 	if err != nil {
 		t.Errorf("waitForCompletion with nil error must return nil, got %v", err)
 	}
@@ -168,7 +168,7 @@ func TestWaitForCompletion_ErrCh_Error(t *testing.T) {
 	errCh := make(chan error, 1)
 	errCh <- errors.New("adapter crashed")
 
-	err := s.waitForCompletion(ctx, errCh)
+	err := s.waitForCompletion(ctx, s.stopCh, errCh)
 	if err == nil {
 		t.Fatal("waitForCompletion must propagate non-nil errors from errCh")
 	}

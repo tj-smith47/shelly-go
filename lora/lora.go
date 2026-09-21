@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"sync"
 	"time"
 
+	"github.com/tj-smith47/shelly-go/internal/serial"
 	"github.com/tj-smith47/shelly-go/rpc"
 )
 
@@ -253,6 +255,11 @@ var (
 )
 
 // DeviceRegistry manages registered LoRa devices.
+//
+// The registry is safe for concurrent use. It keeps its own copy of every
+// device: Register and RegisterOrUpdate copy what they are given, and the
+// getters return copies, so a returned device does not change when the
+// registry is updated later.
 type DeviceRegistry struct {
 	devices       map[string]*RegisteredDevice
 	OnlineTimeout time.Duration
@@ -277,7 +284,7 @@ func (r *DeviceRegistry) Register(device *RegisteredDevice) error {
 		return ErrDeviceAlreadyRegistered
 	}
 
-	r.devices[device.DeviceID] = device
+	r.devices[device.DeviceID] = device.clone()
 	return nil
 }
 
@@ -309,7 +316,7 @@ func (r *DeviceRegistry) RegisterOrUpdate(device *RegisteredDevice) {
 		return
 	}
 
-	r.devices[device.DeviceID] = device
+	r.devices[device.DeviceID] = device.clone()
 }
 
 // Unregister removes a device from the registry.
@@ -325,7 +332,7 @@ func (r *DeviceRegistry) Unregister(deviceID string) error {
 	return nil
 }
 
-// Get retrieves a device by its ID.
+// Get returns a copy of the device with the given ID.
 func (r *DeviceRegistry) Get(deviceID string) (*RegisteredDevice, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -334,7 +341,7 @@ func (r *DeviceRegistry) Get(deviceID string) (*RegisteredDevice, error) {
 	if !exists {
 		return nil, ErrDeviceNotFound
 	}
-	return device, nil
+	return device.clone(), nil
 }
 
 // GetAll returns all registered devices.
@@ -344,7 +351,7 @@ func (r *DeviceRegistry) GetAll() []*RegisteredDevice {
 
 	devices := make([]*RegisteredDevice, 0, len(r.devices))
 	for _, device := range r.devices {
-		devices = append(devices, device)
+		devices = append(devices, device.clone())
 	}
 	return devices
 }
@@ -357,7 +364,7 @@ func (r *DeviceRegistry) GetByGroup(group string) []*RegisteredDevice {
 	var devices []*RegisteredDevice
 	for _, device := range r.devices {
 		if device.Group == group {
-			devices = append(devices, device)
+			devices = append(devices, device.clone())
 		}
 	}
 	return devices
@@ -372,7 +379,7 @@ func (r *DeviceRegistry) GetOnline() []*RegisteredDevice {
 	var devices []*RegisteredDevice
 	for _, device := range r.devices {
 		if device.Online || (device.LastSeen > 0 && now-device.LastSeen < r.OnlineTimeout.Seconds()) {
-			devices = append(devices, device)
+			devices = append(devices, device.clone())
 		}
 	}
 	return devices
@@ -409,6 +416,13 @@ func (r *DeviceRegistry) SetOnline(deviceID string, online bool) error {
 	return nil
 }
 
+// clone returns a copy of d that shares no memory with it.
+func (d *RegisteredDevice) clone() *RegisteredDevice {
+	c := *d
+	c.Metadata = maps.Clone(d.Metadata)
+	return &c
+}
+
 // Count returns the number of registered devices.
 func (r *DeviceRegistry) Count() int {
 	r.mu.RLock()
@@ -424,9 +438,13 @@ func (r *DeviceRegistry) Clear() {
 }
 
 // MessageRouter routes incoming LoRa messages to registered handlers.
+//
+// The router is safe for concurrent use. Set Registry and AutoRegister before
+// the first Route call.
 type MessageRouter struct {
 	Registry     *DeviceRegistry
 	handlers     []handlerEntry
+	deliveries   serial.Queue[delivery]
 	mu           sync.RWMutex
 	stopped      bool
 	AutoRegister bool
@@ -435,6 +453,12 @@ type MessageRouter struct {
 type handlerEntry struct {
 	handler MessageHandler
 	filter  *MessageFilter
+}
+
+// delivery is one routed message with the handlers it goes to.
+type delivery struct {
+	msg      *RoutedMessage
+	handlers []handlerEntry
 }
 
 // NewMessageRouter creates a new message router.
@@ -474,8 +498,19 @@ func (r *MessageRouter) HandleGroup(group string, handler MessageHandler) {
 	r.Handle(handler, &MessageFilter{Group: group})
 }
 
-// Route routes a message to all matching handlers.
-// Returns the number of handlers that processed the message.
+// Route queues a message for every handler whose filter matches it.
+//
+// Handlers, and the Custom funcs of their filters, never run concurrently with
+// themselves or each other, whichever goroutines call Route. When no delivery
+// is in progress the message is delivered before Route returns; when one is,
+// including when Route is called from inside a handler, the message is queued
+// behind it and Route returns at once. A handler may call Route, Handle,
+// ClearHandlers, Stop and Start. The handlers a message goes to are the ones
+// registered when Route was called.
+//
+// The returned count is the number of handlers whose FromDevice and Group
+// criteria match the message. A Custom func is evaluated at delivery, so a
+// handler that Custom then rejects is still counted.
 func (r *MessageRouter) Route(msg *RoutedMessage) (int, error) {
 	r.mu.RLock()
 	if r.stopped {
@@ -483,9 +518,12 @@ func (r *MessageRouter) Route(msg *RoutedMessage) (int, error) {
 		return 0, ErrRouterStopped
 	}
 
-	// Copy handlers slice to avoid holding lock during handler execution
-	handlers := make([]handlerEntry, len(r.handlers))
-	copy(handlers, r.handlers)
+	var matched []handlerEntry
+	for _, entry := range r.handlers {
+		if entry.filter == nil || entry.filter.matchFields(msg) {
+			matched = append(matched, entry)
+		}
+	}
 	registry := r.Registry
 	autoRegister := r.AutoRegister
 	r.mu.RUnlock()
@@ -511,19 +549,24 @@ func (r *MessageRouter) Route(msg *RoutedMessage) (int, error) {
 		}
 	}
 
-	count := 0
-	for _, entry := range handlers {
-		if entry.filter == nil || entry.filter.Match(msg) {
-			entry.handler(msg)
-			count++
-		}
+	if len(matched) > 0 {
+		r.deliveries.Push(delivery{msg: msg, handlers: matched}, deliver)
 	}
 
-	return count, nil
+	return len(matched), nil
+}
+
+func deliver(d delivery) {
+	for _, entry := range d.handlers {
+		if entry.filter == nil || entry.filter.Match(d.msg) {
+			entry.handler(d.msg)
+		}
+	}
 }
 
 // RouteEvent routes an Event to all matching handlers.
-// This is a convenience method that converts an Event to a RoutedMessage.
+// This is a convenience method that converts an Event to a RoutedMessage;
+// delivery and the returned count are as described for Route.
 func (r *MessageRouter) RouteEvent(event *Event, fromDevice string) (int, error) {
 	data, err := decodeBase64(event.Info.Data)
 	if err != nil {

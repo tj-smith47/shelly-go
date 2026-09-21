@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/tj-smith47/shelly-go/transport"
@@ -903,5 +905,33 @@ func TestFindSubstr(t *testing.T) {
 				t.Errorf("findSubstr(%q, %q) = %v, want %v", tt.s, tt.substr, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestMockTransport_MatchersArePerInstance(t *testing.T) {
+	const transports = 8
+
+	// Each transport registers and calls on its own goroutine. A shared matcher
+	// list is a data race here, and lets one transport answer another's calls.
+	var wg sync.WaitGroup
+	for i := range transports {
+		wg.Go(func() {
+			mt := NewMockTransport()
+			want := fmt.Sprintf(`{"owner":%d}`, i)
+			mt.OnPathContains("/status", want, nil)
+
+			for range 50 {
+				resp, err := mt.Call(context.Background(), transport.NewSimpleRequest("/status"))
+				if err != nil || string(resp) != want {
+					t.Errorf("Call() = %s, %v, want %s", resp, err, want)
+					return
+				}
+			}
+		})
+	}
+	wg.Wait()
+
+	if _, err := NewMockTransport().Call(context.Background(), transport.NewSimpleRequest("/status")); err == nil {
+		t.Error("a new transport answered with another transport's matcher")
 	}
 }

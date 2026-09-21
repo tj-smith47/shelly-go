@@ -133,7 +133,7 @@ func (fm *FleetManager) DisconnectAll() error {
 }
 
 func (fm *FleetManager) getUniqueHosts() []string {
-	devices := fm.accounts.ListDevices()
+	devices := fm.AccountManager().ListDevices()
 	hostSet := make(map[string]bool)
 	for i := range devices {
 		if devices[i].Host != "" {
@@ -180,7 +180,7 @@ func (fm *FleetManager) handleOnlineStatus(event *OnlineStatusEvent) {
 	fm.mu.Unlock()
 
 	// Update account manager
-	fm.accounts.UpdateDeviceOnlineStatus(event.DeviceID, event.Online)
+	fm.AccountManager().UpdateDeviceOnlineStatus(event.DeviceID, event.Online)
 
 	// Update health monitor
 	fm.healthMonitor.RecordOnlineStatus(event.DeviceID, event.Online)
@@ -212,7 +212,11 @@ func (fm *FleetManager) GetDeviceStatus(deviceID string) (*DeviceStatus, bool) {
 func (fm *FleetManager) ListDeviceStatuses() []*DeviceStatus {
 	fm.mu.RLock()
 	defer fm.mu.RUnlock()
+	return fm.listDeviceStatusesLocked()
+}
 
+// listDeviceStatusesLocked is ListDeviceStatuses for callers holding fm.mu.
+func (fm *FleetManager) listDeviceStatusesLocked() []*DeviceStatus {
 	statuses := make([]*DeviceStatus, 0, len(fm.statusCache))
 	for _, status := range fm.statusCache {
 		statuses = append(statuses, status)
@@ -227,7 +231,7 @@ func (fm *FleetManager) ListDeviceStatuses() []*DeviceStatus {
 
 // SendCommand sends a command to a specific device.
 func (fm *FleetManager) SendCommand(ctx context.Context, deviceID, action string, params any) error {
-	device, _, ok := fm.accounts.GetDevice(deviceID)
+	device, _, ok := fm.AccountManager().GetDevice(deviceID)
 	if !ok {
 		return fmt.Errorf("device %s not found", deviceID)
 	}
@@ -321,7 +325,7 @@ func (fm *FleetManager) SendBatchCommands(ctx context.Context, commands []BatchC
 
 // AllRelaysOn turns on all relay devices.
 func (fm *FleetManager) AllRelaysOn(ctx context.Context) []BatchResult {
-	devices := fm.accounts.GetControllableDevices()
+	devices := fm.AccountManager().GetControllableDevices()
 	commands := make([]BatchCommand, 0, len(devices))
 
 	for i := range devices {
@@ -340,7 +344,7 @@ func (fm *FleetManager) AllRelaysOn(ctx context.Context) []BatchResult {
 
 // AllRelaysOff turns off all relay devices.
 func (fm *FleetManager) AllRelaysOff(ctx context.Context) []BatchResult {
-	devices := fm.accounts.GetControllableDevices()
+	devices := fm.AccountManager().GetControllableDevices()
 	commands := make([]BatchCommand, 0, len(devices))
 
 	for i := range devices {
@@ -408,7 +412,11 @@ func (fm *FleetManager) GetGroup(id string) (*DeviceGroup, bool) {
 func (fm *FleetManager) ListGroups() []*DeviceGroup {
 	fm.mu.RLock()
 	defer fm.mu.RUnlock()
+	return fm.listGroupsLocked()
+}
 
+// listGroupsLocked is ListGroups for callers holding fm.mu.
+func (fm *FleetManager) listGroupsLocked() []*DeviceGroup {
 	groups := make([]*DeviceGroup, 0, len(fm.groups))
 	for _, g := range fm.groups {
 		groups = append(groups, g)
@@ -614,6 +622,24 @@ func (hm *HealthMonitor) ListDeviceHealth() []*DeviceHealth {
 	return healthList
 }
 
+// snapshot returns a copy of every device's health data, sorted by device ID,
+// that stays consistent while events keep arriving.
+func (hm *HealthMonitor) snapshot() []DeviceHealth {
+	hm.mu.RLock()
+	defer hm.mu.RUnlock()
+
+	healthList := make([]DeviceHealth, 0, len(hm.deviceHealth))
+	for _, h := range hm.deviceHealth {
+		healthList = append(healthList, *h)
+	}
+
+	sort.Slice(healthList, func(i, j int) bool {
+		return healthList[i].DeviceID < healthList[j].DeviceID
+	})
+
+	return healthList
+}
+
 // GetUnhealthyDevices returns devices that haven't been seen recently.
 func (hm *HealthMonitor) GetUnhealthyDevices(threshold time.Duration) []*DeviceHealth {
 	hm.mu.RLock()
@@ -690,14 +716,16 @@ func (fm *FleetManager) ToJSON() ([]byte, error) {
 	fm.mu.RLock()
 	defer fm.mu.RUnlock()
 
+	// The locked variants are used because taking the read lock a second time
+	// deadlocks as soon as a writer is waiting between the two acquisitions.
 	state := struct {
 		Groups   []*DeviceGroup  `json:"groups"`
 		Statuses []*DeviceStatus `json:"statuses"`
-		Health   []*DeviceHealth `json:"health"`
+		Health   []DeviceHealth  `json:"health"`
 	}{
-		Groups:   fm.ListGroups(),
-		Statuses: fm.ListDeviceStatuses(),
-		Health:   fm.healthMonitor.ListDeviceHealth(),
+		Groups:   fm.listGroupsLocked(),
+		Statuses: fm.listDeviceStatusesLocked(),
+		Health:   fm.healthMonitor.snapshot(),
 	}
 
 	return json.Marshal(state)

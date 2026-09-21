@@ -46,7 +46,12 @@ type Connection struct {
 	host             string
 	token            string
 	mu               sync.RWMutex
-	closed           bool
+
+	// writeMu serializes data writes. The WebSocket allows one writer at a
+	// time; pings go through WriteControl, which is safe alongside a writer.
+	writeMu sync.Mutex
+
+	closed bool
 }
 
 // newConnection creates and initializes a new WebSocket connection.
@@ -199,7 +204,9 @@ func (c *Connection) OnRawMessage(handler func(*WSMessage)) {
 	c.mu.Unlock()
 }
 
-// SendCommand sends a control command to a device.
+// SendCommand sends a control command to a device. It is safe to call from
+// several goroutines; the writes happen one at a time. A write is given up
+// after 10 seconds, or at the deadline of ctx when that is sooner.
 func (c *Connection) SendCommand(ctx context.Context, deviceID, action string, params any) error {
 	c.mu.RLock()
 	if c.closed {
@@ -227,11 +234,27 @@ func (c *Connection) SendCommand(ctx context.Context, deviceID, action string, p
 
 	// WebSocket text message type (1 = TextMessage in gorilla/websocket)
 	const textMessage = 1
+
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+
+	if err := ws.SetWriteDeadline(writeDeadline(ctx)); err != nil {
+		return fmt.Errorf("failed to set write deadline: %w", err)
+	}
 	if err := ws.WriteMessage(textMessage, data); err != nil {
 		return fmt.Errorf("failed to send command: %w", err)
 	}
 
 	return nil
+}
+
+// writeDeadline returns the time by which a write started now must finish.
+func writeDeadline(ctx context.Context) time.Time {
+	deadline := time.Now().Add(10 * time.Second)
+	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
+		return d
+	}
+	return deadline
 }
 
 // SendRelayCommand sends a relay on/off command.
@@ -308,19 +331,22 @@ func (c *Connection) handleMessage(data []byte) {
 	var msg WSMessage
 	if err := json.Unmarshal(data, &msg); err != nil {
 		c.mu.RLock()
-		if c.onError != nil {
-			c.onError(fmt.Errorf("failed to parse message: %w", err))
-		}
+		onError := c.onError
 		c.mu.RUnlock()
+
+		if onError != nil {
+			onError(fmt.Errorf("failed to parse message: %w", err))
+		}
 		return
 	}
 
-	// Call raw message handler if registered
 	c.mu.RLock()
-	if c.onRawMessage != nil {
-		c.onRawMessage(&msg)
-	}
+	onRawMessage := c.onRawMessage
 	c.mu.RUnlock()
+
+	if onRawMessage != nil {
+		onRawMessage(&msg)
+	}
 
 	// Route to specific handlers based on event type
 	switch EventType(msg.Event) {

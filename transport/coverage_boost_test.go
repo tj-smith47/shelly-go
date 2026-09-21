@@ -481,14 +481,18 @@ func TestWebSocket_readLoop_ServerClose(t *testing.T) {
 	t.Errorf("state = %v after server close, want Disconnected", ws.State())
 }
 
-func TestWebSocket_handleDisconnect_AlreadyClosedStopPing(t *testing.T) {
-	ws := NewWebSocket("ws://192.168.1.100/rpc", WithReconnect(false))
+func TestWebSocket_handleDisconnect_SessionAlreadyStopped(t *testing.T) {
+	svr := newWsEchoServer(t)
+	defer svr.Close()
 
-	// stopPing already closed — handleDisconnect must not panic.
-	ws.stopPing = make(chan struct{})
-	close(ws.stopPing) // pre-close it
+	ws := NewWebSocket(svrWSURL(svr), WithReconnect(false))
+	defer ws.Close()
+	session := connectedSession(t, ws)
 
-	ws.handleDisconnect(fmt.Errorf("connection reset"))
+	// Close racing a read error stops the same session twice; neither may panic.
+	session.stop()
+	ws.handleDisconnect(session)
+	ws.handleDisconnect(session)
 }
 
 func TestWebSocket_Call_RoundTrip(t *testing.T) {
@@ -1044,52 +1048,27 @@ func TestCoAP_Close_AlreadyClosedStopListen(t *testing.T) {
 	}
 }
 
-// TestWebSocket_pingLoop_ConnNil exercises the `conn == nil` early-return path
-// inside pingLoop.
-func TestWebSocket_pingLoop_ConnNil(t *testing.T) {
-	ws := NewWebSocket("ws://192.168.1.100/rpc", WithPingInterval(5*time.Millisecond))
+// TestWebSocket_pingLoop_WriteError exercises the ping-failure return path.
+func TestWebSocket_pingLoop_WriteError(t *testing.T) {
+	svr := newWsEchoServer(t)
+	defer svr.Close()
 
-	ws.stopPing = make(chan struct{})
-	// conn is nil — pingLoop should return after the first tick.
+	ws := NewWebSocket(svrWSURL(svr), WithPingInterval(5*time.Millisecond), WithReconnect(false))
+	defer ws.Close()
+	session := connectedSession(t, ws)
+	session.conn.Close()
 
 	done := make(chan struct{})
 	go func() {
-		ws.pingLoop()
-		close(done)
+		defer close(done)
+		ws.pingLoop(session)
 	}()
 
 	select {
 	case <-done:
-		// Expected: pingLoop returned due to nil conn.
-	case <-time.After(500 * time.Millisecond):
-		t.Error("pingLoop did not return with nil conn")
+	case <-time.After(5 * time.Second):
+		t.Fatal("pingLoop did not return after its connection failed")
 	}
-}
-
-// TestWebSocket_pingLoop_WriteError exercises the WriteControl error return path.
-func TestWebSocket_pingLoop_WriteError(t *testing.T) {
-	// Connect to a real server, then close the underlying connection while the
-	// ping loop is running so WriteControl returns an error.
-	upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
-	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			return
-		}
-		// Close server-side immediately so client ping fails.
-		conn.Close()
-	}))
-	defer svr.Close()
-
-	ws := NewWebSocket(svrWSURL(svr), WithPingInterval(20*time.Millisecond), WithReconnect(false))
-	defer ws.Close()
-
-	if err := ws.Connect(context.Background()); err != nil {
-		t.Fatalf("Connect() error = %v", err)
-	}
-
-	// Give pingLoop time to attempt a ping and hit the write error.
-	time.Sleep(200 * time.Millisecond)
 }
 
 // TestMQTT_handleNotification_WithHandler covers the nil-handler guard in
@@ -1097,53 +1076,38 @@ func TestWebSocket_pingLoop_WriteError(t *testing.T) {
 func TestMQTT_handleNotification_HanlderSet(t *testing.T) {
 	m := NewMQTT("tcp://192.168.1.10:1883", "device-abc")
 
-	var received json.RawMessage
+	received := make(chan json.RawMessage, 1)
 	m.notifyMu.Lock()
-	m.notifyHandler = func(data json.RawMessage) { received = data }
+	m.notifyHandler = func(data json.RawMessage) { received <- data }
 	m.notifyMu.Unlock()
 
 	msg := &mockMessage{payload: []byte(`{"method":"NotifyStatus"}`)}
 	m.handleNotification(nil, msg)
 
-	if received == nil {
+	select {
+	case <-received:
+	case <-time.After(5 * time.Second):
 		t.Error("handleNotification did not call handler")
 	}
 }
 
-// TestWebSocket_Call_WriteError exercises the WriteMessage error path in Call
-// by writing to a connection that was closed server-side.  We inject the conn
-// directly, close it, then confirm Call returns an error.
 func TestWebSocket_Call_WriteError(t *testing.T) {
 	svr := newWsEchoServer(t)
 	defer svr.Close()
 
 	ws := NewWebSocket(svrWSURL(svr), WithReconnect(false))
 	defer ws.Close()
+	session := connectedSession(t, ws)
 
-	if err := ws.Connect(context.Background()); err != nil {
-		t.Fatalf("Connect() error = %v", err)
-	}
-
-	// Close the underlying websocket connection directly so WriteMessage fails.
-	ws.connMu.Lock()
-	conn := ws.conn
-	ws.connMu.Unlock()
-	conn.Close()
-
-	// Give the readLoop a moment to detect and call handleDisconnect.
-	time.Sleep(50 * time.Millisecond)
-
-	// Inject a fake conn so that Call doesn't auto-reconnect but WriteMessage
-	// fails on the closed connection.
-	ws.connMu.Lock()
-	ws.conn = conn // put closed conn back so Call sees non-nil and tries to write
-	ws.connMu.Unlock()
+	// No new connection can be made, so Call fails whether it still holds the
+	// dead session (write error) or has to dial again (dial error).
+	svr.Listener.Close()
+	session.conn.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
-	_, err := ws.Call(ctx, newTestRPCRequest("Switch.Set", nil))
-	if err == nil {
+	if _, err := ws.Call(ctx, newTestRPCRequest("Switch.Set", nil)); err == nil {
 		t.Error("Call() with closed connection error = nil, want error")
 	}
 }
@@ -1158,10 +1122,12 @@ func TestMQTT_Connect_TokenError(t *testing.T) {
 	// with a client that returns an error Subscribe token.
 	client := &mockClientConnected{connected: false, subscribeErr: fmt.Errorf("subscribe error")}
 	// onConnect subscribes to the response topic; if that fails it returns early.
+	m.client = client
 	m.onConnect(client)
 
-	// State should be Connected (setState is called before subscribe).
-	if m.State() != StateConnected {
-		t.Errorf("State() = %v, want Connected", m.State())
+	// Without the response subscription no reply can arrive, so the transport
+	// must not claim to be connected.
+	if m.State() == StateConnected {
+		t.Errorf("State() = %v after a failed response subscription", m.State())
 	}
 }

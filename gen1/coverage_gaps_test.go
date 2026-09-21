@@ -434,7 +434,7 @@ func TestReceiveLoop_NonTimeoutError(t *testing.T) {
 
 	// Close the underlying connection directly — this causes ReadFromUDP to
 	// return a non-timeout error on the next iteration without closing stopCh,
-	// exercising the "Log error and continue" branch.
+	// which ends the receive loop.
 	srvConn.Close()
 
 	// Give the loop a moment to hit the error path.

@@ -366,22 +366,26 @@ func newRateLimiter(requestsPerSecond float64) *rateLimiter {
 }
 
 // wait waits until the next request can be made.
+//
+// Each caller reserves the next free slot under the lock and waits for it
+// with the lock released, so a caller whose ctx ends returns at once even when
+// others are queued ahead of it. A slot given up that way is not reused.
 func (r *rateLimiter) wait(ctx context.Context) error {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	now := time.Now()
-	nextCall := r.lastCall.Add(r.interval)
+	slot := r.lastCall.Add(r.interval)
+	if slot.Before(now) {
+		slot = now
+	}
+	r.lastCall = slot
+	r.mu.Unlock()
 
-	if now.Before(nextCall) {
-		waitDuration := nextCall.Sub(now)
+	if delay := slot.Sub(now); delay > 0 {
 		select {
-		case <-time.After(waitDuration):
+		case <-time.After(delay):
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 	}
-
-	r.lastCall = time.Now()
 	return nil
 }

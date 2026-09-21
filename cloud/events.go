@@ -3,6 +3,8 @@ package cloud
 import (
 	"encoding/json"
 	"sync"
+
+	"github.com/tj-smith47/shelly-go/internal/serial"
 )
 
 // EventHandlers manages event handlers for WebSocket events.
@@ -27,6 +29,9 @@ type EventHandlers struct {
 
 	// onMessage is called for all messages.
 	onMessage []func(msg *WebSocketMessage)
+
+	// queue orders deliveries so handlers never run concurrently.
+	queue serial.Queue[*WebSocketMessage]
 
 	// mu protects handler registration.
 	mu sync.RWMutex
@@ -86,47 +91,52 @@ func (h *EventHandlers) OnMessage(handler func(msg *WebSocketMessage)) {
 	h.onMessage = append(h.onMessage, handler)
 }
 
-// Dispatch dispatches a message to the appropriate handlers.
+// Dispatch delivers a message to the handlers registered for its event type.
+//
+// Handlers run one at a time, in the order messages were dispatched, and never
+// concurrently with themselves. When a delivery is already in progress, on
+// another goroutine or because a handler called Dispatch, the message is queued
+// and Dispatch returns at once; the delivery in progress hands it to the
+// handlers afterwards. Handlers may register further handlers or call Clear;
+// the change applies from the next message on.
 func (h *EventHandlers) Dispatch(msg *WebSocketMessage) {
+	h.queue.Push(msg, h.deliver)
+}
+
+// deliver runs the handlers registered for msg.
+func (h *EventHandlers) deliver(msg *WebSocketMessage) {
+	var (
+		byDevice  []func(deviceID string)
+		byPayload []func(deviceID string, payload json.RawMessage)
+		payload   = msg.Status
+	)
+
 	h.mu.RLock()
-	defer h.mu.RUnlock()
-
-	// Call all message handlers
-	for _, handler := range h.onMessage {
-		handler(msg)
-	}
-
-	// Dispatch based on event type
+	onMessage := h.onMessage
 	switch msg.Event {
 	case EventDeviceOnline:
-		for _, handler := range h.onDeviceOnline {
-			handler(msg.DeviceID)
-		}
-
+		byDevice = h.onDeviceOnline
 	case EventDeviceOffline:
-		for _, handler := range h.onDeviceOffline {
-			handler(msg.DeviceID)
-		}
-
+		byDevice = h.onDeviceOffline
 	case EventDeviceStatusChange:
-		for _, handler := range h.onStatusChange {
-			handler(msg.DeviceID, msg.Status)
-		}
-
+		byPayload = h.onStatusChange
 	case EventNotifyStatus:
-		for _, handler := range h.onNotifyStatus {
-			handler(msg.DeviceID, msg.Status)
-		}
-
+		byPayload = h.onNotifyStatus
 	case EventNotifyFullStatus:
-		for _, handler := range h.onNotifyFullStatus {
-			handler(msg.DeviceID, msg.Status)
-		}
-
+		byPayload = h.onNotifyFullStatus
 	case EventNotifyEvent:
-		for _, handler := range h.onNotifyEvent {
-			handler(msg.DeviceID, msg.Data)
-		}
+		byPayload, payload = h.onNotifyEvent, msg.Data
+	}
+	h.mu.RUnlock()
+
+	for _, handler := range onMessage {
+		handler(msg)
+	}
+	for _, handler := range byDevice {
+		handler(msg.DeviceID)
+	}
+	for _, handler := range byPayload {
+		handler(msg.DeviceID, payload)
 	}
 }
 

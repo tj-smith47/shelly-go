@@ -30,18 +30,16 @@ const (
 // Note: CoAP is primarily used for receiving status updates from Gen1 devices.
 // For control commands, use the HTTP transport with REST API.
 type CoAP struct {
-	opts           *options
-	conn           *net.UDPConn
-	notifyHandler  NotificationHandler
-	stopListen     chan struct{}
-	address        string
-	stateCallbacks []func(ConnectionState)
-	state          ConnectionState
-	mu             sync.RWMutex
-	notifyMu       sync.RWMutex
-	stateMu        sync.RWMutex
-	connMu         sync.Mutex
-	closed         bool
+	opts          *options
+	conn          *net.UDPConn
+	notifyHandler NotificationHandler
+	stopListen    chan struct{}
+	address       string
+	connState
+	mu       sync.RWMutex
+	notifyMu sync.RWMutex
+	connMu   sync.Mutex
+	closed   bool
 }
 
 // CoIoTMessage represents a CoIoT status message from a Gen1 device.
@@ -69,10 +67,8 @@ func NewCoAP(address string, opts ...Option) *CoAP {
 	applyOptions(options, opts)
 
 	return &CoAP{
-		address:        address,
-		opts:           options,
-		state:          StateDisconnected,
-		stateCallbacks: make([]func(ConnectionState), 0),
+		address: address,
+		opts:    options,
 	}
 }
 
@@ -80,6 +76,10 @@ func NewCoAP(address string, opts ...Option) *CoAP {
 // For multicast mode, this joins the CoIoT multicast group.
 // For unicast mode, this prepares for communication with the specified device.
 func (c *CoAP) Connect(ctx context.Context) error {
+	// State callbacks run after connMu is released, so one of them may call
+	// back into the transport.
+	defer c.flushState()
+
 	c.connMu.Lock()
 	defer c.connMu.Unlock()
 
@@ -91,7 +91,7 @@ func (c *CoAP) Connect(ctx context.Context) error {
 		return nil // already connected
 	}
 
-	c.setState(StateConnecting)
+	c.queueState(StateConnecting)
 
 	var conn *net.UDPConn
 	var err error
@@ -105,16 +105,16 @@ func (c *CoAP) Connect(ctx context.Context) error {
 	}
 
 	if err != nil {
-		c.setState(StateDisconnected)
+		c.queueState(StateDisconnected)
 		return err
 	}
 
 	c.conn = conn
 	c.stopListen = make(chan struct{})
-	c.setState(StateConnected)
+	c.queueState(StateConnected)
 
 	// Start listener
-	go c.listenLoop()
+	go c.listenLoop(conn, c.stopListen)
 
 	return nil
 }
@@ -167,23 +167,15 @@ func (c *CoAP) startUnicastConnection() (*net.UDPConn, error) {
 	return conn, nil
 }
 
-// listenLoop reads messages from the UDP connection.
-func (c *CoAP) listenLoop() {
+// listenLoop reads messages from conn until stop is closed.
+func (c *CoAP) listenLoop(conn *net.UDPConn, stop <-chan struct{}) {
 	buf := make([]byte, coapBufferSize)
 
 	for {
 		select {
-		case <-c.stopListen:
+		case <-stop:
 			return
 		default:
-		}
-
-		c.connMu.Lock()
-		conn := c.conn
-		c.connMu.Unlock()
-
-		if conn == nil {
-			return
 		}
 
 		// Set read deadline for non-blocking check of stop channel
@@ -341,10 +333,8 @@ func (c *CoAP) Call(ctx context.Context, req RPCRequest) (json.RawMessage, error
 	}
 
 	// Auto-connect if not connected
-	if c.conn == nil {
-		if err := c.Connect(ctx); err != nil {
-			return nil, err
-		}
+	if err := c.Connect(ctx); err != nil {
+		return nil, err
 	}
 
 	// For Gen1 devices, CoAP is primarily for listening
@@ -374,36 +364,6 @@ func (c *CoAP) Unsubscribe() error {
 	return nil
 }
 
-// State returns the current connection state.
-func (c *CoAP) State() ConnectionState {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.state
-}
-
-// OnStateChange registers a callback for connection state changes.
-func (c *CoAP) OnStateChange(callback func(ConnectionState)) {
-	c.stateMu.Lock()
-	defer c.stateMu.Unlock()
-	c.stateCallbacks = append(c.stateCallbacks, callback)
-}
-
-// setState updates the connection state and notifies callbacks.
-func (c *CoAP) setState(state ConnectionState) {
-	c.mu.Lock()
-	c.state = state
-	c.mu.Unlock()
-
-	c.stateMu.RLock()
-	callbacks := make([]func(ConnectionState), len(c.stateCallbacks))
-	copy(callbacks, c.stateCallbacks)
-	c.stateMu.RUnlock()
-
-	for _, cb := range callbacks {
-		cb(state)
-	}
-}
-
 // isClosed returns true if the transport is closed.
 func (c *CoAP) isClosed() bool {
 	c.mu.RLock()
@@ -421,6 +381,7 @@ func (c *CoAP) Close() error {
 	c.closed = true
 	c.mu.Unlock()
 
+	c.connMu.Lock()
 	// Stop listener (only if it was started)
 	if c.stopListen != nil {
 		select {
@@ -431,7 +392,6 @@ func (c *CoAP) Close() error {
 	}
 
 	// Close connection
-	c.connMu.Lock()
 	if c.conn != nil {
 		c.conn.Close()
 		c.conn = nil

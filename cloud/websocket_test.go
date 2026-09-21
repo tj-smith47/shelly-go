@@ -619,7 +619,7 @@ func TestWebSocketReadLoop(t *testing.T) {
 	}
 
 	// Read loop should process message and then return on EOF
-	err := ws.readLoop(ctx)
+	_, err := ws.readLoop(ctx, ws.stopCh)
 	if !errors.Is(err, ErrWebSocketClosed) {
 		t.Errorf("readLoop() error = %v, want ErrWebSocketClosed", err)
 	}
@@ -650,7 +650,8 @@ func TestWebSocketReadLoopContextCancel(t *testing.T) {
 	// Run readLoop in goroutine
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- ws.readLoop(ctx)
+		_, err := ws.readLoop(ctx, ws.stopCh)
+		errCh <- err
 	}()
 
 	// Cancel context after short delay
@@ -826,7 +827,7 @@ func TestWebSocketAttemptConnectSuccess(t *testing.T) {
 	)
 
 	ctx := context.Background()
-	newInterval, shouldContinue, err := ws.attemptConnect(ctx, 500*time.Millisecond)
+	newInterval, shouldContinue, err := ws.attemptConnect(ctx, ws.stopCh, 500*time.Millisecond)
 	if err != nil {
 		t.Errorf("attemptConnect() error = %v, want nil", err)
 	}
@@ -856,7 +857,7 @@ func TestWebSocketAttemptConnectFailWithBackoff(t *testing.T) {
 
 	ctx := context.Background()
 	startTime := time.Now()
-	newInterval, shouldContinue, err := ws.attemptConnect(ctx, 50*time.Millisecond)
+	newInterval, shouldContinue, err := ws.attemptConnect(ctx, ws.stopCh, 50*time.Millisecond)
 	elapsed := time.Since(startTime)
 
 	if err != nil {
@@ -891,7 +892,7 @@ func TestWebSocketAttemptConnectFailWithMaxBackoff(t *testing.T) {
 
 	ctx := context.Background()
 	// Start with interval already at max
-	newInterval, shouldContinue, err := ws.attemptConnect(ctx, 100*time.Millisecond)
+	newInterval, shouldContinue, err := ws.attemptConnect(ctx, ws.stopCh, 100*time.Millisecond)
 	if err != nil {
 		t.Errorf("attemptConnect() error = %v, want nil", err)
 	}
@@ -923,7 +924,7 @@ func TestWebSocketAttemptConnectFailWithContextCancel(t *testing.T) {
 		cancel()
 	}()
 
-	_, shouldContinue, err := ws.attemptConnect(ctx, 10*time.Second)
+	_, shouldContinue, err := ws.attemptConnect(ctx, ws.stopCh, 10*time.Second)
 
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("attemptConnect() error = %v, want context.Canceled", err)
@@ -934,10 +935,7 @@ func TestWebSocketAttemptConnectFailWithContextCancel(t *testing.T) {
 }
 
 func TestWebSocketAttemptConnectFailWithStopChannel(t *testing.T) {
-	// First connect succeeds (to set ws.connected = true so Close() works)
-	mockConn := newMockWebSocketConn()
-	callCount := 0
-	mockDialer := &mockWebSocketDialer{}
+	mockDialer := &mockWebSocketDialer{dialErr: errors.New("connection refused")}
 
 	client := NewClient(
 		WithAccessToken("test-token"),
@@ -945,37 +943,13 @@ func TestWebSocketAttemptConnectFailWithStopChannel(t *testing.T) {
 	)
 
 	ws := NewWebSocket(client, WithDialer(mockDialer))
+	stop := ws.stopCh
 
-	// Connect first so stopCh is valid
-	mockDialer.conn = mockConn
-	ctx := context.Background()
-	if err := ws.Connect(ctx); err != nil {
-		t.Fatalf("Initial Connect failed: %v", err)
+	if err := ws.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
 	}
 
-	// Now set dialer to fail for subsequent connect attempts
-	mockDialer.dialErr = errors.New("connection refused")
-	mockDialer.conn = nil
-
-	// Manually mark as disconnected so attemptConnect will try to connect
-	ws.mu.Lock()
-	ws.connected = false
-	// Create new stopCh since the old one might be closed
-	ws.stopCh = make(chan struct{})
-	ws.mu.Unlock()
-
-	// Close stop channel during wait
-	go func() {
-		time.Sleep(10 * time.Millisecond)
-		// Directly close stopCh since Close() won't work now that connected=false
-		ws.mu.Lock()
-		close(ws.stopCh)
-		ws.mu.Unlock()
-	}()
-
-	_, shouldContinue, err := ws.attemptConnect(ctx, 10*time.Second)
-	_ = callCount // suppress unused warning
-
+	_, shouldContinue, err := ws.attemptConnect(context.Background(), stop, 10*time.Second)
 	if err != nil {
 		t.Errorf("attemptConnect() error = %v, want nil", err)
 	}

@@ -2,7 +2,9 @@ package rpc
 
 import (
 	"encoding/json"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestNewNotificationRouter(t *testing.T) {
@@ -455,5 +457,50 @@ func TestNotificationRouter_ConcurrentAccess(t *testing.T) {
 	// Should have 10 handlers registered
 	if nr.HandlerCount() != 10 {
 		t.Errorf("handler count = %v, want 10", nr.HandlerCount())
+	}
+}
+
+// The handler counts without locking on purpose: the race detector fails this
+// test if Route ever runs a handler concurrently with itself.
+func TestNotificationRouter_HandlersNeverRunConcurrently(t *testing.T) {
+	router := NewNotificationRouter()
+	var global, byMethod int
+	router.OnNotification(func(string, json.RawMessage) { global++ })
+	router.OnNotificationMethod("NotifyStatus", func(json.RawMessage) { byMethod++ })
+
+	const n = 100
+	var wg sync.WaitGroup
+	for range n {
+		wg.Go(func() { router.Route(&Notification{Method: "NotifyStatus"}) })
+	}
+	wg.Wait()
+
+	if global != n || byMethod != n {
+		t.Errorf("global=%d byMethod=%d, want %d each", global, byMethod, n)
+	}
+}
+
+func TestNotificationRouter_HandlerMayChangeHandlers(t *testing.T) {
+	router := NewNotificationRouter()
+	var late int
+	router.OnNotification(func(string, json.RawMessage) {
+		router.RemoveAllHandlers()
+		router.OnNotification(func(string, json.RawMessage) { late++ })
+	})
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		router.Route(&Notification{Method: "NotifyStatus"})
+		router.Route(&Notification{Method: "NotifyStatus"})
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Route deadlocked when a handler changed the handlers")
+	}
+	if late != 1 {
+		t.Errorf("replacement handler ran %d times, want 1", late)
 	}
 }

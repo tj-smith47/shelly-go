@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sync"
 
 	"github.com/tj-smith47/shelly-go/transport"
@@ -16,6 +17,7 @@ type CallHandler func(params any) (json.RawMessage, error)
 type MockTransport struct {
 	handlers map[string]CallHandler
 	calls    []RecordedCall
+	matchers []matcherHandler
 	mu       sync.RWMutex
 	closed   bool
 }
@@ -189,15 +191,12 @@ type matcherHandler struct {
 	handler CallHandler
 }
 
-// matchers holds registered path matchers.
-var matchers []matcherHandler
-
 // OnPathMatch registers a handler for paths matching a custom function.
 // This allows matching paths with query parameters.
 func (mt *MockTransport) OnPathMatch(matcher PathMatcher, handler CallHandler) *MockTransport {
 	mt.mu.Lock()
 	defer mt.mu.Unlock()
-	matchers = append(matchers, matcherHandler{matcher: matcher, handler: handler})
+	mt.matchers = append(mt.matchers, matcherHandler{matcher: matcher, handler: handler})
 	return mt
 }
 
@@ -263,12 +262,17 @@ func findSubstr(s, substr string) int {
 func (mt *MockTransport) ClearMatchers() {
 	mt.mu.Lock()
 	defer mt.mu.Unlock()
-	matchers = nil
+	mt.matchers = nil
 }
 
 // callWithMatchers tries matchers if no exact handler found.
 func (mt *MockTransport) callWithMatchers(method string, params any) (json.RawMessage, error, bool) {
-	for _, mh := range matchers {
+	mt.mu.RLock()
+	registered := slices.Clone(mt.matchers)
+	mt.mu.RUnlock()
+
+	// The lock is released first so a handler may call back into the transport.
+	for _, mh := range registered {
 		if mh.matcher(method) {
 			resp, err := mh.handler(params)
 			return resp, err, true

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -1568,4 +1569,22 @@ func TestManager_GetStatus_InvalidJSON(t *testing.T) {
 	if err == nil {
 		t.Error("GetStatus() expected error for invalid JSON")
 	}
+}
+
+// Fails under the race detector if the percentage is read without the lock
+// that SetPercentage writes it under.
+func TestStagedRollout_PercentageReadersAreLocked(t *testing.T) {
+	rollout := NewStagedRollout([]Device{
+		&mockDevice{address: "192.168.1.100"},
+		&mockDevice{address: "192.168.1.101"},
+	}, 50, nil)
+
+	var wg sync.WaitGroup
+	for i := range 50 {
+		wg.Go(func() { rollout.SetPercentage(i * 2) })
+		wg.Go(func() { rollout.TargetDeviceCount() })
+		wg.Go(func() { rollout.SelectDevices() })
+		wg.Go(func() { rollout.GetStatus() })
+	}
+	wg.Wait()
 }

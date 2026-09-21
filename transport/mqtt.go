@@ -3,12 +3,15 @@ package transport
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+
+	"github.com/tj-smith47/shelly-go/internal/serial"
 )
 
 // MQTT is an MQTT transport for Shelly devices.
@@ -21,23 +24,27 @@ import (
 //   - Request/response correlation
 //   - Last will and testament support
 type MQTT struct {
-	client         mqtt.Client
-	opts           *options
-	notifyHandler  NotificationHandler
-	pending        map[int64]chan *rpcResponse
-	broker         string
-	deviceID       string
-	src            string
-	stateCallbacks []func(ConnectionState)
-	requestID      atomic.Int64
-	state          ConnectionState
-	mu             sync.RWMutex
-	notifyMu       sync.RWMutex
-	stateMu        sync.RWMutex
-	connMu         sync.Mutex
-	pendingMu      sync.Mutex
-	closed         bool
+	client        mqtt.Client
+	done          chan struct{}
+	opts          *options
+	notifyHandler NotificationHandler
+	pending       map[int64]chan *rpcResponse
+	ready         chan error
+	broker        string
+	deviceID      string
+	src           string
+	notifications serial.Queue[[]byte]
+	connState
+	requestID atomic.Int64
+	mu        sync.RWMutex
+	notifyMu  sync.RWMutex
+	connMu    sync.Mutex
+	clientMu  sync.Mutex
+	pendingMu sync.Mutex
+	closed    bool
 }
+
+var errMQTTClosed = errors.New("MQTT transport is closed")
 
 // NewMQTT creates a new MQTT transport.
 //
@@ -59,33 +66,75 @@ func NewMQTT(broker, deviceID string, opts ...Option) *MQTT {
 	}
 
 	return &MQTT{
-		broker:         broker,
-		deviceID:       deviceID,
-		src:            options.mqttClientID,
-		opts:           options,
-		state:          StateDisconnected,
-		pending:        make(map[int64]chan *rpcResponse),
-		stateCallbacks: make([]func(ConnectionState), 0),
+		broker:   broker,
+		deviceID: deviceID,
+		src:      options.mqttClientID,
+		opts:     options,
+		pending:  make(map[int64]chan *rpcResponse),
+		done:     make(chan struct{}),
 	}
 }
 
 // Connect establishes the MQTT connection.
 // This must be called before making any RPC calls.
 func (m *MQTT) Connect(ctx context.Context) error {
+	_, err := m.connect(ctx)
+	return err
+}
+
+// connect returns the connected client, dialing the broker if there is none.
+//
+// connMu only keeps two dials from running at once. The client itself is
+// guarded by clientMu, so Close and the client's own event handlers never wait
+// behind a dial.
+func (m *MQTT) connect(ctx context.Context) (mqtt.Client, error) {
+	// State callbacks run after connMu is released, so one of them may call
+	// back into the transport.
+	defer m.flushState()
+
 	m.connMu.Lock()
 	defer m.connMu.Unlock()
 
 	if m.isClosed() {
-		return fmt.Errorf("MQTT transport is closed")
+		return nil, errMQTTClosed
 	}
 
-	if m.client != nil && m.client.IsConnected() {
-		return nil // already connected
+	if client := m.currentClient(); client != nil && client.IsConnected() {
+		return client, nil // already connected
 	}
 
-	m.setState(StateConnecting)
+	// A client that lost its connection keeps redialing on its own; left
+	// running next to its replacement it would answer on the same client ID.
+	m.dropClient(nil)
 
-	// Create MQTT client options
+	m.queueState(StateConnecting)
+
+	// Create and connect client
+	client := mqtt.NewClient(m.clientOptions())
+	ready := make(chan error, 1)
+	m.clientMu.Lock()
+	m.client = client
+	m.ready = ready
+	m.clientMu.Unlock()
+	token := client.Connect()
+
+	err := m.awaitReady(ctx, token, ready)
+	if err != nil {
+		if m.dropClient(client) {
+			m.queueState(StateDisconnected)
+		}
+		return nil, err
+	}
+
+	// Close may have run during the dial and taken the client with it.
+	if m.currentClient() != client {
+		return nil, errMQTTClosed
+	}
+	return client, nil
+}
+
+// clientOptions builds the broker client's options from the transport's.
+func (m *MQTT) clientOptions() *mqtt.ClientOptions {
 	mqttOpts := mqtt.NewClientOptions().
 		AddBroker(m.broker).
 		SetClientID(m.opts.mqttClientID).
@@ -94,69 +143,126 @@ func (m *MQTT) Connect(ctx context.Context) error {
 		SetOnConnectHandler(m.onConnect).
 		SetConnectionLostHandler(m.onConnectionLost)
 
-	// Add authentication if provided
 	if m.opts.username != "" {
 		mqttOpts.SetUsername(m.opts.username)
 		mqttOpts.SetPassword(m.opts.password)
 	}
-
-	// Add TLS config if provided
 	if m.opts.tlsConfig != nil {
 		mqttOpts.SetTLSConfig(m.opts.tlsConfig)
 	}
+	return mqttOpts
+}
 
-	// Create and connect client
-	m.client = mqtt.NewClient(mqttOpts)
-	token := m.client.Connect()
-
-	// Wait for connection with context timeout
-	done := make(chan struct{})
-	go func() {
-		token.Wait()
-		close(done)
-	}()
-
+// awaitReady waits for the broker connection and then for onConnect to report
+// the response subscription. ctx or Close ends either wait.
+func (m *MQTT) awaitReady(ctx context.Context, token mqtt.Token, ready <-chan error) error {
 	select {
 	case <-ctx.Done():
-		m.setState(StateDisconnected)
 		return ctx.Err()
-	case <-done:
+	case <-m.done:
+		return errMQTTClosed
+	case <-token.Done():
 		if token.Error() != nil {
-			m.setState(StateDisconnected)
 			return fmt.Errorf("mqtt connect: %w", token.Error())
 		}
 	}
-
-	return nil
+	// The broker connection alone is not enough: a request published before
+	// the response topic is subscribed never gets its reply.
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-m.done:
+		return errMQTTClosed
+	case err := <-ready:
+		return err
+	}
 }
 
-// onConnect is called when MQTT connection is established.
-func (m *MQTT) onConnect(client mqtt.Client) {
-	m.setState(StateConnected)
+// currentClient returns the client in use, or nil.
+func (m *MQTT) currentClient() mqtt.Client {
+	m.clientMu.Lock()
+	defer m.clientMu.Unlock()
+	return m.client
+}
 
-	// Subscribe to response topic
-	responseTopic := m.src + "/rpc"
-	token := client.Subscribe(responseTopic, m.opts.mqttQoS, m.handleResponse)
-	token.Wait()
-	if token.Error() != nil {
+// dropClient disconnects and forgets the current client. With a non-nil only
+// it does so just when that is still the current client, and reports whether
+// it was.
+func (m *MQTT) dropClient(only mqtt.Client) bool {
+	m.clientMu.Lock()
+	client := m.client
+	if client == nil || (only != nil && client != only) {
+		m.clientMu.Unlock()
+		return false
+	}
+	m.client = nil
+	m.ready = nil
+	m.clientMu.Unlock()
+
+	client.Disconnect(0)
+	return true
+}
+
+// isCurrent reports whether client is the one the transport is using. Events
+// from a client that was dropped must not touch the state of its replacement.
+func (m *MQTT) isCurrent(client mqtt.Client) bool {
+	return m.currentClient() == client
+}
+
+// onConnect is called when MQTT connection is established, including each
+// time the client reconnects by itself.
+func (m *MQTT) onConnect(client mqtt.Client) {
+	if !m.isCurrent(client) {
 		return
 	}
 
-	// Subscribe to events topic if notification handler is set
+	err := m.subscribeTopics(client)
+
+	m.clientMu.Lock()
+	ready := m.ready
+	m.clientMu.Unlock()
+	if ready != nil {
+		select {
+		case ready <- err:
+		default:
+		}
+	}
+
+	// Connected is reported only once replies can arrive, so a listener that
+	// makes a Call straight away gets its response.
+	if err != nil {
+		m.setState(StateDisconnected)
+		return
+	}
+	m.setState(StateConnected)
+}
+
+// subscribeTopics subscribes to the response topic and, when a notification
+// handler is registered, the device's events topic.
+func (m *MQTT) subscribeTopics(client mqtt.Client) error {
+	token := client.Subscribe(m.src+"/rpc", m.opts.mqttQoS, m.handleResponse)
+	token.Wait()
+	if token.Error() != nil {
+		return fmt.Errorf("subscribe to responses: %w", token.Error())
+	}
+
 	m.notifyMu.RLock()
 	hasHandler := m.notifyHandler != nil
 	m.notifyMu.RUnlock()
 
 	if hasHandler {
-		eventsTopic := m.deviceID + "/events/rpc"
-		token = client.Subscribe(eventsTopic, m.opts.mqttQoS, m.handleNotification)
+		token = client.Subscribe(m.deviceID+"/events/rpc", m.opts.mqttQoS, m.handleNotification)
 		token.Wait()
+		if token.Error() != nil {
+			return fmt.Errorf("subscribe to events: %w", token.Error())
+		}
 	}
+	return nil
 }
 
 // onConnectionLost is called when MQTT connection is lost.
 func (m *MQTT) onConnectionLost(client mqtt.Client, err error) {
-	if m.isClosed() {
+	if m.isClosed() || !m.isCurrent(client) {
 		return
 	}
 
@@ -197,13 +303,23 @@ func (m *MQTT) handleResponse(client mqtt.Client, msg mqtt.Message) {
 }
 
 // handleNotification handles incoming MQTT notification messages.
+//
+// The handler runs off the client's message goroutine: that goroutine also
+// delivers RPC responses, so a handler that makes a Call would wait forever
+// for a response queued behind itself.
 func (m *MQTT) handleNotification(client mqtt.Client, msg mqtt.Message) {
+	m.notifications.Add(msg.Payload())
+	go m.notifications.Drain(m.notify)
+}
+
+// notify passes one notification to the registered handler.
+func (m *MQTT) notify(payload []byte) {
 	m.notifyMu.RLock()
 	handler := m.notifyHandler
 	m.notifyMu.RUnlock()
 
 	if handler != nil {
-		handler(msg.Payload())
+		handler(payload)
 	}
 }
 
@@ -233,14 +349,13 @@ func waitForPublish(ctx context.Context, token mqtt.Token) error {
 // The response is received on the client's response topic.
 func (m *MQTT) Call(ctx context.Context, rpcReq RPCRequest) (json.RawMessage, error) {
 	if m.isClosed() {
-		return nil, fmt.Errorf("MQTT transport is closed")
+		return nil, errMQTTClosed
 	}
 
 	// Auto-connect if not connected
-	if m.client == nil || !m.client.IsConnected() {
-		if err := m.Connect(ctx); err != nil {
-			return nil, err
-		}
+	client, err := m.connect(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	// Build request body from RPCRequest interface
@@ -253,8 +368,8 @@ func (m *MQTT) Call(ctx context.Context, rpcReq RPCRequest) (json.RawMessage, er
 	// Unmarshal params from json.RawMessage and add to request
 	if params := rpcReq.GetParams(); len(params) > 0 {
 		var p any
-		if err := json.Unmarshal(params, &p); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal params: %w", err)
+		if unmarshalErr := json.Unmarshal(params, &p); unmarshalErr != nil {
+			return nil, fmt.Errorf("failed to unmarshal params: %w", unmarshalErr)
 		}
 		reqBody["params"] = p
 	}
@@ -291,7 +406,7 @@ func (m *MQTT) Call(ctx context.Context, rpcReq RPCRequest) (json.RawMessage, er
 
 	// Publish to device RPC topic
 	rpcTopic := m.deviceID + "/rpc"
-	token := m.client.Publish(rpcTopic, m.opts.mqttQoS, false, data)
+	token := client.Publish(rpcTopic, m.opts.mqttQoS, false, data)
 	if err := waitForPublish(ctx, token); err != nil {
 		return nil, err
 	}
@@ -315,25 +430,24 @@ func (m *MQTT) Call(ctx context.Context, rpcReq RPCRequest) (json.RawMessage, er
 // This subscribes to the device's events topic.
 func (m *MQTT) Subscribe(handler NotificationHandler) error {
 	m.notifyMu.Lock()
-	defer m.notifyMu.Unlock()
-
 	if m.notifyHandler != nil {
+		m.notifyMu.Unlock()
 		return errHandlerAlreadyRegistered
 	}
-
 	m.notifyHandler = handler
+	m.notifyMu.Unlock()
 
 	// Subscribe to events topic if connected
-	m.connMu.Lock()
-	client := m.client
-	m.connMu.Unlock()
+	client := m.currentClient()
 
 	if client != nil && client.IsConnected() {
 		eventsTopic := m.deviceID + "/events/rpc"
 		token := client.Subscribe(eventsTopic, m.opts.mqttQoS, m.handleNotification)
 		token.Wait()
 		if token.Error() != nil {
+			m.notifyMu.Lock()
 			m.notifyHandler = nil
+			m.notifyMu.Unlock()
 			return fmt.Errorf("subscribe to events: %w", token.Error())
 		}
 	}
@@ -349,9 +463,7 @@ func (m *MQTT) Unsubscribe() error {
 	m.notifyMu.Unlock()
 
 	// Unsubscribe from events topic if connected
-	m.connMu.Lock()
-	client := m.client
-	m.connMu.Unlock()
+	client := m.currentClient()
 
 	if client != nil && client.IsConnected() {
 		eventsTopic := m.deviceID + "/events/rpc"
@@ -363,40 +475,6 @@ func (m *MQTT) Unsubscribe() error {
 	}
 
 	return nil
-}
-
-// State returns the current connection state.
-func (m *MQTT) State() ConnectionState {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.state
-}
-
-// OnStateChange registers a callback for connection state changes.
-//
-// Callbacks run on whichever goroutine changed the state (Connect, Close, or
-// the transport's background reconnect handling), so a callback can run
-// concurrently with itself and must be safe for concurrent use.
-func (m *MQTT) OnStateChange(callback func(ConnectionState)) {
-	m.stateMu.Lock()
-	defer m.stateMu.Unlock()
-	m.stateCallbacks = append(m.stateCallbacks, callback)
-}
-
-// setState updates the connection state and notifies callbacks.
-func (m *MQTT) setState(state ConnectionState) {
-	m.mu.Lock()
-	m.state = state
-	m.mu.Unlock()
-
-	m.stateMu.RLock()
-	callbacks := make([]func(ConnectionState), len(m.stateCallbacks))
-	copy(callbacks, m.stateCallbacks)
-	m.stateMu.RUnlock()
-
-	for _, cb := range callbacks {
-		cb(state)
-	}
 }
 
 // isClosed returns true if the transport is closed.
@@ -414,6 +492,7 @@ func (m *MQTT) Close() error {
 		return nil
 	}
 	m.closed = true
+	close(m.done)
 	m.mu.Unlock()
 
 	// Cancel all pending requests
@@ -424,13 +503,16 @@ func (m *MQTT) Close() error {
 	}
 	m.pendingMu.Unlock()
 
-	// Disconnect from broker
-	m.connMu.Lock()
-	if m.client != nil {
-		m.client.Disconnect(250) // 250ms quiesce period
-		m.client = nil
+	// Disconnect from broker. Not under connMu: a dial in progress would make
+	// Close wait for it; connect notices its client is gone when it returns.
+	m.clientMu.Lock()
+	client := m.client
+	m.client = nil
+	m.ready = nil
+	m.clientMu.Unlock()
+	if client != nil {
+		client.Disconnect(250) // 250ms quiesce period
 	}
-	m.connMu.Unlock()
 
 	m.setState(StateClosed)
 	return nil

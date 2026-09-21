@@ -50,12 +50,11 @@ func (d *Device) restCall(ctx context.Context, path string) (json.RawMessage, er
 // and capabilities. The result is cached for subsequent calls.
 func (d *Device) GetDeviceInfo(ctx context.Context) (*types.DeviceInfo, error) {
 	d.mu.RLock()
-	if d.info != nil {
-		d.mu.RUnlock()
-		info := d.info.ToTypesDeviceInfo()
-		return info, nil
-	}
+	cached := d.info
 	d.mu.RUnlock()
+	if cached != nil {
+		return cached.ToTypesDeviceInfo(), nil
+	}
 
 	info, err := d.fetchDeviceInfo(ctx)
 	if err != nil {

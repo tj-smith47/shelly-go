@@ -2,7 +2,10 @@ package rpc
 
 import (
 	"encoding/json"
+	"slices"
 	"sync"
+
+	"github.com/tj-smith47/shelly-go/internal/serial"
 )
 
 // NotificationHandler is a callback function for handling notifications.
@@ -19,6 +22,7 @@ type MethodNotificationHandler func(params json.RawMessage)
 type NotificationRouter struct {
 	methodHandlers map[string][]MethodNotificationHandler
 	handlers       []NotificationHandler
+	deliveries     serial.Queue[*Notification]
 	mu             sync.RWMutex
 }
 
@@ -94,24 +98,30 @@ func (nr *NotificationRouter) RemoveAllHandlers() {
 // Handlers are called synchronously in the order they were registered.
 // If a handler panics, the panic is not recovered and will propagate to
 // the caller.
+//
+// Handlers never run concurrently, whichever goroutines call Route, and they
+// may register or remove handlers; such a change applies from the next
+// notification. When Route is called while another notification is being
+// delivered, including from inside a handler, the new one is queued behind it.
 func (nr *NotificationRouter) Route(notification *Notification) {
 	if notification == nil {
 		return
 	}
 
-	nr.mu.RLock()
-	defer nr.mu.RUnlock()
+	nr.deliveries.Push(notification, nr.deliver)
+}
 
-	// Call global handlers
-	for _, handler := range nr.handlers {
+func (nr *NotificationRouter) deliver(notification *Notification) {
+	nr.mu.RLock()
+	global := slices.Clone(nr.handlers)
+	byMethod := slices.Clone(nr.methodHandlers[notification.Method])
+	nr.mu.RUnlock()
+
+	for _, handler := range global {
 		handler(notification.Method, notification.Params)
 	}
-
-	// Call method-specific handlers
-	if handlers, ok := nr.methodHandlers[notification.Method]; ok {
-		for _, handler := range handlers {
-			handler(notification.Params)
-		}
+	for _, handler := range byMethod {
+		handler(notification.Params)
 	}
 }
 

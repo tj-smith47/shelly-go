@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/tj-smith47/shelly-go/transport"
@@ -73,7 +74,7 @@ type Client struct {
 	transport transport.Transport
 	builder   *RequestBuilder
 	router    *NotificationRouter
-	auth      *AuthData
+	auth      atomic.Pointer[AuthData]
 }
 
 // NewClient creates a new RPC client with the given transport.
@@ -100,7 +101,7 @@ func NewClient(t transport.Transport) *Client {
 // The auth data will be included in all RPC requests.
 func NewClientWithAuth(t transport.Transport, auth *AuthData) *Client {
 	c := NewClient(t)
-	c.auth = auth
+	c.auth.Store(auth)
 	return c
 }
 
@@ -120,8 +121,8 @@ func (c *Client) Call(ctx context.Context, method string, params any) (json.RawM
 	}
 
 	// Add authentication if configured
-	if c.auth != nil {
-		req.WithAuth(c.auth)
+	if auth := c.auth.Load(); auth != nil {
+		req.WithAuth(auth)
 	}
 
 	// Execute request via transport (transport now uses RPCRequest interface)
@@ -179,8 +180,8 @@ func (c *Client) Notify(ctx context.Context, method string, params any) error {
 	}
 
 	// Add authentication if configured
-	if c.auth != nil {
-		req.WithAuth(c.auth)
+	if auth := c.auth.Load(); auth != nil {
+		req.WithAuth(auth)
 	}
 
 	// Send notification via transport (ignore response)
@@ -225,12 +226,12 @@ func (c *Client) RemoveAllHandlers() {
 
 // SetAuth sets the authentication data for all subsequent requests.
 func (c *Client) SetAuth(auth *AuthData) {
-	c.auth = auth
+	c.auth.Store(auth)
 }
 
 // ClearAuth clears the authentication data.
 func (c *Client) ClearAuth() {
-	c.auth = nil
+	c.auth.Store(nil)
 }
 
 // Close closes the underlying transport.

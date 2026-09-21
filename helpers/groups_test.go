@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/tj-smith47/shelly-go/factory"
 	"github.com/tj-smith47/shelly-go/types"
@@ -326,4 +327,38 @@ func (d *mockDevice) Generation() types.Generation {
 		return types.GenUnknown
 	}
 	return d.gen
+}
+
+func TestGroup_CallbacksMayChangeTheGroup(t *testing.T) {
+	dev1 := &mockDevice{addr: "192.168.1.100"}
+	dev2 := &mockDevice{addr: "192.168.1.101"}
+	g := NewGroup("Test", WithDevices(dev1, dev2))
+
+	done := make(chan struct{})
+	var visited int
+	var kept *Group
+	go func() {
+		defer close(done)
+		if err := g.ForEach(func(d factory.Device) error {
+			visited++
+			g.Remove(d.Address())
+			return nil
+		}); err != nil {
+			t.Errorf("ForEach() error = %v", err)
+		}
+		g.Add(dev1)
+		kept = g.Filter(func(factory.Device) bool { g.SetName("renamed"); return true })
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("a callback that changes the group deadlocked")
+	}
+	if visited != 2 {
+		t.Errorf("ForEach visited %d devices, want 2", visited)
+	}
+	if kept.Len() != 1 || g.Name() != "renamed" {
+		t.Errorf("after callbacks: kept=%d name=%q, want 1 and renamed", kept.Len(), g.Name())
+	}
 }

@@ -2,9 +2,12 @@ package gen2
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 
+	"github.com/tj-smith47/shelly-go/transport"
 	"github.com/tj-smith47/shelly-go/types"
 )
 
@@ -608,4 +611,31 @@ func TestDevice_MultipleComponentIDs(t *testing.T) {
 	if switch2.Key() != "switch:2" {
 		t.Errorf("switch2.Key() = %v, want switch:2", switch2.Key())
 	}
+}
+
+// staticTransport answers every call with the same body and keeps no state,
+// so it is safe to share between goroutines.
+type staticTransport []byte
+
+func (s staticTransport) Call(context.Context, transport.RPCRequest) (json.RawMessage, error) {
+	return json.RawMessage(s), nil
+}
+
+func (s staticTransport) Close() error { return nil }
+
+func TestDevice_GetDeviceInfo_Concurrent(t *testing.T) {
+	device := NewDevice(newTestClient(staticTransport(
+		`{"jsonrpc":"2.0","id":1,"result":{"id":"shellyplus1-abc123","gen":2}}`)))
+
+	// The race detector fails this test if the info cache is unguarded.
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			info, err := device.GetDeviceInfo(context.Background())
+			if err != nil || info.ID != "shellyplus1-abc123" {
+				t.Errorf("GetDeviceInfo() = %+v, %v", info, err)
+			}
+		})
+	}
+	wg.Wait()
 }

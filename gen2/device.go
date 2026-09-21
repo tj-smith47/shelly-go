@@ -3,6 +3,7 @@ package gen2
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/tj-smith47/shelly-go/rpc"
 	"github.com/tj-smith47/shelly-go/types"
@@ -13,10 +14,13 @@ import (
 // Device provides access to all device components and the Shelly namespace.
 // It implements the types.Device interface and provides type-safe access to
 // components like Switch, Cover, Light, etc.
+//
+// A Device is safe for concurrent use.
 type Device struct {
 	client *rpc.Client
 	shelly *Shelly
 	info   *DeviceInfo // Cached device info
+	mu     sync.RWMutex
 }
 
 // NewDevice creates a new Gen2+ device with the given RPC client.
@@ -63,8 +67,11 @@ func (d *Device) Client() *rpc.Client {
 //
 // To force a refresh, call device.Shelly().GetDeviceInfo() directly.
 func (d *Device) GetDeviceInfo(ctx context.Context) (*DeviceInfo, error) {
-	if d.info != nil {
-		return d.info, nil
+	d.mu.RLock()
+	cached := d.info
+	d.mu.RUnlock()
+	if cached != nil {
+		return cached, nil
 	}
 
 	info, err := d.shelly.GetDeviceInfo(ctx)
@@ -72,7 +79,9 @@ func (d *Device) GetDeviceInfo(ctx context.Context) (*DeviceInfo, error) {
 		return nil, err
 	}
 
+	d.mu.Lock()
 	d.info = info
+	d.mu.Unlock()
 	return info, nil
 }
 

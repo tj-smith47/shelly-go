@@ -7,10 +7,12 @@ import (
 	"net"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/tj-smith47/shelly-go/internal/serial"
 	"github.com/tj-smith47/shelly-go/types"
 )
 
@@ -186,6 +188,7 @@ type WiFiDiscoverer struct {
 	OnNetworkFound func(*WiFiNetwork)
 	OnDeviceFound  func(*WiFiDiscoveredDevice)
 	HTTPClient     *http.Client
+	found          serial.Queue[func()]
 	ProbeTimeout   time.Duration
 	tickInterval   time.Duration // injectable for tests; 0 → 10s production default
 	mu             sync.RWMutex
@@ -229,6 +232,10 @@ func (w *WiFiDiscoverer) Discover(timeout time.Duration) ([]DiscoveredDevice, er
 }
 
 // DiscoverWithContext scans for Shelly WiFi APs until the context is canceled.
+//
+// OnNetworkFound and OnDeviceFound are never called concurrently, even when
+// this overlaps a background scan started by StartDiscovery. Set both before
+// the first scan.
 func (w *WiFiDiscoverer) DiscoverWithContext(ctx context.Context) ([]DiscoveredDevice, error) {
 	if w.Scanner == nil {
 		return nil, ErrWiFiNotSupported
@@ -238,6 +245,10 @@ func (w *WiFiDiscoverer) DiscoverWithContext(ctx context.Context) ([]DiscoveredD
 	if err != nil {
 		return nil, &WiFiError{Message: "WiFi scan failed", Err: err}
 	}
+
+	// The entries are filled in below; the scanner may hand the same slice to
+	// every caller, so that is done on a copy.
+	networks = slices.Clone(networks)
 
 	devices := make([]DiscoveredDevice, 0, len(networks))
 
@@ -255,7 +266,7 @@ func (w *WiFiDiscoverer) DiscoverWithContext(ctx context.Context) ([]DiscoveredD
 
 		// Notify callback
 		if w.OnNetworkFound != nil {
-			w.OnNetworkFound(network)
+			w.notify(func() { w.OnNetworkFound(network) })
 		}
 
 		// Create basic device from network info
@@ -278,11 +289,17 @@ func (w *WiFiDiscoverer) DiscoverWithContext(ctx context.Context) ([]DiscoveredD
 
 		// Notify callback
 		if w.OnDeviceFound != nil {
-			w.OnDeviceFound(device)
+			w.notify(func() { w.OnDeviceFound(device) })
 		}
 	}
 
 	return devices, nil
+}
+
+// notify runs a found-callback in order and never alongside another one; a
+// manual scan can overlap the background scans of StartDiscovery.
+func (w *WiFiDiscoverer) notify(call func()) {
+	w.found.Push(call, func(f func()) { f() })
 }
 
 // networkToDevice creates a WiFiDiscoveredDevice from a WiFiNetwork.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -317,5 +318,47 @@ func TestBulkProvisioner_provisionWithRetry_NilResultFromProvision(t *testing.T)
 	}
 	if result.Success {
 		t.Error("provisionWithRetry should not succeed")
+	}
+}
+
+// The factory counts without locking on purpose: the race detector fails this
+// test if ProvisionBulk workers ever call ClientFactory at the same time.
+func TestBulkProvisioner_ClientFactoryNotCalledConcurrently(t *testing.T) {
+	var calls int
+	factory := func(string) (*rpc.Client, error) {
+		calls++
+		tr := &mockTransport{
+			callFunc: func(_ context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+				switch req.GetMethod() {
+				case "Shelly.GetDeviceInfo":
+					return jsonrpcResponse(`{"id":"test"}`)
+				case "WiFi.SetConfig":
+					return jsonrpcResponse(`{"restart_required":false}`)
+				default:
+					return jsonrpcResponse(`null`)
+				}
+			},
+		}
+		return rpc.NewClient(tr), nil
+	}
+
+	b := NewBulkProvisioner(factory)
+	b.Concurrency = 8
+	b.RetryCount = 0
+
+	targets := make([]*BulkProvisionTarget, 24)
+	for i := range targets {
+		targets[i] = &BulkProvisionTarget{
+			Address: fmt.Sprintf("192.168.1.%d", 100+i),
+			Config:  &DeviceConfig{WiFi: &WiFiConfig{SSID: "Net"}},
+		}
+	}
+
+	result, err := b.ProvisionBulk(context.Background(), targets, nil, &ProvisionOptions{WaitForConnection: false})
+	if err != nil {
+		t.Fatalf("ProvisionBulk() error = %v", err)
+	}
+	if result.SuccessCount != len(targets) || calls != len(targets) {
+		t.Errorf("SuccessCount=%d calls=%d, want %d each", result.SuccessCount, calls, len(targets))
 	}
 }

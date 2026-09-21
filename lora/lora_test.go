@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/tj-smith47/shelly-go/rpc"
 	"github.com/tj-smith47/shelly-go/transport"
@@ -1462,4 +1464,126 @@ func TestRoutedMessage_Fields(t *testing.T) {
 	if string(msg.Data) != "test" {
 		t.Errorf("Data = %s, want test", string(msg.Data))
 	}
+}
+
+func TestMessageRouter_Route_HandlersNeverOverlap(t *testing.T) {
+	router := NewMessageRouter()
+
+	// Both counters are written without a lock: the race detector fails this
+	// test if a handler or a Custom func ever runs concurrently with itself.
+	handled, filtered := 0, 0
+	router.Handle(func(*RoutedMessage) { handled++ }, &MessageFilter{
+		Custom: func(*RoutedMessage) bool { filtered++; return true },
+	})
+
+	const callers, perCaller = 8, 50
+	var wg sync.WaitGroup
+	for range callers {
+		wg.Go(func() {
+			for range perCaller {
+				count, err := router.Route(&RoutedMessage{FromDevice: "sensor1"})
+				if err != nil || count != 1 {
+					t.Errorf("Route() = %d, %v, want 1, nil", count, err)
+				}
+			}
+		})
+	}
+
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Route callers did not finish")
+	}
+
+	if handled != callers*perCaller || filtered != callers*perCaller {
+		t.Errorf("handled = %d, filtered = %d, want %d each", handled, filtered, callers*perCaller)
+	}
+}
+
+func TestMessageRouter_Route_HandlerMayCallRouter(t *testing.T) {
+	router := NewMessageRouter()
+
+	var got []string
+	router.Handle(func(msg *RoutedMessage) {
+		got = append(got, msg.FromDevice)
+		if msg.FromDevice != "first" {
+			return
+		}
+		router.Handle(func(*RoutedMessage) {}, nil)
+		if _, err := router.Route(&RoutedMessage{FromDevice: "second"}); err != nil {
+			t.Errorf("nested Route() error = %v", err)
+		}
+		router.ClearHandlers()
+	}, nil)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if _, err := router.Route(&RoutedMessage{FromDevice: "first"}); err != nil {
+			t.Errorf("Route() error = %v", err)
+		}
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Route deadlocked when its handler called the router")
+	}
+
+	if len(got) != 2 || got[0] != "first" || got[1] != "second" {
+		t.Errorf("delivered %v, want [first second]", got)
+	}
+}
+
+func TestMessageRouter_Route_CountIgnoresCustom(t *testing.T) {
+	router := NewMessageRouter()
+	called := false
+	router.Handle(func(*RoutedMessage) { called = true }, &MessageFilter{
+		FromDevice: "sensor1",
+		Custom:     func(*RoutedMessage) bool { return false },
+	})
+
+	count, err := router.Route(&RoutedMessage{FromDevice: "sensor1"})
+	if err != nil || count != 1 {
+		t.Errorf("Route() = %d, %v, want 1, nil", count, err)
+	}
+	if called {
+		t.Error("handler ran although Custom rejected the message")
+	}
+}
+
+func TestDeviceRegistry_ReturnsCopies(t *testing.T) {
+	registry := NewDeviceRegistry()
+	registered := &RegisteredDevice{DeviceID: "sensor1", Metadata: map[string]any{"k": "v"}}
+	if err := registry.Register(registered); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	// Readers use what the getters returned while a writer updates the same
+	// device: the race detector fails this test if they share memory.
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		for range 200 {
+			if err := registry.UpdateLastSeen("sensor1", -70, 9); err != nil {
+				t.Errorf("UpdateLastSeen() error = %v", err)
+			}
+			registry.RegisterOrUpdate(&RegisteredDevice{DeviceID: "sensor1", Metadata: map[string]any{"k": "w"}})
+		}
+	})
+	wg.Go(func() {
+		for range 200 {
+			registered.LastRSSI++
+			got, err := registry.Get("sensor1")
+			if err != nil || got.DeviceID != "sensor1" || got.Metadata["k"] == nil {
+				t.Errorf("Get() = %+v, %v", got, err)
+			}
+			for _, d := range registry.GetAll() {
+				if d.LastRSSI > 0 {
+					t.Errorf("LastRSSI = %d, want the registry's own value", d.LastRSSI)
+				}
+			}
+		}
+	})
+	wg.Wait()
 }

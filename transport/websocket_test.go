@@ -3,9 +3,13 @@ package transport
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 func TestNewWebSocket(t *testing.T) {
@@ -44,7 +48,7 @@ func TestNewWebSocket(t *testing.T) {
 }
 
 func TestWebSocket_Call(t *testing.T) {
-	ws := NewWebSocket("ws://192.168.1.100/rpc")
+	ws := NewWebSocket("ws://192.168.1.100/rpc", WithTimeout(200*time.Millisecond))
 	_, err := ws.Call(context.Background(), NewSimpleRequest("Switch.Set"))
 	if err == nil {
 		t.Error("Call() error = nil, want not implemented error")
@@ -196,16 +200,18 @@ func TestWebSocket_handleMessage_Response(t *testing.T) {
 func TestWebSocket_handleMessage_Notification(t *testing.T) {
 	ws := NewWebSocket("ws://192.168.1.100/rpc")
 
-	var received json.RawMessage
+	received := make(chan json.RawMessage, 1)
 	ws.Subscribe(func(data json.RawMessage) {
-		received = data
+		received <- data
 	})
 
 	// Simulate receiving a notification
 	message := []byte(`{"method":"NotifyStatus","params":{"ts":1234}}`)
 	ws.handleMessage(message)
 
-	if received == nil {
+	select {
+	case <-received:
+	case <-time.After(5 * time.Second):
 		t.Error("notification handler not called")
 	}
 }
@@ -236,8 +242,8 @@ func TestWebSocket_handleMessage_ResponseNoPending(t *testing.T) {
 func TestBase64Encode(t *testing.T) {
 	tests := []struct {
 		name  string
-		input []byte
 		want  string
+		input []byte
 	}{
 		{
 			name:  "empty",
@@ -289,11 +295,24 @@ func TestBasicAuth(t *testing.T) {
 	}
 }
 
-func TestWebSocket_handleDisconnect(t *testing.T) {
-	ws := NewWebSocket("ws://192.168.1.100/rpc", WithReconnect(false))
+// connectedSession connects ws and returns the session it established.
+func connectedSession(t *testing.T, ws *WebSocket) *wsSession {
+	t.Helper()
+	if err := ws.Connect(context.Background()); err != nil {
+		t.Fatalf("Connect() error = %v", err)
+	}
+	ws.connMu.Lock()
+	defer ws.connMu.Unlock()
+	return ws.session
+}
 
-	// Initialize stopPing channel (normally done in Connect)
-	ws.stopPing = make(chan struct{})
+func TestWebSocket_handleDisconnect(t *testing.T) {
+	svr := newWsEchoServer(t)
+	defer svr.Close()
+
+	ws := NewWebSocket(svrWSURL(svr), WithReconnect(false))
+	defer ws.Close()
+	session := connectedSession(t, ws)
 
 	// Create a pending request that should be canceled
 	respChan := make(chan *rpcResponse, 1)
@@ -302,13 +321,16 @@ func TestWebSocket_handleDisconnect(t *testing.T) {
 	ws.pendingMu.Unlock()
 
 	// Record state changes
+	var mu sync.Mutex
 	states := make([]ConnectionState, 0)
 	ws.OnStateChange(func(state ConnectionState) {
+		mu.Lock()
 		states = append(states, state)
+		mu.Unlock()
 	})
 
 	// Simulate disconnect
-	ws.handleDisconnect(nil)
+	ws.handleDisconnect(session)
 
 	// Verify pending request was canceled
 	ws.pendingMu.Lock()
@@ -318,16 +340,19 @@ func TestWebSocket_handleDisconnect(t *testing.T) {
 	ws.pendingMu.Unlock()
 
 	// Verify state changed to disconnected
+	mu.Lock()
+	defer mu.Unlock()
 	if len(states) == 0 || states[len(states)-1] != StateDisconnected {
 		t.Error("state should be disconnected")
 	}
 }
 
 func TestWebSocket_handleDisconnectWithReconnect(t *testing.T) {
-	ws := NewWebSocket("ws://192.168.1.100/rpc", WithReconnect(true), WithRetry(1, 10*time.Millisecond))
+	svr := newWsEchoServer(t)
+	defer svr.Close()
 
-	// Initialize stopPing channel (normally done in Connect)
-	ws.stopPing = make(chan struct{})
+	ws := NewWebSocket(svrWSURL(svr), WithReconnect(true), WithRetry(1, 10*time.Millisecond))
+	session := connectedSession(t, ws)
 
 	var mu sync.Mutex
 	states := make([]ConnectionState, 0)
@@ -337,8 +362,8 @@ func TestWebSocket_handleDisconnectWithReconnect(t *testing.T) {
 		mu.Unlock()
 	})
 
-	// Simulate disconnect - it will attempt to reconnect but fail
-	ws.handleDisconnect(nil)
+	// Simulate disconnect - it will attempt to reconnect
+	ws.handleDisconnect(session)
 
 	// Give reconnect time to attempt
 	time.Sleep(100 * time.Millisecond)
@@ -348,7 +373,8 @@ func TestWebSocket_handleDisconnectWithReconnect(t *testing.T) {
 }
 
 func TestWebSocket_reconnect(t *testing.T) {
-	ws := NewWebSocket("ws://192.168.1.100/rpc", WithRetry(1, 10*time.Millisecond))
+	ws := NewWebSocket("ws://192.168.1.100/rpc", WithRetry(1, 10*time.Millisecond),
+		WithTimeout(200*time.Millisecond))
 
 	var mu sync.Mutex
 	states := make([]ConnectionState, 0)
@@ -428,36 +454,83 @@ func TestWebSocket_isClosed(t *testing.T) {
 }
 
 func TestWebSocket_pingLoopStops(t *testing.T) {
-	ws := NewWebSocket("ws://192.168.1.100/rpc", WithPingInterval(10*time.Millisecond))
+	svr := newWsEchoServer(t)
+	defer svr.Close()
 
-	// Start ping loop in background
-	go ws.pingLoop()
+	ws := NewWebSocket(svrWSURL(svr), WithPingInterval(time.Hour), WithReconnect(false))
+	session := connectedSession(t, ws)
 
-	// Give it time to start
-	time.Sleep(5 * time.Millisecond)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ws.pingLoop(session)
+	}()
 
 	// Close should stop the ping loop
 	ws.Close()
 
-	// Give time for goroutine to exit
-	time.Sleep(20 * time.Millisecond)
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("pingLoop kept running after Close")
+	}
 }
 
-func TestWebSocket_readLoopNilConn(t *testing.T) {
-	ws := NewWebSocket("ws://192.168.1.100/rpc")
+// A read loop left over from an earlier connection must not tear down the
+// connection that replaced it.
+func TestWebSocket_StaleSessionLeavesSuccessorAlone(t *testing.T) {
+	svr := newWsEchoServer(t)
+	defer svr.Close()
 
-	// readLoop should return immediately when conn is nil
-	ws.readLoop()
+	ws := NewWebSocket(svrWSURL(svr), WithReconnect(false))
+	defer ws.Close()
 
-	// No panics should occur
+	first := connectedSession(t, ws)
+	ws.handleDisconnect(first)
+	second := connectedSession(t, ws)
+	if second == first {
+		t.Fatal("Connect() reused a torn-down session")
+	}
+
+	ws.handleDisconnect(first)
+
+	if ws.State() != StateConnected {
+		t.Errorf("state = %v after a stale disconnect, want connected", ws.State())
+	}
+	if _, err := ws.Call(context.Background(), newTestRPCRequest("Shelly.GetStatus", nil)); err != nil {
+		t.Errorf("Call() on the successor session error = %v", err)
+	}
 }
 
-func TestWebSocket_readLoopClosed(t *testing.T) {
-	ws := NewWebSocket("ws://192.168.1.100/rpc")
-	ws.Close()
+// Close has to close the connection itself: that is what ends the read
+// goroutine, which otherwise blocks in ReadMessage for good.
+func TestWebSocket_CloseClosesConnection(t *testing.T) {
+	serverSawClose := make(chan struct{})
+	upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
+	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		for {
+			if _, _, err := conn.ReadMessage(); err != nil {
+				close(serverSawClose)
+				return
+			}
+		}
+	}))
+	defer svr.Close()
 
-	// readLoop should return immediately when closed
-	ws.readLoop()
+	ws := NewWebSocket(svrWSURL(svr), WithReconnect(false))
+	connectedSession(t, ws)
+	if err := ws.Close(); err != nil {
+		t.Errorf("Close() error = %v", err)
+	}
 
-	// No panics should occur
+	select {
+	case <-serverSawClose:
+	case <-time.After(5 * time.Second):
+		t.Fatal("server never saw the connection close")
+	}
 }

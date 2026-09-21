@@ -123,6 +123,9 @@ type RoutedMessage struct {
 type MessageHandler func(msg *RoutedMessage)
 
 // MessageFilter allows filtering messages by device, group, or custom criteria.
+//
+// A MessageRouter never runs Custom concurrently with itself or with any
+// handler, and holds no lock while it runs.
 type MessageFilter struct {
 	Custom     func(msg *RoutedMessage) bool
 	FromDevice string
@@ -131,14 +134,17 @@ type MessageFilter struct {
 
 // Match returns true if the message matches the filter criteria.
 func (f *MessageFilter) Match(msg *RoutedMessage) bool {
+	if !f.matchFields(msg) {
+		return false
+	}
+	return f.Custom == nil || f.Custom(msg)
+}
+
+// matchFields checks every criterion except Custom, so it is safe to call
+// from any goroutine.
+func (f *MessageFilter) matchFields(msg *RoutedMessage) bool {
 	if f.FromDevice != "" && msg.FromDevice != f.FromDevice {
 		return false
 	}
-	if f.Group != "" && msg.Group != f.Group {
-		return false
-	}
-	if f.Custom != nil && !f.Custom(msg) {
-		return false
-	}
-	return true
+	return f.Group == "" || msg.Group == f.Group
 }

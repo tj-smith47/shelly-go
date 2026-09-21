@@ -614,3 +614,25 @@ func TestTokenManager_EnsureValid_AuthError(t *testing.T) {
 		t.Error("EnsureValid() should return error when auth fails")
 	}
 }
+
+// A failed background refresh has nobody to return its error to, so it must
+// stay readable until a later refresh succeeds.
+func TestTokenManager_LastRefreshError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewEncoder(w).Encode(AuthResponse{IsOK: false}); err != nil {
+			t.Errorf("encode response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	tm := NewTokenManager(NewWithOptions("tag", "token", server.URL, nil))
+	if err := tm.LastRefreshError(); err != nil {
+		t.Fatalf("LastRefreshError() = %v before any refresh, want nil", err)
+	}
+
+	tm.refreshIfNeeded(context.Background())
+
+	if err := tm.LastRefreshError(); err == nil {
+		t.Error("LastRefreshError() = nil after a failed background refresh")
+	}
+}

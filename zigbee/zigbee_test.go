@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1731,23 +1732,74 @@ func TestScanner_DiscoverDevices_ContextCancelled(t *testing.T) {
 }
 
 func TestScanner_NilHTTPClient(t *testing.T) {
-	scanner := &Scanner{
-		HTTPClient:  nil, // Will be set to default
-		Concurrency: 5,
-	}
+	server := createMockShellyServer(t, map[string]any{"id": "shellyplus1-abc123", "gen": 2}, nil)
+	defer server.Close()
 
-	// Call with empty addresses to trigger the nil client check
-	devices, err := scanner.DiscoverDevices(context.Background(), []string{})
+	scanner := &Scanner{Concurrency: 5}
+
+	devices, err := scanner.DiscoverDevices(context.Background(), []string{server.URL})
 	if err != nil {
 		t.Errorf("DiscoverDevices() error = %v", err)
 	}
-	if len(devices) != 0 {
-		t.Errorf("DiscoverDevices() returned %d devices, want 0", len(devices))
+	if len(devices) != 1 {
+		t.Errorf("DiscoverDevices() returned %d devices, want 1", len(devices))
 	}
 
-	// Verify HTTPClient was set
-	if scanner.HTTPClient == nil {
-		t.Error("HTTPClient should be set after DiscoverDevices call")
+	// The scanner is left untouched so concurrent scans do not write to it.
+	if scanner.HTTPClient != nil {
+		t.Error("DiscoverDevices() must not set HTTPClient")
+	}
+}
+
+type countingRoundTripper struct {
+	requests atomic.Int64
+}
+
+func (c *countingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	c.requests.Add(1)
+	return http.DefaultTransport.RoundTrip(req)
+}
+
+func TestScanner_UsesHTTPClient(t *testing.T) {
+	server := createMockShellyServer(t, map[string]any{"id": "shellyplus1-abc123", "gen": 2}, nil)
+	defer server.Close()
+
+	counter := &countingRoundTripper{}
+	scanner := NewScanner()
+	scanner.HTTPClient = &http.Client{Transport: counter}
+
+	if _, err := scanner.DiscoverDevices(context.Background(), []string{server.URL}); err != nil {
+		t.Fatalf("DiscoverDevices() error = %v", err)
+	}
+	if counter.requests.Load() == 0 {
+		t.Error("probe did not go through Scanner.HTTPClient")
+	}
+}
+
+func TestScanner_DiscoverDevices_CancelledContextReturns(t *testing.T) {
+	scanner := NewScanner()
+	scanner.Concurrency = 1
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	addresses := make([]string, 50)
+	for i := range addresses {
+		addresses[i] = "http://127.0.0.1:1"
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if _, err := scanner.DiscoverDevices(ctx, addresses); err != nil {
+			t.Errorf("DiscoverDevices() error = %v", err)
+		}
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("DiscoverDevices() did not return after its context was canceled")
 	}
 }
 

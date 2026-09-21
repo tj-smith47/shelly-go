@@ -842,13 +842,22 @@ func (r *BLEProvisionResult) Duration() time.Duration {
 
 // BulkProvisioner handles provisioning multiple devices.
 type BulkProvisioner struct {
-	// ClientFactory builds the RPC client for one device. ProvisionBulk calls
-	// it from up to Concurrency workers at once, so it must be safe for
-	// concurrent use.
+	// ClientFactory builds the RPC client for one device. Devices are
+	// provisioned by up to Concurrency workers in parallel, but the factory
+	// itself is called by one worker at a time, so it needs no locking.
 	ClientFactory func(address string) (*rpc.Client, error)
 	Concurrency   int
 	RetryCount    int
 	RetryDelay    time.Duration
+	factoryMu     sync.Mutex
+}
+
+// newClient calls ClientFactory under a lock: factories usually share a
+// transport pool or a counter and are written without concurrency in mind.
+func (b *BulkProvisioner) newClient(address string) (*rpc.Client, error) {
+	b.factoryMu.Lock()
+	defer b.factoryMu.Unlock()
+	return b.ClientFactory(address)
 }
 
 // NewBulkProvisioner creates a new bulk provisioner.
@@ -1048,7 +1057,7 @@ func (b *BulkProvisioner) provisionWithRetry(
 			}
 		}
 
-		client, err := b.ClientFactory(address)
+		client, err := b.newClient(address)
 		if err != nil {
 			lastResult = &ProvisionResult{
 				Address: address,

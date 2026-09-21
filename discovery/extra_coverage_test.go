@@ -1,6 +1,8 @@
 package discovery
 
 import (
+	"context"
+	"sync"
 	"testing"
 	"time"
 )
@@ -58,7 +60,6 @@ func TestParseBTHomeObject_EmptyData(t *testing.T) {
 func TestBLEDiscoverer_HandleAdvertisement_SendsToChannel(t *testing.T) {
 	d := NewBLEDiscovererWithScanner(newMockBLEScanner())
 	d.devicesCh = make(chan DiscoveredDevice, 10)
-	d.stopCh = make(chan struct{})
 
 	adv := &BLEAdvertisement{
 		Address:     "AA:BB:CC:DD:EE:FF",
@@ -82,7 +83,6 @@ func TestBLEDiscoverer_HandleAdvertisement_FullChannel(t *testing.T) {
 	// When devicesCh is full the default branch is taken — must not block.
 	d := NewBLEDiscovererWithScanner(newMockBLEScanner())
 	d.devicesCh = make(chan DiscoveredDevice) // zero-capacity → always full
-	d.stopCh = make(chan struct{})
 
 	adv := &BLEAdvertisement{
 		Address:     "AA:BB:CC:DD:EE:FF",
@@ -229,7 +229,6 @@ func TestScanner_Stop_WithAllDiscoverers(t *testing.T) {
 func TestBLEDiscoverer_HandleAdvertisement_NonShelly(t *testing.T) {
 	d := NewBLEDiscovererWithScanner(newMockBLEScanner())
 	d.devicesCh = make(chan DiscoveredDevice, 10)
-	d.stopCh = make(chan struct{})
 
 	// Non-Shelly advertisement — isShellyDevice returns false → early return.
 	adv := &BLEAdvertisement{
@@ -244,5 +243,55 @@ func TestBLEDiscoverer_HandleAdvertisement_NonShelly(t *testing.T) {
 		t.Errorf("unexpected device on channel for non-Shelly adv: %+v", dev)
 	default:
 		// Good — nothing was sent.
+	}
+}
+
+// The callbacks in the next two tests count without locking on purpose: the
+// race detector fails them if a found-callback ever runs concurrently.
+
+func TestBLEDiscoverer_OnDeviceFoundNotCalledConcurrently(t *testing.T) {
+	d := NewBLEDiscovererWithScanner(newMockBLEScanner())
+	var calls int
+	d.OnDeviceFound = func(*BLEDiscoveredDevice) { calls++ }
+
+	const n = 50
+	var wg sync.WaitGroup
+	for range n {
+		wg.Go(func() {
+			d.handleAdvertisement(&BLEAdvertisement{
+				Address:     "AA:BB:CC:DD:EE:FF",
+				LocalName:   "SHELLY-PLUS1-ABC",
+				ServiceData: make(map[string][]byte),
+			})
+		})
+	}
+	wg.Wait()
+
+	if calls != n {
+		t.Errorf("OnDeviceFound ran %d times, want %d", calls, n)
+	}
+}
+
+func TestWiFiDiscoverer_FoundCallbacksNotCalledConcurrently(t *testing.T) {
+	d := NewWiFiDiscovererWithScanner(&mockWiFiScanner{
+		networks: []WiFiNetwork{{SSID: "ShellyPlus1-A8032ABE5084"}},
+	})
+	var networks, devices int
+	d.OnNetworkFound = func(*WiFiNetwork) { networks++ }
+	d.OnDeviceFound = func(*WiFiDiscoveredDevice) { devices++ }
+
+	const n = 20
+	var wg sync.WaitGroup
+	for range n {
+		wg.Go(func() {
+			if _, err := d.DiscoverWithContext(context.Background()); err != nil {
+				t.Errorf("DiscoverWithContext() error = %v", err)
+			}
+		})
+	}
+	wg.Wait()
+
+	if networks != n || devices != n {
+		t.Errorf("networks=%d devices=%d, want %d each", networks, devices, n)
 	}
 }

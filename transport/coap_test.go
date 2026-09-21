@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net"
 	"testing"
+	"time"
 )
 
 func TestNewCoAP(t *testing.T) {
@@ -369,36 +370,85 @@ func TestCoAP_isClosed(t *testing.T) {
 	}
 }
 
-func TestCoAP_listenLoopStopsOnClose(t *testing.T) {
-	coap := NewCoAP("192.168.1.100")
-
-	// Initialize stopListen channel
-	coap.stopListen = make(chan struct{})
-
-	// Start listen loop in goroutine (it will exit early since conn is nil)
-	done := make(chan struct{})
-	go func() {
-		coap.listenLoop()
-		close(done)
-	}()
-
-	// Close to stop the listen loop
-	close(coap.stopListen)
-
-	// Wait for goroutine to finish
-	<-done
+// udpPair returns a local listener socket and the address to send to it.
+func udpPair(t *testing.T) (*net.UDPConn, *net.UDPAddr) {
+	t.Helper()
+	conn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	if err != nil {
+		t.Fatalf("ListenUDP() error = %v", err)
+	}
+	addr, ok := conn.LocalAddr().(*net.UDPAddr)
+	if !ok {
+		t.Fatalf("LocalAddr() = %T, want *net.UDPAddr", conn.LocalAddr())
+	}
+	return conn, addr
 }
 
-func TestCoAP_listenLoopNilConn(t *testing.T) {
-	coap := NewCoAP("192.168.1.100")
+func TestCoAP_listenLoopStopsOnClose(t *testing.T) {
+	coap := NewCoAP("127.0.0.1")
+	conn, _ := udpPair(t)
 
-	// Initialize stopListen channel
+	coap.connMu.Lock()
+	coap.conn = conn
 	coap.stopListen = make(chan struct{})
+	stop := coap.stopListen
+	coap.connMu.Unlock()
 
-	// listenLoop should return immediately when conn is nil
-	coap.listenLoop()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		coap.listenLoop(conn, stop)
+	}()
 
-	// No panics should occur
+	// Close runs while the loop is reading; the race detector fails this test
+	// if the two touch the connection or stop channel without the lock.
+	if err := coap.Close(); err != nil {
+		t.Errorf("Close() error = %v", err)
+	}
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("listenLoop kept running after Close")
+	}
+}
+
+// The handler runs on the single listen goroutine, so notifications arrive
+// one at a time and a handler is free to close the transport.
+func TestCoAP_HandlerMayCloseTransport(t *testing.T) {
+	coap := NewCoAP("127.0.0.1")
+	conn, addr := udpPair(t)
+
+	coap.connMu.Lock()
+	coap.conn = conn
+	coap.stopListen = make(chan struct{})
+	stop := coap.stopListen
+	coap.connMu.Unlock()
+
+	closed := make(chan error, 1)
+	if err := coap.Subscribe(func(json.RawMessage) { closed <- coap.Close() }); err != nil {
+		t.Fatalf("Subscribe() error = %v", err)
+	}
+	go coap.listenLoop(conn, stop)
+
+	sender, err := net.DialUDP("udp4", nil, addr)
+	if err != nil {
+		t.Fatalf("DialUDP() error = %v", err)
+	}
+	defer sender.Close()
+	frame := append([]byte{0x40, 0x02, 0x00, 0x01, 0xFF}, []byte(`{"id":"shelly1-abc"}`)...)
+	if _, err := sender.Write(frame); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+
+	select {
+	case err := <-closed:
+		if err != nil {
+			t.Errorf("Close() from a handler error = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("handler never ran or Close() deadlocked")
+	}
 }
 
 func TestCoAP_MultipleStateCallbacks(t *testing.T) {

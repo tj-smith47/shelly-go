@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tj-smith47/shelly-go/internal/serial"
 	"github.com/tj-smith47/shelly-go/types"
 )
 
@@ -53,6 +54,11 @@ func (d *AccountDevice) CanControl() bool {
 }
 
 // AccountManager manages user accounts that have granted access to the integrator.
+//
+// The OnAccountAdded, OnAccountRemoved, OnDeviceAdded and OnDeviceRemoved
+// callbacks run one at a time, in the order the changes were made, after the
+// change is visible and with no manager lock held. A callback may therefore
+// call any method of the manager, including ones that change it.
 type AccountManager struct {
 	accounts         map[string]*Account
 	deviceIndex      map[string]string
@@ -60,7 +66,14 @@ type AccountManager struct {
 	onAccountRemoved func(userID string)
 	onDeviceAdded    func(userID string, device *AccountDevice)
 	onDeviceRemoved  func(userID string, deviceID string)
+	notifications    serial.Queue[func()]
 	mu               sync.RWMutex
+}
+
+// notify delivers the notifications queued while am.mu was held. It must be
+// called with am.mu released.
+func (am *AccountManager) notify() {
+	am.notifications.Drain(func(deliver func()) { deliver() })
 }
 
 // NewAccountManager creates a new account manager.
@@ -74,6 +87,8 @@ func NewAccountManager() *AccountManager {
 // AddAccount adds or updates a user account.
 func (am *AccountManager) AddAccount(account *Account) {
 	am.mu.Lock()
+	// Deferred first so that it runs last, once the lock is released.
+	defer am.notify()
 	defer am.mu.Unlock()
 
 	existing, exists := am.accounts[account.UserID]
@@ -84,9 +99,11 @@ func (am *AccountManager) AddAccount(account *Account) {
 		am.deviceIndex[account.Devices[i].DeviceID] = account.UserID
 	}
 
-	if !exists && am.onAccountAdded != nil {
-		am.onAccountAdded(account)
-	} else if exists {
+	if !exists {
+		if callback := am.onAccountAdded; callback != nil {
+			am.notifications.Add(func() { callback(account) })
+		}
+	} else {
 		// Check for removed devices
 		existingDevices := make(map[string]bool)
 		for i := range existing.Devices {
@@ -105,6 +122,7 @@ func (am *AccountManager) AddAccount(account *Account) {
 // RemoveAccount removes a user account.
 func (am *AccountManager) RemoveAccount(userID string) bool {
 	am.mu.Lock()
+	defer am.notify()
 	defer am.mu.Unlock()
 
 	account, exists := am.accounts[userID]
@@ -120,8 +138,8 @@ func (am *AccountManager) RemoveAccount(userID string) bool {
 
 	delete(am.accounts, userID)
 
-	if am.onAccountRemoved != nil {
-		am.onAccountRemoved(userID)
+	if callback := am.onAccountRemoved; callback != nil {
+		am.notifications.Add(func() { callback(userID) })
 	}
 
 	return true
@@ -164,6 +182,7 @@ func (am *AccountManager) AccountCount() int {
 // AddDevice adds a device to an account.
 func (am *AccountManager) AddDevice(userID string, device *AccountDevice) error {
 	am.mu.Lock()
+	defer am.notify()
 	defer am.mu.Unlock()
 
 	account, exists := am.accounts[userID]
@@ -191,8 +210,8 @@ func (am *AccountManager) AddDevice(userID string, device *AccountDevice) error 
 	account.Devices = append(account.Devices, *device)
 	am.deviceIndex[device.DeviceID] = userID
 
-	if am.onDeviceAdded != nil {
-		am.onDeviceAdded(userID, device)
+	if callback := am.onDeviceAdded; callback != nil {
+		am.notifications.Add(func() { callback(userID, device) })
 	}
 
 	return nil
@@ -201,6 +220,7 @@ func (am *AccountManager) AddDevice(userID string, device *AccountDevice) error 
 // RemoveDevice removes a device from an account.
 func (am *AccountManager) RemoveDevice(userID, deviceID string) bool {
 	am.mu.Lock()
+	defer am.notify()
 	defer am.mu.Unlock()
 
 	account, exists := am.accounts[userID]
@@ -213,8 +233,8 @@ func (am *AccountManager) RemoveDevice(userID, deviceID string) bool {
 			account.Devices = append(account.Devices[:i], account.Devices[i+1:]...)
 			delete(am.deviceIndex, deviceID)
 
-			if am.onDeviceRemoved != nil {
-				am.onDeviceRemoved(userID, deviceID)
+			if callback := am.onDeviceRemoved; callback != nil {
+				am.notifications.Add(func() { callback(userID, deviceID) })
 			}
 			return true
 		}

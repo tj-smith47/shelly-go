@@ -548,3 +548,30 @@ func TestGen2Device_Methods(t *testing.T) {
 		t.Errorf("Generation() = %v, want Gen3", device.Generation())
 	}
 }
+
+// The option counts without locking on purpose: the race detector fails this
+// test if BatchFromAddresses ever runs an Option on more than one goroutine.
+func TestBatchFromAddresses_OptionsAppliedOnce(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": "dev", "gen": 2})
+	}))
+	defer server.Close()
+
+	addresses := make([]string, 16)
+	for i := range addresses {
+		addresses[i] = server.URL
+	}
+
+	var calls int
+	counting := func(*Options) { calls++ }
+
+	_, errs := BatchFromAddresses(addresses, counting)
+	for i, err := range errs {
+		if err != nil {
+			t.Errorf("errs[%d] = %v, want nil", i, err)
+		}
+	}
+	if calls != 1 {
+		t.Errorf("option ran %d times, want 1", calls)
+	}
+}

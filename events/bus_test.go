@@ -382,3 +382,54 @@ func TestEventBus_PublishWithAsyncHistory(t *testing.T) {
 		t.Errorf("len(History()) = %v, want <= 5", len(history))
 	}
 }
+
+// The handler and filter below touch unsynchronized state on purpose: the
+// race detector fails this test if either runs concurrently with itself.
+func TestEventBus_SubscriptionNeverRunsConcurrently(t *testing.T) {
+	bus := NewEventBus()
+	defer bus.Close()
+
+	var handled, filtered int
+	bus.SubscribeFiltered(
+		func(Event) bool { filtered++; return true },
+		func(Event) { handled++ },
+	)
+
+	const n = 100
+	var wg sync.WaitGroup
+	for i := range n {
+		wg.Go(func() {
+			ev := NewDeviceOnlineEvent("dev")
+			if i%2 == 0 {
+				bus.Publish(ev)
+			} else {
+				bus.PublishAsync(ev)
+			}
+		})
+	}
+	wg.Wait()
+
+	if handled != n || filtered != n {
+		t.Errorf("handled=%d filtered=%d, want %d each", handled, filtered, n)
+	}
+}
+
+func TestEventBus_HandlerMayPublish(t *testing.T) {
+	bus := NewEventBus()
+	defer bus.Close()
+
+	var seen int
+	bus.Subscribe(func(Event) {
+		seen++
+		if seen == 1 {
+			bus.Publish(NewDeviceOnlineEvent("dev"))
+			bus.PublishAsync(NewDeviceOnlineEvent("dev"))
+		}
+	})
+
+	bus.Publish(NewDeviceOnlineEvent("dev"))
+
+	if seen != 3 {
+		t.Errorf("handler ran %d times, want 3", seen)
+	}
+}

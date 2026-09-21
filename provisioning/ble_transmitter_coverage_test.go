@@ -63,6 +63,9 @@ func buildTransmitterWithFakeConnector(fc *fakeBLEConnector) *tinyGoBLETransmitt
 	return &tinyGoBLETransmitter{
 		connector: fc,
 		notifyCh:  make(chan []byte, 10),
+		// The fake hands out zero-value devices, which cannot be disconnected
+		// for real.
+		dropDevice: func(bluetooth.Device) error { return nil },
 	}
 }
 

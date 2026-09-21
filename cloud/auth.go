@@ -433,9 +433,48 @@ type BrowserLoginResult struct {
 
 // BrowserLoginOptions configures the browser login flow.
 type BrowserLoginOptions struct {
-	ClientID     string        // OAuth client ID (default: shelly-diy)
-	CallbackPort int           // Port for local callback server (default: auto-select)
-	Timeout      time.Duration // Timeout waiting for callback (default: 5 minutes)
+	// OnAuthorizeURL, when set, is called once with the URL the user has to
+	// open, before BrowserLogin starts waiting for the callback. With an
+	// auto-selected CallbackPort this is the only way to learn the URL in
+	// time, because the result is returned only after the login finished.
+	OnAuthorizeURL func(authorizeURL string)
+	ClientID       string        // OAuth client ID (default: shelly-diy)
+	CallbackPort   int           // Port for local callback server (default: auto-select)
+	Timeout        time.Duration // Timeout waiting for callback (default: 5 minutes)
+}
+
+// browserCallbackHandler serves the OAuth redirect. Only the first outcome of
+// each kind is kept: the sends never block, because the server's Shutdown
+// waits for running handlers and a repeated request would otherwise hold it
+// up forever.
+func browserCallbackHandler(codeCh chan<- string, errCh chan<- error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		code := r.URL.Query().Get("code")
+		if code == "" {
+			errMsg := r.URL.Query().Get("error")
+			if errMsg == "" {
+				errMsg = "no authorization code received"
+			}
+			http.Error(w, errMsg, http.StatusBadRequest)
+			select {
+			case errCh <- fmt.Errorf("oauth callback error: %s", errMsg):
+			default:
+			}
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<!DOCTYPE html><html><body>
+			<h1>Login Successful!</h1>
+			<p>You can close this window and return to the CLI.</p>
+			<script>window.close();</script>
+		</body></html>`)
+
+		select {
+		case codeCh <- code:
+		default:
+		}
+	}
 }
 
 // BrowserLogin initiates an OAuth browser login flow.
@@ -443,8 +482,10 @@ type BrowserLoginOptions struct {
 // that the user should open in their browser. Once the user completes login,
 // the callback is received and the code is exchanged for a token.
 //
-// The caller is responsible for opening the returned AuthorizeURL in the user's browser.
-// This function blocks until the callback is received or the context is canceled.
+// The caller is responsible for opening the AuthorizeURL in the user's browser.
+// This function blocks until the callback is received or the context is
+// canceled, so set BrowserLoginOptions.OnAuthorizeURL to receive the URL while
+// the login is still waiting.
 func BrowserLogin(ctx context.Context, opts *BrowserLoginOptions) (*BrowserLoginResult, error) {
 	if opts == nil {
 		opts = &BrowserLoginOptions{}
@@ -472,30 +513,8 @@ func BrowserLogin(ctx context.Context, opts *BrowserLoginOptions) (*BrowserLogin
 	codeCh := make(chan string, 1)
 	errCh := make(chan error, 1)
 
-	// Create HTTP server for callback
 	mux := http.NewServeMux()
-	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
-		code := r.URL.Query().Get("code")
-		if code == "" {
-			errMsg := r.URL.Query().Get("error")
-			if errMsg == "" {
-				errMsg = "no authorization code received"
-			}
-			http.Error(w, errMsg, http.StatusBadRequest)
-			errCh <- fmt.Errorf("oauth callback error: %s", errMsg)
-			return
-		}
-
-		// Success page
-		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, `<!DOCTYPE html><html><body>
-			<h1>Login Successful!</h1>
-			<p>You can close this window and return to the CLI.</p>
-			<script>window.close();</script>
-		</body></html>`)
-
-		codeCh <- code
-	})
+	mux.HandleFunc("/callback", browserCallbackHandler(codeCh, errCh))
 
 	server := &http.Server{
 		Handler:           mux,
@@ -505,7 +524,10 @@ func BrowserLogin(ctx context.Context, opts *BrowserLoginOptions) (*BrowserLogin
 	// Start server in goroutine
 	go func() {
 		if serveErr := server.Serve(listener); serveErr != nil && serveErr != http.ErrServerClosed {
-			errCh <- serveErr
+			select {
+			case errCh <- serveErr:
+			default:
+			}
 		}
 	}()
 
@@ -517,6 +539,12 @@ func BrowserLogin(ctx context.Context, opts *BrowserLoginOptions) (*BrowserLogin
 	// The caller should open this URL in the browser
 	result := &BrowserLoginResult{
 		AuthorizeURL: authorizeURL,
+	}
+
+	// Called once the server is accepting connections, so the URL works the
+	// moment the caller opens it.
+	if opts.OnAuthorizeURL != nil {
+		opts.OnAuthorizeURL(authorizeURL)
 	}
 
 	// Wait for callback or timeout

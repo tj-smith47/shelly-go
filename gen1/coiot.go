@@ -3,11 +3,14 @@ package gen1
 import (
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/tj-smith47/shelly-go/internal/serial"
 )
 
 const (
@@ -54,12 +57,12 @@ type CoIoTListener struct {
 	conn          *net.UDPConn
 	stopCh        chan struct{}
 	listenFn      func(addr *net.UDPAddr) (*net.UDPConn, error)
-	multicastAddr string
 	handlers      []StatusHandler
+	multicastAddr string
+	updates       serial.Queue[*CoIoTStatus]
 	port          int
 	bufferSize    int
 	mu            sync.RWMutex
-	dispatchMu    sync.Mutex
 	running       bool
 }
 
@@ -183,8 +186,7 @@ func (l *CoIoTListener) Start() error {
 	l.running = true
 	l.stopCh = make(chan struct{})
 
-	// Start receive loop
-	go l.receiveLoop()
+	go l.receiveLoop(conn, l.stopCh, l.bufferSize)
 
 	return nil
 }
@@ -215,75 +217,83 @@ func (l *CoIoTListener) IsRunning() bool {
 	return l.running
 }
 
-// receiveLoop listens for incoming CoAP messages.
-func (l *CoIoTListener) receiveLoop() {
-	buf := make([]byte, l.bufferSize)
+// receiveLoop reads CoAP messages from conn until stop is closed.
+//
+// The conn and stop channel are arguments because a later Start replaces the
+// struct fields; a loop reading the fields would adopt the new socket and
+// never end.
+func (l *CoIoTListener) receiveLoop(conn *net.UDPConn, stop <-chan struct{}, bufferSize int) {
+	buf := make([]byte, bufferSize)
 
 	for {
 		select {
-		case <-l.stopCh:
+		case <-stop:
 			return
 		default:
-			// Set read deadline to allow periodic stop checks
-			if err := l.conn.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
-				// Non-fatal, continue
-				continue
-			}
+		}
 
-			n, srcAddr, err := l.conn.ReadFromUDP(buf)
-			if err != nil {
-				// Timeout is expected, continue
-				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-					continue
-				}
-				// Check if stopped
-				select {
-				case <-l.stopCh:
-					return
-				default:
-					// Log error and continue
-					continue
-				}
+		// The deadline bounds how long a Stop can go unnoticed.
+		if err := conn.SetReadDeadline(time.Now().Add(1 * time.Second)); err != nil {
+			if errors.Is(err, net.ErrClosed) {
+				return
 			}
+			continue
+		}
 
-			if n > 0 {
-				// Make a copy of the data for async processing
-				data := make([]byte, n)
-				copy(data, buf[:n])
-
-				// Parse and dispatch message
-				var sourceIP string
-				if srcAddr != nil {
-					sourceIP = srcAddr.IP.String()
-				}
-				go l.handleMessage(data, sourceIP)
+		n, srcAddr, err := conn.ReadFromUDP(buf)
+		if err != nil {
+			// A closed socket never recovers; retrying would spin.
+			if errors.Is(err, net.ErrClosed) {
+				return
 			}
+			continue
+		}
+		if n == 0 {
+			continue
+		}
+
+		// The parsed status keeps the bytes in Raw, and buf is reused.
+		data := make([]byte, n)
+		copy(data, buf[:n])
+
+		var sourceIP string
+		if srcAddr != nil {
+			sourceIP = srcAddr.IP.String()
+		}
+
+		// Queueing here fixes the delivery order to the arrival order.
+		// Delivery runs on its own goroutine so a slow handler cannot stall
+		// the read loop.
+		if l.enqueue(data, sourceIP) {
+			go l.deliver()
 		}
 	}
 }
 
-// handleMessage parses a CoAP message and dispatches to handlers.
-func (l *CoIoTListener) handleMessage(data []byte, sourceAddr string) {
+// enqueue parses a CoAP message and queues its status for delivery. It
+// reports whether anything was queued; invalid messages are ignored.
+func (l *CoIoTListener) enqueue(data []byte, sourceAddr string) bool {
 	status, err := ParseCoAPMessage(data, sourceAddr)
 	if err != nil {
-		// Invalid message, ignore
-		return
+		return false
 	}
+	l.updates.Add(status)
+	return true
+}
 
-	// Get handlers
-	l.mu.RLock()
-	handlers := make([]StatusHandler, len(l.handlers))
-	copy(handlers, l.handlers)
-	l.mu.RUnlock()
+// deliver hands queued statuses to the registered handlers, one at a time and
+// in the order they were queued.
+func (l *CoIoTListener) deliver() {
+	l.updates.Drain(func(s *CoIoTStatus) {
+		l.mu.RLock()
+		handlers := make([]StatusHandler, len(l.handlers))
+		copy(handlers, l.handlers)
+		l.mu.RUnlock()
 
-	// Each packet is handled on its own goroutine so a slow handler cannot
-	// stall the UDP read loop; this lock keeps handlers from overlapping.
-	l.dispatchMu.Lock()
-	defer l.dispatchMu.Unlock()
-
-	for _, handler := range handlers {
-		handler(status.DeviceID, status)
-	}
+		for _, handler := range handlers {
+			handler(s.DeviceID, s)
+		}
+	})
 }
 
 // parseExtendedValue parses CoAP extended delta/length encoding.
@@ -471,8 +481,8 @@ func parseCoIoTPayload(payload []byte, status *CoIoTStatus) {
 	}
 
 	// Parse serial if present
-	if serial, ok := jsonPayload["S"].(float64); ok {
-		status.Serial = int(serial)
+	if serialNum, ok := jsonPayload["S"].(float64); ok {
+		status.Serial = int(serialNum)
 	}
 }
 
