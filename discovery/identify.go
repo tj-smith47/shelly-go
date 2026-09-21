@@ -262,14 +262,16 @@ func ProbeAddresses(ctx context.Context, addresses []string) []DiscoveredDevice 
 //
 // The callback is called for each address after probing, with information
 // about whether a device was found. Return false from the callback to
-// cancel the operation.
+// cancel the operation. Addresses are probed concurrently, but the callback
+// is never invoked concurrently with itself, and Done increases by one on
+// each call.
 func ProbeAddressesWithProgress(
 	ctx context.Context,
 	addresses []string,
 	callback ProbeProgressCallback,
 ) []DiscoveredDevice {
 	var devices []DiscoveredDevice
-	var mu sync.Mutex
+	var mu, cbMu sync.Mutex
 	var wg sync.WaitGroup
 	var done int
 	var canceled bool
@@ -327,15 +329,17 @@ func ProbeAddressesWithProgress(
 
 			// Report progress
 			if callback != nil {
-				mu.Lock()
-				done++
-				currentDone := done
-				mu.Unlock()
+				// A dedicated lock, held across the callback: callers count and
+				// print from it without their own locking, and Done must arrive
+				// in increasing order. mu stays free so probes keep recording.
+				cbMu.Lock()
+				defer cbMu.Unlock()
 
+				done++
 				progress := ProbeProgress{
 					Address: address,
 					Total:   total,
-					Done:    currentDone,
+					Done:    done,
 					Found:   device != nil,
 					Device:  device,
 					Error:   err,

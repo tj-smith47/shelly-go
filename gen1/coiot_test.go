@@ -2,6 +2,7 @@ package gen1
 
 import (
 	"encoding/binary"
+	"sync"
 	"testing"
 	"time"
 )
@@ -727,6 +728,29 @@ func TestParseCoIoTPayload(t *testing.T) {
 				t.Errorf("ValidityRaw = %d, want %d", status.ValidityRaw, tt.wantValid)
 			}
 		})
+	}
+}
+
+// TestHandleMessage_HandlersSerialized relies on the race detector: the handler
+// mutates unsynchronized state while packets are dispatched from many goroutines.
+func TestHandleMessage_HandlersSerialized(t *testing.T) {
+	listener := NewCoIoTListener()
+
+	var calls int
+	listener.OnStatus(func(string, *CoIoTStatus) { calls++ })
+
+	options := map[int][]byte{optionGlobalDevID: []byte("DEVICE#123456#2")}
+	msg := buildCoAPMessage(0, codeStatus, options, []byte(`{"G":[[0,1101,1]]}`))
+
+	const packets = 50
+	var wg sync.WaitGroup
+	for range packets {
+		wg.Go(func() { listener.handleMessage(msg, "10.0.0.1") })
+	}
+	wg.Wait()
+
+	if calls != packets {
+		t.Errorf("handler ran %d times, want %d", calls, packets)
 	}
 }
 

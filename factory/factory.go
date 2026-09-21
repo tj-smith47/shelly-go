@@ -292,6 +292,10 @@ func MustFromDiscovery(d *discovery.DiscoveredDevice, opts ...Option) Device {
 }
 
 // BatchFromAddresses creates devices from multiple addresses concurrently.
+//
+// Each address applies opts to its own Options value on its own goroutine, so
+// a custom Option that touches state outside the Options it is given must be
+// safe for concurrent use. The With* options in this package are.
 func BatchFromAddresses(addresses []string, opts ...Option) ([]Device, []error) {
 	devices := make([]Device, len(addresses))
 	errs := make([]error, len(addresses))

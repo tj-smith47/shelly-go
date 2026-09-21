@@ -128,7 +128,10 @@ func (bus *EventBus) Publish(event Event) {
 }
 
 // PublishAsync dispatches an event asynchronously.
-// Each subscriber's handler is invoked in a separate goroutine.
+// Each subscriber's handler is invoked in a separate goroutine, so a handler
+// registered on more than one subscription, or reached by overlapping
+// PublishAsync calls, runs concurrently with itself and must be safe for that.
+// Publish delivers on the caller's goroutine, one handler at a time.
 func (bus *EventBus) PublishAsync(event Event) {
 	if bus.closed.Load() {
 		return

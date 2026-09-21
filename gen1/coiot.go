@@ -59,6 +59,7 @@ type CoIoTListener struct {
 	port          int
 	bufferSize    int
 	mu            sync.RWMutex
+	dispatchMu    sync.Mutex
 	running       bool
 }
 
@@ -131,7 +132,9 @@ func NewCoIoTListener(opts ...CoIoTOption) *CoIoTListener {
 // OnStatus registers a handler for status updates.
 //
 // Multiple handlers can be registered and will all be called
-// when a status update is received.
+// when a status update is received. Handlers are never invoked
+// concurrently, so they may keep state without their own locking.
+// A slow handler delays later updates but does not block packet reception.
 func (l *CoIoTListener) OnStatus(handler StatusHandler) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -273,7 +276,11 @@ func (l *CoIoTListener) handleMessage(data []byte, sourceAddr string) {
 	copy(handlers, l.handlers)
 	l.mu.RUnlock()
 
-	// Dispatch to handlers
+	// Each packet is handled on its own goroutine so a slow handler cannot
+	// stall the UDP read loop; this lock keeps handlers from overlapping.
+	l.dispatchMu.Lock()
+	defer l.dispatchMu.Unlock()
+
 	for _, handler := range handlers {
 		handler(status.DeviceID, status)
 	}

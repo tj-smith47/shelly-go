@@ -842,6 +842,9 @@ func (r *BLEProvisionResult) Duration() time.Duration {
 
 // BulkProvisioner handles provisioning multiple devices.
 type BulkProvisioner struct {
+	// ClientFactory builds the RPC client for one device. ProvisionBulk calls
+	// it from up to Concurrency workers at once, so it must be safe for
+	// concurrent use.
 	ClientFactory func(address string) (*rpc.Client, error)
 	Concurrency   int
 	RetryCount    int

@@ -701,8 +701,39 @@ func TestProbeAddressesWithProgress_Cancel(t *testing.T) {
 
 	_ = ProbeAddressesWithProgress(context.Background(), addresses, callback)
 
-	// May have multiple calls due to concurrency, but should stop eventually
-	// The key is that it doesn't hang
+	// Probes already in flight still report, so more than one call is allowed.
+	if progressCalls < 1 || progressCalls > len(addresses) {
+		t.Errorf("progressCalls = %d, want 1..%d", progressCalls, len(addresses))
+	}
+}
+
+func TestProbeAddressesWithProgress_CallbackSerialized(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(gen2ShellyResponse{ID: "d", Gen: 2})
+	}))
+	defer server.Close()
+
+	addresses := make([]string, 40)
+	for i := range addresses {
+		addresses[i] = server.URL
+	}
+
+	// Unsynchronized on purpose: the race detector fails this test if the
+	// callback ever runs concurrently with itself.
+	var seen []int
+	_ = ProbeAddressesWithProgress(context.Background(), addresses, func(p ProbeProgress) bool {
+		seen = append(seen, p.Done)
+		return true
+	})
+
+	if len(seen) != len(addresses) {
+		t.Fatalf("callback ran %d times, want %d", len(seen), len(addresses))
+	}
+	for i, d := range seen {
+		if d != i+1 {
+			t.Fatalf("Done sequence = %v, want 1..%d in order", seen, len(addresses))
+		}
+	}
 }
 
 func TestProbeAddressesWithProgress_WithError(t *testing.T) {

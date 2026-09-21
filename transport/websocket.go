@@ -416,6 +416,10 @@ func (w *WebSocket) State() ConnectionState {
 }
 
 // OnStateChange registers a callback for connection state changes.
+//
+// Callbacks run on whichever goroutine changed the state (Connect, Close, or
+// the transport's background reconnect handling), so a callback can run
+// concurrently with itself and must be safe for concurrent use.
 func (w *WebSocket) OnStateChange(callback func(ConnectionState)) {
 	w.stateMu.Lock()
 	defer w.stateMu.Unlock()
