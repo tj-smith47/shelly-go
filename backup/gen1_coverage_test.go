@@ -1173,7 +1173,7 @@ func TestRestoreGen1WiFi_BadJSONIsWarning(t *testing.T) {
 	dev, _ := gen1ColorDevice(t, `{}`)
 	bkp := &Backup{WiFi: json.RawMessage(`{bad`)}
 	result := &RestoreResult{Success: true}
-	restoreGen1WiFi(t.Context(), dev, bkp, nil, result)
+	restoreGen1WiFi(t.Context(), dev, bkp, nil, nil, result)
 	if len(result.Warnings) == 0 || !strings.Contains(result.Warnings[0], "parse WiFi config") {
 		t.Errorf("expected parse-WiFi-config warning, got %v", result.Warnings)
 	}
@@ -1188,7 +1188,7 @@ func TestRestoreGen1WiFi_APAndRoamingError(t *testing.T) {
 	}
 	bkp := &Backup{WiFi: marshalGen1WiFi(settings)}
 	result := &RestoreResult{Success: true}
-	restoreGen1WiFi(t.Context(), dev, bkp, nil, result)
+	restoreGen1WiFi(t.Context(), dev, bkp, nil, nil, result)
 	// Both AP and AP-roaming writes fail → two warnings.
 	if len(result.Warnings) < 2 {
 		t.Errorf("expected at least 2 warnings for AP+roaming failures, got %v", result.Warnings)
@@ -1201,7 +1201,7 @@ func TestRestoreGen1WiFi_OverrideWithNoBackupWiFi(t *testing.T) {
 	dev, sets := gen1ColorDevice(t, `{}`)
 	bkp := &Backup{} // no WiFi
 	result := &RestoreResult{Success: true}
-	restoreGen1WiFi(t.Context(), dev, bkp, &Gen1NetworkOverride{SSID: "Home", Password: "pw"}, result)
+	restoreGen1WiFi(t.Context(), dev, bkp, nil, &Gen1NetworkOverride{SSID: "Home", Password: "pw"}, result)
 	if len(result.Warnings) != 0 {
 		t.Errorf("unexpected warnings: %v", result.Warnings)
 	}
@@ -1439,7 +1439,7 @@ func TestRestoreGen1WiFi_Sta1SkippedWhenEmptySSID(t *testing.T) {
 	wifiJSON := []byte(`{"sta1":{"enabled":false}}`)
 	bkp := &Backup{WiFi: wifiJSON}
 	result := &RestoreResult{Success: true}
-	restoreGen1WiFi(t.Context(), dev, bkp, nil, result)
+	restoreGen1WiFi(t.Context(), dev, bkp, nil, nil, result)
 	if len(result.Warnings) != 0 {
 		t.Errorf("unexpected warnings: %v", result.Warnings)
 	}

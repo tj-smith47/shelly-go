@@ -163,7 +163,7 @@ func TestRestoreGen1WiFi_Sta1AndApRoaming(t *testing.T) {
 	bkp := &Backup{WiFi: marshalGen1WiFi(settings)}
 	result := &RestoreResult{Success: true}
 
-	restoreGen1WiFi(t.Context(), dev, bkp, nil, result)
+	restoreGen1WiFi(t.Context(), dev, bkp, nil, nil, result)
 	if len(result.Warnings) != 0 {
 		t.Errorf("unexpected warnings: %v", result.Warnings)
 	}
@@ -724,6 +724,62 @@ func TestApplyGen1WiFiOverride(t *testing.T) {
 		}
 		if sta.SSID != "net2" {
 			t.Errorf("ssid override not applied: %q", sta.SSID)
+		}
+	})
+}
+
+// TestRestoreGen1_SourceIdentityNotCopied asserts that a cross-device restore
+// leaves the target's hostname-derived identity alone: the source's default MQTT
+// client id and AP SSID (both equal to the source hostname) are not written,
+// while custom values still are.
+func TestRestoreGen1_SourceIdentityNotCopied(t *testing.T) {
+	t.Parallel()
+	src := &gen1.Settings{Device: &gen1.DeviceSettings{Hostname: "ShellyBulbDuo-D167E6"}}
+
+	t.Run("mqtt default id skipped", func(t *testing.T) {
+		t.Parallel()
+		dev, sets := gen1ColorDevice(t, `{}`)
+		settings := *src
+		settings.MQTT = &gen1.MQTTSettings{Enable: false, ID: "shellybulbduo-d167e6"}
+		restoreGen1MQTT(t.Context(), dev, &settings, &RestoreResult{Success: true})
+		if joined := strings.Join(*sets, " "); strings.Contains(joined, "mqtt_id=") {
+			t.Errorf("source hostname must not be written as mqtt_id: %v", *sets)
+		}
+	})
+	t.Run("mqtt custom id kept", func(t *testing.T) {
+		t.Parallel()
+		dev, sets := gen1ColorDevice(t, `{}`)
+		settings := *src
+		settings.MQTT = &gen1.MQTTSettings{Enable: true, ID: "bath-1"}
+		restoreGen1MQTT(t.Context(), dev, &settings, &RestoreResult{Success: true})
+		if joined := strings.Join(*sets, " "); !strings.Contains(joined, "mqtt_id=bath-1") {
+			t.Errorf("custom mqtt_id must be restored: %v", *sets)
+		}
+	})
+	t.Run("ap default ssid skipped", func(t *testing.T) {
+		t.Parallel()
+		dev, sets := gen1ColorDevice(t, `{}`)
+		bkp := &Backup{WiFi: marshalGen1WiFi(&gen1.Settings{
+			WiFiAp: &gen1.WiFiApSettings{Enabled: false, SSID: "ShellyBulbDuo-D167E6"},
+		})}
+		restoreGen1WiFi(t.Context(), dev, bkp, src, nil, &RestoreResult{Success: true})
+		joined := strings.Join(*sets, " ")
+		if strings.Contains(joined, "wifi_ap_ssid=") {
+			t.Errorf("source hostname must not be written as the AP SSID: %v", *sets)
+		}
+		if !strings.Contains(joined, "wifi_ap_enabled=false") {
+			t.Errorf("AP enabled flag must still be written: %v", *sets)
+		}
+	})
+	t.Run("ap custom ssid kept", func(t *testing.T) {
+		t.Parallel()
+		dev, sets := gen1ColorDevice(t, `{}`)
+		bkp := &Backup{WiFi: marshalGen1WiFi(&gen1.Settings{
+			WiFiAp: &gen1.WiFiApSettings{Enabled: true, SSID: "bath-setup"},
+		})}
+		restoreGen1WiFi(t.Context(), dev, bkp, src, nil, &RestoreResult{Success: true})
+		if joined := strings.Join(*sets, " "); !strings.Contains(joined, "wifi_ap_ssid=bath-setup") {
+			t.Errorf("custom AP SSID must be restored: %v", *sets)
 		}
 	})
 }

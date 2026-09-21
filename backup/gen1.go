@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/tj-smith47/shelly-go/gen1"
@@ -675,7 +676,7 @@ func RestoreGen1(ctx context.Context, dev *gen1.Device, bkp *Backup, opts *Gen1R
 	if opts.NetworkOnly {
 		runGen1RestoreStep(ctx, dev, pacer, opts, gen1RestoreStep{
 			name: componentWiFi, probe: false, write: func() {
-				restoreGen1WiFi(ctx, dev, bkp, opts.NetworkOverride, result)
+				restoreGen1WiFi(ctx, dev, bkp, &settings, opts.NetworkOverride, result)
 			},
 		}, result)
 		return result, nil
@@ -728,7 +729,7 @@ func RestoreGen1(ctx context.Context, dev *gen1.Device, bkp *Backup, opts *Gen1R
 			restoreGen1DeviceSettings(ctx, dev, &settings, gen1ConfigHasKey(bkp.Config, "discoverable"), result)
 		}},
 		{name: componentWiFi, skip: opts.SkipNetwork, probe: false, write: func() {
-			restoreGen1WiFi(ctx, dev, bkp, opts.NetworkOverride, result)
+			restoreGen1WiFi(ctx, dev, bkp, &settings, opts.NetworkOverride, result)
 		}},
 		{name: componentMQTT, probe: true, write: func() { restoreGen1MQTT(ctx, dev, &settings, result) }},
 		{name: componentCloud, probe: true, write: func() { restoreGen1Cloud(ctx, dev, &settings, result) }},
@@ -1196,6 +1197,18 @@ func gen1ConfigHasKey(raw json.RawMessage, key string) bool {
 	return ok
 }
 
+// gen1SourceIdentity reports whether value is the backup source's own identity:
+// its hostname, from which Gen1 firmware derives the default MQTT client id and
+// AP SSID. Writing such a value onto another device would rename that device's
+// identity after the source, so callers leave it out and the target keeps its
+// own hostname-derived default. A custom value is not identity and is restored.
+func gen1SourceIdentity(value string, settings *gen1.Settings) bool {
+	if value == "" || settings == nil || settings.Device == nil {
+		return false
+	}
+	return strings.EqualFold(value, settings.Device.Hostname)
+}
+
 // restoreGen1WiFi restores WiFi settings from the backup. When override is
 // non-nil, its network fields replace the backup's station settings before they
 // are applied (used to clone a device's config without copying its IP address).
@@ -1203,6 +1216,7 @@ func restoreGen1WiFi(
 	ctx context.Context,
 	dev *gen1.Device,
 	bkp *Backup,
+	settings *gen1.Settings,
 	override *Gen1NetworkOverride,
 	result *RestoreResult,
 ) {
@@ -1240,7 +1254,11 @@ func restoreGen1WiFi(
 		result.RestartRequired = true
 	}
 	if wifi.Ap != nil {
-		if err := dev.SetWiFiAP(ctx, wifi.Ap.Enabled, wifi.Ap.SSID, wifi.Ap.Key); err != nil {
+		ssid := wifi.Ap.SSID
+		if gen1SourceIdentity(ssid, settings) {
+			ssid = ""
+		}
+		if err := dev.SetWiFiAP(ctx, wifi.Ap.Enabled, ssid, wifi.Ap.Key); err != nil {
 			addWarningf(result, "set WiFi AP: %v", err)
 		}
 	}
@@ -1305,12 +1323,16 @@ func restoreGen1MQTT(ctx context.Context, dev *gen1.Device, settings *gen1.Setti
 	if settings.MQTT == nil {
 		return
 	}
+	id := settings.MQTT.ID
+	if gen1SourceIdentity(id, settings) {
+		id = ""
+	}
 	cfg := &gen1.MQTTConfig{
 		Enable:              settings.MQTT.Enable,
 		Server:              settings.MQTT.Server,
 		User:                settings.MQTT.User,
 		Password:            settings.MQTT.Pass,
-		ID:                  settings.MQTT.ID,
+		ID:                  id,
 		KeepAlive:           settings.MQTT.KeepAlive,
 		MaxQos:              settings.MQTT.MaxQos,
 		CleanSession:        settings.MQTT.CleanSession,

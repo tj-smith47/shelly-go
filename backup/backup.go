@@ -293,7 +293,8 @@ func (m *Manager) restoreOptionalConfigs(
 		},
 		{data: backup.BLE, method: "BLE.SetConfig", name: componentBLE, restore: opts.RestoreBLE, setRestart: false},
 		{
-			data: backup.MQTT, method: "MQTT.SetConfig", name: componentMQTT,
+			data:   stripSourceMQTTClientID(backup.MQTT, backup.DeviceInfo),
+			method: "MQTT.SetConfig", name: componentMQTT,
 			restore: opts.RestoreMQTT, setRestart: false,
 		},
 	}
@@ -307,6 +308,30 @@ func (m *Manager) restoreOptionalConfigs(
 			}
 		}
 	}
+}
+
+// stripSourceMQTTClientID drops a client_id equal to the backup source's device
+// id, the Gen2 default, so a restore onto another device leaves that device's
+// own default client id in place instead of renaming it after the source. A
+// custom client id is not identity and is kept.
+func stripSourceMQTTClientID(mqtt json.RawMessage, src *DeviceInfo) json.RawMessage {
+	if len(mqtt) == 0 || src == nil || src.ID == "" {
+		return mqtt
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(mqtt, &fields); err != nil {
+		return mqtt
+	}
+	var id string
+	if json.Unmarshal(fields["client_id"], &id) != nil || !strings.EqualFold(id, src.ID) {
+		return mqtt
+	}
+	delete(fields, "client_id")
+	out, err := json.Marshal(fields)
+	if err != nil {
+		return mqtt
+	}
+	return out
 }
 
 // restoreComplexItems restores schedules, webhooks, scripts, and KVS.

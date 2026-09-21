@@ -141,3 +141,43 @@ func TestShouldRestoreConfigKey(t *testing.T) {
 		}
 	}
 }
+
+// TestStripSourceMQTTClientID asserts the Gen2 default client id (the source's
+// device id) is dropped before MQTT.SetConfig so a restore onto another device
+// keeps that device's own default, while a custom client id survives.
+func TestStripSourceMQTTClientID(t *testing.T) {
+	t.Parallel()
+	src := &DeviceInfo{ID: "shellyplus2pm-aabbcc"}
+
+	tests := []struct {
+		name     string
+		mqtt     string
+		src      *DeviceInfo
+		wantKept bool
+	}{
+		{"default id dropped", `{"enable":false,"client_id":"shellyplus2pm-aabbcc"}`, src, false},
+		{"default id dropped case-insensitively", `{"client_id":"ShellyPlus2PM-AABBCC"}`, src, false},
+		{"custom id kept", `{"client_id":"bath-fan"}`, src, true},
+		{"no source info keeps id", `{"client_id":"shellyplus2pm-aabbcc"}`, nil, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			out := stripSourceMQTTClientID(json.RawMessage(tt.mqtt), tt.src)
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal(out, &fields); err != nil {
+				t.Fatalf("output is not JSON: %v", err)
+			}
+			if _, kept := fields["client_id"]; kept != tt.wantKept {
+				t.Errorf("client_id kept = %v, want %v (out=%s)", kept, tt.wantKept, out)
+			}
+		})
+	}
+
+	if out := stripSourceMQTTClientID(nil, src); out != nil {
+		t.Errorf("nil config must pass through, got %s", out)
+	}
+	if out := stripSourceMQTTClientID(json.RawMessage(`not json`), src); string(out) != "not json" {
+		t.Errorf("unparseable config must pass through unchanged, got %s", out)
+	}
+}
