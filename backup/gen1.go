@@ -126,18 +126,18 @@ func ExportGen1(ctx context.Context, dev *gen1.Device) (*Backup, error) {
 		Generation: 1,
 	}
 
-	// Get full settings (this is Gen1's equivalent of Shelly.GetConfig)
-	settings, err := dev.GetSettings(ctx)
+	// Keep the device's /settings response byte for byte. Re-marshaling the
+	// typed Settings would drop every key that struct does not name, and the
+	// restore could then never write those settings back.
+	rawSettings, err := dev.Call(ctx, gen1SettingsPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get settings: %w", err)
 	}
-
-	// Store full settings as Config
-	configData, err := json.Marshal(settings)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal settings: %w", err)
+	var settings *gen1.Settings
+	if err = json.Unmarshal(rawSettings, &settings); err != nil {
+		return nil, fmt.Errorf("failed to parse settings: %w", err)
 	}
-	bkp.Config = configData
+	bkp.Config = rawSettings
 
 	// Extract WiFi settings
 	bkp.WiFi = marshalGen1WiFi(settings)
@@ -173,9 +173,10 @@ func ExportGen1(ctx context.Context, dev *gen1.Device) (*Backup, error) {
 
 	// Get action URLs (Gen1's equivalent of webhooks)
 	actions, err := dev.GetActions(ctx)
-	if err == nil && actions != nil {
-		bkp.Webhooks = mustMarshal(actions)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get actions: %w", err)
 	}
+	bkp.Webhooks = mustMarshal(actions)
 
 	return bkp, nil
 }
@@ -714,6 +715,9 @@ func RestoreGen1(ctx context.Context, dev *gen1.Device, bkp *Backup, opts *Gen1R
 	// has a clock, without re-writing settings that already took at the AP.
 	if opts.ClockDependentOnly {
 		restoreGen1ClockDependent(ctx, dev, pacer, opts, &settings, bkp, result)
+		if result.DestabilizedStep == "" {
+			verifyGen1Restore(ctx, dev, bkp, &settings, opts, result)
+		}
 		return result, nil
 	}
 
@@ -752,9 +756,13 @@ func RestoreGen1(ctx context.Context, dev *gen1.Device, bkp *Backup, opts *Gen1R
 		}},
 		// Per-meter overpower limits, which restoreGen1Components does not cover (the
 		// device-level max_power is restored with the device settings).
-		{name: "meters", skip: opts.SkipMeters, probe: true, write: func() {
+		{name: gen1Meters, skip: opts.SkipMeters, probe: true, write: func() {
 			restoreGen1Meters(ctx, dev, &settings, result)
 			restoreGen1EMeters(ctx, dev, &settings, result)
+		}},
+		// Every setting the steps above do not cover.
+		{name: "settings", probe: true, write: func() {
+			restoreGen1RemainingSettings(ctx, dev, bkp, &settings, opts, result)
 		}},
 	}
 	for _, step := range steps {
@@ -772,6 +780,7 @@ func RestoreGen1(ctx context.Context, dev *gen1.Device, bkp *Backup, opts *Gen1R
 		restoreGen1Actions(ctx, dev, bkp, result)
 	}
 
+	verifyGen1Restore(ctx, dev, bkp, &settings, opts, result)
 	return result, nil
 }
 
@@ -1063,16 +1072,16 @@ func marshalGen1WiFi(settings *gen1.Settings) json.RawMessage {
 func marshalGen1Components(settings *gen1.Settings) map[string]json.RawMessage {
 	components := map[string]json.RawMessage{}
 	if len(settings.Lights) > 0 {
-		components["lights"] = mustMarshal(settings.Lights)
+		components[gen1Lights] = mustMarshal(settings.Lights)
 	}
 	if len(settings.Relays) > 0 {
-		components["relays"] = mustMarshal(settings.Relays)
+		components[gen1Relays] = mustMarshal(settings.Relays)
 	}
 	if len(settings.Rollers) > 0 {
 		components["rollers"] = mustMarshal(settings.Rollers)
 	}
 	if len(settings.Meters) > 0 {
-		components["meters"] = mustMarshal(settings.Meters)
+		components[gen1Meters] = mustMarshal(settings.Meters)
 	}
 	if len(settings.EMeters) > 0 {
 		components["emeters"] = mustMarshal(settings.EMeters)
@@ -1490,10 +1499,12 @@ func restoreGen1Actions(ctx context.Context, dev *gen1.Device, bkp *Backup, resu
 	}
 
 	for _, action := range actions.Actions {
-		if len(action.URLs) > 0 {
-			if err := dev.SetAction(ctx, action.Index, action.Event, action.URLs, action.Enabled); err != nil {
-				addWarningf(result, "set action %s: %v", action.Event, err)
-			}
+		// An entry with nothing configured is the device default.
+		if len(action.URLs) == 0 && !action.Enabled && len(action.Params) == 0 {
+			continue
+		}
+		if err := dev.SetActionConfig(ctx, &action); err != nil {
+			addWarningf(result, "set action %s: %v", action.Event, err)
 		}
 	}
 }

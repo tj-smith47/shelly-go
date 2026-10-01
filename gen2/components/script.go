@@ -3,6 +3,7 @@ package components
 import (
 	"context"
 	"encoding/json"
+	"unicode/utf8"
 
 	"github.com/tj-smith47/shelly-go/rpc"
 	"github.com/tj-smith47/shelly-go/types"
@@ -246,7 +247,7 @@ func (s *Script) GetStatus(ctx context.Context, id int) (*ScriptStatus, error) {
 	return &status, nil
 }
 
-// GetCode retrieves the source code of a script.
+// GetCode retrieves the whole source code of a script.
 //
 // Parameters:
 //   - id: Script ID
@@ -258,24 +259,43 @@ func (s *Script) GetStatus(ctx context.Context, id int) (*ScriptStatus, error) {
 //	    fmt.Printf("Script code:\n%s\n", code.Data)
 //	}
 func (s *Script) GetCode(ctx context.Context, id int) (*ScriptGetCodeResponse, error) {
-	params := map[string]any{
-		"id": id,
-	}
-
-	resultJSON, err := s.client.Call(ctx, "Script.GetCode", params)
-	if err != nil {
-		return nil, err
-	}
-
 	var result ScriptGetCodeResponse
-	if err := json.Unmarshal(resultJSON, &result); err != nil {
-		return nil, err
+	// The device returns long code in pieces and reports how much is left.
+	for offset := 0; ; {
+		params := map[string]any{"id": id}
+		if offset > 0 {
+			params["offset"] = offset
+		}
+		resultJSON, err := s.client.Call(ctx, "Script.GetCode", params)
+		if err != nil {
+			return nil, err
+		}
+		var chunk struct {
+			Data string `json:"data"`
+			Left int    `json:"left"`
+		}
+		if err := json.Unmarshal(resultJSON, &chunk); err != nil {
+			return nil, err
+		}
+		if offset == 0 {
+			if err := json.Unmarshal(resultJSON, &result); err != nil {
+				return nil, err
+			}
+		} else {
+			result.Data += chunk.Data
+		}
+		if chunk.Left <= 0 || chunk.Data == "" {
+			return &result, nil
+		}
+		offset += len(chunk.Data)
 	}
-
-	return &result, nil
 }
 
-// PutCode uploads source code to a script.
+// scriptCodeChunk is the most code, in bytes, sent in one Script.PutCode call.
+const scriptCodeChunk = 1024
+
+// PutCode uploads source code to a script. Code longer than one request can
+// carry is sent in several calls.
 //
 // Parameters:
 //   - id: Script ID
@@ -286,14 +306,28 @@ func (s *Script) GetCode(ctx context.Context, id int) (*ScriptGetCodeResponse, e
 //
 //	err := script.PutCode(ctx, 1, "print('Hello, World!');", false)
 func (s *Script) PutCode(ctx context.Context, id int, code string, appendCode bool) error {
-	params := map[string]any{
-		"id":     id,
-		"code":   code,
-		"append": appendCode,
+	// A device refuses a request body larger than its buffer, so long code is
+	// uploaded in pieces, each cut on a character boundary.
+	for first := true; first || code != ""; first = false {
+		chunk := code
+		if len(chunk) > scriptCodeChunk {
+			cut := scriptCodeChunk
+			for cut > 0 && !utf8.RuneStart(code[cut]) {
+				cut--
+			}
+			chunk = code[:cut]
+		}
+		code = code[len(chunk):]
+		params := map[string]any{
+			"id":     id,
+			"code":   chunk,
+			"append": appendCode || !first,
+		}
+		if _, err := s.client.Call(ctx, "Script.PutCode", params); err != nil {
+			return err
+		}
 	}
-
-	_, err := s.client.Call(ctx, "Script.PutCode", params)
-	return err
+	return nil
 }
 
 // Start starts a script.

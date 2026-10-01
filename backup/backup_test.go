@@ -78,7 +78,7 @@ func TestManager_Export(t *testing.T) {
 			case "Script.List":
 				return jsonrpcResponse(`{"scripts":[]}`)
 			case "KVS.List":
-				return jsonrpcResponse(`{"keys":[]}`)
+				return jsonrpcResponse(`{"keys":{}}`)
 			default:
 				return jsonrpcResponse(`null`)
 			}
@@ -255,7 +255,7 @@ func TestManager_Export_WithKVS(t *testing.T) {
 			case "Shelly.GetConfig":
 				return jsonrpcResponse(`{}`)
 			case "KVS.List":
-				return jsonrpcResponse(`{"keys":["key1","key2"]}`)
+				return jsonrpcResponse(`{"keys":{"key1":{"etag":"a"},"key2":{"etag":"b"}}}`)
 			case "KVS.Get":
 				return jsonrpcResponse(`{"value":"test"}`)
 			default:
@@ -1965,90 +1965,6 @@ func TestManager_Restore_StopScriptsUnmarshalError(t *testing.T) {
 	}
 	if !result.Success {
 		t.Error("Restore() Success = false, want true")
-	}
-}
-
-func TestManager_Export_ListWebhooksError(t *testing.T) {
-	transport := &mockTransport{
-		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-			method := req.GetMethod()
-			switch method {
-			case "Shelly.GetDeviceInfo":
-				return jsonrpcResponse(`{"id":"test-device","model":"SNSW-001X16EU","gen":2}`)
-			case "Shelly.GetConfig":
-				return jsonrpcResponse(`{"sys":{"device":{"name":"Test"}}}`)
-			case "Webhook.List":
-				return nil, errTest
-			default:
-				return jsonrpcResponse(`null`)
-			}
-		},
-	}
-
-	client := rpc.NewClient(transport)
-	mgr := New(client)
-
-	opts := &ExportOptions{
-		IncludeWebhooks: true,
-	}
-	backupData, err := mgr.Export(context.Background(), opts)
-	// Export should succeed but webhooks will be nil
-	if err != nil {
-		t.Errorf("Export() error = %v", err)
-	}
-	if backupData == nil {
-		t.Error("Export() returned nil backup")
-		return
-	}
-	var backup Backup
-	if err := json.Unmarshal(backupData, &backup); err != nil {
-		t.Errorf("Failed to unmarshal backup: %v", err)
-		return
-	}
-	if backup.Webhooks != nil {
-		t.Error("Export() Webhooks should be nil when error occurred")
-	}
-}
-
-func TestManager_Export_ListSchedulesError(t *testing.T) {
-	transport := &mockTransport{
-		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-			method := req.GetMethod()
-			switch method {
-			case "Shelly.GetDeviceInfo":
-				return jsonrpcResponse(`{"id":"test-device","model":"SNSW-001X16EU","gen":2}`)
-			case "Shelly.GetConfig":
-				return jsonrpcResponse(`{"sys":{"device":{"name":"Test"}}}`)
-			case "Schedule.List":
-				return nil, errTest
-			default:
-				return jsonrpcResponse(`null`)
-			}
-		},
-	}
-
-	client := rpc.NewClient(transport)
-	mgr := New(client)
-
-	opts := &ExportOptions{
-		IncludeSchedules: true,
-	}
-	backupData, err := mgr.Export(context.Background(), opts)
-	// Export should succeed but schedules will be nil
-	if err != nil {
-		t.Errorf("Export() error = %v", err)
-	}
-	if backupData == nil {
-		t.Error("Export() returned nil backup")
-		return
-	}
-	var backup Backup
-	if err := json.Unmarshal(backupData, &backup); err != nil {
-		t.Errorf("Failed to unmarshal backup: %v", err)
-		return
-	}
-	if backup.Schedules != nil {
-		t.Error("Export() Schedules should be nil when error occurred")
 	}
 }
 

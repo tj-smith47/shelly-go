@@ -59,6 +59,7 @@ type RollerConfig struct {
 	InputMode              string  `json:"input_mode,omitempty"`
 	BtnType                string  `json:"btn_type,omitempty"`
 	SafetyMode             string  `json:"safety_mode,omitempty"`
+	SafetyAllowedOnTrigger string  `json:"safety_allowed_on_trigger,omitempty"`
 	ObstacleMode           string  `json:"obstacle_mode,omitempty"`
 	ObstacleAction         string  `json:"obstacle_action,omitempty"`
 	ObstacleDelay          int     `json:"obstacle_delay,omitempty"`
@@ -69,7 +70,6 @@ type RollerConfig struct {
 	SwapInputs             bool    `json:"swap_inputs,omitempty"`
 	BtnReverse             bool    `json:"btn_reverse,omitempty"`
 	Swap                   bool    `json:"swap,omitempty"`
-	SafetyAllowedOnTrigger bool    `json:"safety_allowed_on_trigger,omitempty"`
 	Positioning            bool    `json:"positioning,omitempty"`
 }
 
@@ -248,8 +248,8 @@ func buildRollerSafetyParams(params url.Values, config *RollerConfig) {
 	if config.SafetyAction != "" {
 		params.Set("safety_action", config.SafetyAction)
 	}
-	if config.SafetyAllowedOnTrigger {
-		params.Set("safety_allowed_on_trigger", boolTrue)
+	if config.SafetyAllowedOnTrigger != "" {
+		params.Set("safety_allowed_on_trigger", config.SafetyAllowedOnTrigger)
 	}
 	if config.Positioning {
 		params.Set("positioning", boolTrue)

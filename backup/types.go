@@ -46,6 +46,9 @@ type Script struct {
 	Code   string `json:"code,omitempty"`
 	ID     int    `json:"id"`
 	Enable bool   `json:"enable"`
+	// Running records whether the script was running when the backup was
+	// taken, so a restore starts it again.
+	Running bool `json:"running,omitempty"`
 }
 
 // AuthInfo contains authentication information.

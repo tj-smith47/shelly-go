@@ -142,42 +142,56 @@ func TestShouldRestoreConfigKey(t *testing.T) {
 	}
 }
 
-// TestStripSourceMQTTClientID asserts the Gen2 default client id (the source's
-// device id) is dropped before MQTT.SetConfig so a restore onto another device
-// keeps that device's own default, while a custom client id survives.
-func TestStripSourceMQTTClientID(t *testing.T) {
+// TestStripGen2Identity asserts the values that would make a restored device
+// act as the source are removed before any SetConfig: the MQTT client id and
+// topic prefix when they are the source's device id (the Gen2 default), and
+// the device's own MAC, firmware id, profile and config revision.
+func TestStripGen2Identity(t *testing.T) {
 	t.Parallel()
 	src := &DeviceInfo{ID: "shellyplus2pm-aabbcc"}
 
 	tests := []struct {
-		name     string
-		mqtt     string
-		src      *DeviceInfo
-		wantKept bool
+		src  *DeviceInfo
+		name string
+		key  string
+		cfg  string
+		want string
 	}{
-		{"default id dropped", `{"enable":false,"client_id":"shellyplus2pm-aabbcc"}`, src, false},
-		{"default id dropped case-insensitively", `{"client_id":"ShellyPlus2PM-AABBCC"}`, src, false},
-		{"custom id kept", `{"client_id":"bath-fan"}`, src, true},
-		{"no source info keeps id", `{"client_id":"shellyplus2pm-aabbcc"}`, nil, true},
+		{
+			src, "default mqtt ids dropped", "mqtt",
+			`{"enable":false,"client_id":"shellyplus2pm-aabbcc","topic_prefix":"ShellyPlus2PM-AABBCC"}`,
+			`{"enable":false}`,
+		},
+		{
+			src, "custom mqtt ids kept", "mqtt",
+			`{"client_id":"bath-fan","topic_prefix":"home/bath"}`,
+			`{"client_id":"bath-fan","topic_prefix":"home/bath"}`,
+		},
+		{
+			nil, "no source info keeps ids", "mqtt",
+			`{"client_id":"shellyplus2pm-aabbcc"}`, `{"client_id":"shellyplus2pm-aabbcc"}`,
+		},
+		{
+			src, "device identity dropped from sys", "sys",
+			`{"device":{"name":"Bath","mac":"AABBCC","fw_id":"x","profile":"switch","eco_mode":true},"cfg_rev":9,"sntp":{"server":"s"}}`,
+			`{"device":{"eco_mode":true,"name":"Bath"},"sntp":{"server":"s"}}`,
+		},
+		{
+			src, "a component named like an identity key is untouched", "switch:0",
+			`{"id":0,"name":"Fan","mac":"kept"}`, `{"id":0,"mac":"kept","name":"Fan"}`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			out := stripSourceMQTTClientID(json.RawMessage(tt.mqtt), tt.src)
-			var fields map[string]json.RawMessage
-			if err := json.Unmarshal(out, &fields); err != nil {
-				t.Fatalf("output is not JSON: %v", err)
+			cfg, err := decodeConfig(json.RawMessage(tt.cfg))
+			if err != nil {
+				t.Fatalf("decode: %v", err)
 			}
-			if _, kept := fields["client_id"]; kept != tt.wantKept {
-				t.Errorf("client_id kept = %v, want %v (out=%s)", kept, tt.wantKept, out)
+			stripGen2Identity(tt.key, cfg, tt.src)
+			if got := canonicalJSON(cfg); got != tt.want {
+				t.Errorf("stripGen2Identity(%s) = %s, want %s", tt.key, got, tt.want)
 			}
 		})
-	}
-
-	if out := stripSourceMQTTClientID(nil, src); out != nil {
-		t.Errorf("nil config must pass through, got %s", out)
-	}
-	if out := stripSourceMQTTClientID(json.RawMessage(`not json`), src); string(out) != "not json" {
-		t.Errorf("unparseable config must pass through unchanged, got %s", out)
 	}
 }

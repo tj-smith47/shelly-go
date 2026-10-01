@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -217,22 +218,70 @@ func TestGetActions(t *testing.T) {
 	mock := testutil.NewMockTransport()
 	device := NewDevice(mock)
 
-	mock.OnCallJSON("/settings/actions", `{
-		"actions": [
-			{"index": 0, "name": "out_on_url", "urls": ["http://example.com"], "enabled": true}
-		]
-	}`)
+	// The shape a Bulb Duo returns, plus a threshold action as an EM reports it.
+	mock.OnCallJSON("/settings/actions", `{"actions":{
+		"out_on_url":[{"index":0,"urls":["http://localhost/light/0?white=100"],"enabled":true}],
+		"out_off_url":[{"index":0,"urls":[],"enabled":false}],
+		"over_power_url":[{"index":1,"urls":["http://h/over"],"enabled":true,"over_power_url_threshold":2000}]
+	}}`)
 
 	actions, err := device.GetActions(context.Background())
 	if err != nil {
 		t.Fatalf("GetActions failed: %v", err)
 	}
-
-	if len(actions.Actions) != 1 {
-		t.Errorf("Expected 1 action, got %d", len(actions.Actions))
+	if len(actions.Actions) != 3 {
+		t.Fatalf("Expected 3 actions, got %d", len(actions.Actions))
 	}
-	if !actions.Actions[0].Enabled {
-		t.Error("Expected action to be enabled")
+	// Ordered by event name.
+	off, on, over := actions.Actions[0], actions.Actions[1], actions.Actions[2]
+	if off.Event != ActionOutputOffUrl || off.Enabled || len(off.URLs) != 0 {
+		t.Errorf("out_off_url = %+v", off)
+	}
+	if on.Event != ActionOutputOnUrl || !on.Enabled || on.URLs[0] != "http://localhost/light/0?white=100" {
+		t.Errorf("out_on_url = %+v", on)
+	}
+	if over.Index != 1 || over.Params["over_power_url_threshold"] != float64(2000) {
+		t.Errorf("over_power_url = %+v", over)
+	}
+
+	// The backup stores the marshaled form, so it must parse back unchanged.
+	data, err := json.Marshal(actions)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var again ActionSettings
+	if err := json.Unmarshal(data, &again); err != nil {
+		t.Fatalf("unmarshal round trip: %v", err)
+	}
+	if !reflect.DeepEqual(*actions, again) {
+		t.Errorf("round trip changed actions:\n got %+v\nwant %+v", again, *actions)
+	}
+}
+
+// A device parser rejects "urls":null, so an action built without URLs must
+// still marshal an empty list.
+func TestActionSettings_MarshalsNilURLsAsEmptyList(t *testing.T) {
+	data, err := json.Marshal(ActionSettings{Actions: []Action{{Event: ActionOutputOffUrl}}})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if want := `{"actions":{"out_off_url":[{"enabled":false,"index":0,"urls":[]}]}}`; string(data) != want {
+		t.Errorf("got %s, want %s", data, want)
+	}
+}
+
+func TestSetActionConfig(t *testing.T) {
+	mock := testutil.NewMockTransport()
+	device := NewDevice(mock)
+	mock.OnCallJSON("/settings/actions?enabled=true&index=1&name=over_power_url"+
+		"&over_power_url_onetime=true&over_power_url_threshold=2000&urls[]=http%3A%2F%2Fh%2Fover", `{}`)
+
+	err := device.SetActionConfig(context.Background(), &Action{
+		Event: "over_power_url", Index: 1, Enabled: true, URLs: []string{"http://h/over"},
+		Params: map[string]any{"over_power_url_threshold": float64(2000), "over_power_url_onetime": true},
+	})
+	if err != nil {
+		t.Fatalf("SetActionConfig failed: %v", err)
 	}
 }
 
@@ -241,7 +290,7 @@ func TestSetAction(t *testing.T) {
 	defer mock.ClearMatchers()
 	device := NewDevice(mock)
 
-	mock.OnPathContains("/settings/actions?", json.RawMessage(`{}`), nil)
+	mock.OnCallJSON("/settings/actions?enabled=true&index=0&name=out_on_url&urls[]=http%3A%2F%2Fexample.com%2Ftrigger", `{}`)
 
 	err := device.SetAction(context.Background(), 0, ActionOutputOnUrl, []string{"http://example.com/trigger"}, true)
 	if err != nil {
@@ -267,7 +316,7 @@ func TestClearAction(t *testing.T) {
 	defer mock.ClearMatchers()
 	device := NewDevice(mock)
 
-	mock.OnPathContains("/settings/actions?", json.RawMessage(`{}`), nil)
+	mock.OnCallJSON("/settings/actions?enabled=false&index=0&name=out_on_url&urls[]=", `{}`)
 
 	err := device.ClearAction(context.Background(), 0, ActionOutputOnUrl)
 	if err != nil {

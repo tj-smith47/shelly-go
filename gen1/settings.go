@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -25,7 +26,7 @@ import (
 //	err := device.SetWiFiStation(ctx, true, "MyNetwork", "password123")
 func (d *Device) SetWiFiStation(ctx context.Context, enabled bool, ssid, password string) error {
 	params := url.Values{}
-	params.Set("enabled", boolToString(enabled))
+	params.Set(actionFieldEnabled, boolToString(enabled))
 	if ssid != "" {
 		params.Set("ssid", ssid)
 	}
@@ -56,7 +57,7 @@ func (d *Device) SetWiFiStation(ctx context.Context, enabled bool, ssid, passwor
 //   - dns: DNS server (optional, empty string to skip)
 func (d *Device) SetWiFiStationStatic(ctx context.Context, ssid, password, ip, gateway, mask, dns string) error {
 	return d.setStaticWiFi(ctx, "/settings/sta", &staticWiFiKeys{
-		enabled: "enabled", ssid: "ssid", key: "key", method: "ipv4_method",
+		enabled: actionFieldEnabled, ssid: "ssid", key: "key", method: "ipv4_method",
 		ip: "ip", gateway: "gateway", mask: "netmask", dns: "dns",
 	}, ssid, password, ip, gateway, mask, dns)
 }
@@ -120,7 +121,7 @@ func (d *Device) SetWiFiAP(ctx context.Context, enabled bool, ssid, password str
 // counterpart of SetWiFiStation and targets the dedicated /settings/sta1 resource.
 func (d *Device) SetWiFiStation1(ctx context.Context, enabled bool, ssid, password string) error {
 	params := url.Values{}
-	params.Set("enabled", boolToString(enabled))
+	params.Set(actionFieldEnabled, boolToString(enabled))
 	if ssid != "" {
 		params.Set("ssid", ssid)
 	}
@@ -140,7 +141,7 @@ func (d *Device) SetWiFiStation1(ctx context.Context, enabled bool, ssid, passwo
 // It is the sta1 counterpart of SetWiFiStationStatic; an empty dns is omitted.
 func (d *Device) SetWiFiStation1Static(ctx context.Context, ssid, password, ip, gateway, mask, dns string) error {
 	return d.setStaticWiFi(ctx, "/settings/sta1", &staticWiFiKeys{
-		enabled: "enabled", ssid: "ssid", key: "key", method: "ipv4_method",
+		enabled: actionFieldEnabled, ssid: "ssid", key: "key", method: "ipv4_method",
 		ip: "ip", gateway: "gateway", mask: "netmask", dns: "dns",
 	}, ssid, password, ip, gateway, mask, dns)
 }
@@ -300,7 +301,7 @@ func (d *Device) SetCloud(ctx context.Context, enabled bool) error {
 //   - password: Password
 func (d *Device) SetAuth(ctx context.Context, enabled bool, username, password string) error {
 	params := url.Values{}
-	params.Set("enabled", boolToString(enabled))
+	params.Set(actionFieldEnabled, boolToString(enabled))
 	if username != "" {
 		params.Set("username", username)
 	}
@@ -392,18 +393,102 @@ const (
 	ActionOvertemperature ActionEvent = "overtemperature_url"
 )
 
-// Action represents a configured action URL.
+// Action is one configured action URL entry for an event on a component.
 type Action struct {
+	// Params carries the action's device-specific settings beyond index, urls and
+	// enabled, such as power thresholds and one-time flags, keyed by the parameter
+	// name the device uses. Values keep the JSON type the device reported.
+	Params map[string]any `json:"-"`
+	// Name is unused; the device reports the event name as the map key (Event).
 	Name    string      `json:"name,omitempty"`
 	Event   ActionEvent `json:"-"`
-	URLs    []string    `json:"urls,omitempty"`
-	Index   int         `json:"index,omitempty"`
+	URLs    []string    `json:"urls"`
+	Index   int         `json:"index"`
 	Enabled bool        `json:"enabled"`
 }
 
 // ActionSettings contains all action URL settings.
+//
+// The device reports actions as a map from event name to the entries for each
+// component index. Actions flattens that map, one entry per (event, index),
+// ordered by event name then index, and marshals back to the device's shape.
 type ActionSettings struct {
-	Actions []Action `json:"actions,omitempty"`
+	Actions []Action `json:"-"`
+}
+
+// actionFixedFields are the Action fields with their own struct members; every
+// other key the device reports on an action entry is kept in Params.
+const (
+	actionFieldIndex   = "index"
+	actionFieldEnabled = "enabled"
+	actionFieldURLs    = "urls"
+)
+
+var actionFixedFields = map[string]bool{actionFieldIndex: true, actionFieldURLs: true, actionFieldEnabled: true}
+
+// UnmarshalJSON parses the device's {"actions":{"<event>":[...]}} shape.
+func (s *ActionSettings) UnmarshalJSON(data []byte) error {
+	var wire struct {
+		Actions map[string][]map[string]json.RawMessage `json:"actions"`
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	events := make([]string, 0, len(wire.Actions))
+	for event := range wire.Actions {
+		events = append(events, event)
+	}
+	sort.Strings(events)
+	s.Actions = s.Actions[:0]
+	for _, event := range events {
+		for _, entry := range wire.Actions[event] {
+			action := Action{Event: ActionEvent(event)}
+			for key, raw := range entry {
+				var err error
+				switch key {
+				case actionFieldIndex:
+					err = json.Unmarshal(raw, &action.Index)
+				case actionFieldURLs:
+					err = json.Unmarshal(raw, &action.URLs)
+				case actionFieldEnabled:
+					err = json.Unmarshal(raw, &action.Enabled)
+				default:
+					var v any
+					if err = json.Unmarshal(raw, &v); err == nil {
+						if action.Params == nil {
+							action.Params = map[string]any{}
+						}
+						action.Params[key] = v
+					}
+				}
+				if err != nil {
+					return fmt.Errorf("action %s[%s]: %w", event, key, err)
+				}
+			}
+			s.Actions = append(s.Actions, action)
+		}
+	}
+	return nil
+}
+
+// MarshalJSON writes the device's {"actions":{"<event>":[...]}} shape.
+func (s ActionSettings) MarshalJSON() ([]byte, error) {
+	byEvent := map[string][]map[string]any{}
+	for _, action := range s.Actions {
+		entry := map[string]any{
+			actionFieldIndex: action.Index, actionFieldURLs: action.URLs, actionFieldEnabled: action.Enabled,
+		}
+		if action.URLs == nil {
+			entry[actionFieldURLs] = []string{}
+		}
+		for key, v := range action.Params {
+			if !actionFixedFields[key] {
+				entry[key] = v
+			}
+		}
+		byEvent[string(action.Event)] = append(byEvent[string(action.Event)], entry)
+	}
+	return json.Marshal(map[string]any{"actions": byEvent})
 }
 
 // GetActions retrieves all configured action URLs.
@@ -421,6 +506,53 @@ func (d *Device) GetActions(ctx context.Context) (*ActionSettings, error) {
 	return &settings, nil
 }
 
+// SetActionConfig writes one action entry in full: its URLs, enabled flag and
+// every device-specific parameter in Params.
+func (d *Device) SetActionConfig(ctx context.Context, action *Action) error {
+	params := url.Values{}
+	params.Set(actionFieldIndex, strconv.Itoa(action.Index))
+	params.Set("name", string(action.Event))
+	params.Set(actionFieldEnabled, boolToString(action.Enabled))
+	for key, v := range action.Params {
+		if !actionFixedFields[key] {
+			params.Set(key, queryValue(v))
+		}
+	}
+	// The device reads the URL list only from a literal "urls[]" parameter: it
+	// ignores an indexed name and a percent-encoded bracket, and then refuses
+	// to enable the action because it sees no URL. An empty value clears the list.
+	query := params.Encode()
+	if len(action.URLs) == 0 {
+		query += "&urls[]="
+	}
+	for _, u := range action.URLs {
+		query += "&urls[]=" + url.QueryEscape(u)
+	}
+	if _, err := d.restCall(ctx, "/settings/actions?"+query); err != nil {
+		return fmt.Errorf("failed to set action %s[%d]: %w", action.Event, action.Index, err)
+	}
+	return nil
+}
+
+// queryValue renders a JSON-decoded scalar the way the device's query API
+// expects it: booleans as true/false, numbers without an exponent, strings as is.
+func queryValue(v any) string {
+	switch t := v.(type) {
+	case bool:
+		return boolToString(t)
+	case float64:
+		return strconv.FormatFloat(t, 'f', -1, 64)
+	case json.Number:
+		return t.String()
+	case string:
+		return t
+	case nil:
+		return ""
+	default:
+		return fmt.Sprint(t)
+	}
+}
+
 // SetAction configures an action URL for a specific event.
 //
 // Parameters:
@@ -433,21 +565,7 @@ func (d *Device) GetActions(ctx context.Context) (*ActionSettings, error) {
 //
 //	err := device.SetAction(ctx, 0, gen1.ActionOutputOn, []string{"http://192.168.1.100/trigger"}, true)
 func (d *Device) SetAction(ctx context.Context, index int, event ActionEvent, urls []string, enabled bool) error {
-	params := url.Values{}
-	params.Set("index", strconv.Itoa(index))
-	params.Set("name", string(event))
-	params.Set("enabled", boolToString(enabled))
-
-	for i, u := range urls {
-		params.Set(fmt.Sprintf("urls[%d]", i), u)
-	}
-
-	endpoint := "/settings/actions?" + params.Encode()
-	_, err := d.restCall(ctx, endpoint)
-	if err != nil {
-		return fmt.Errorf("failed to set action: %w", err)
-	}
-	return nil
+	return d.SetActionConfig(ctx, &Action{Index: index, Event: event, URLs: urls, Enabled: enabled})
 }
 
 // SetActionURL is a convenience method to set a single action URL.

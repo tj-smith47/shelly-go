@@ -443,6 +443,7 @@ type RollerSettings struct {
 	InputMode              string   `json:"input_mode,omitempty"`
 	BtnType                string   `json:"btn_type,omitempty"`
 	SafetyMode             string   `json:"safety_mode,omitempty"`
+	SafetyAllowedOnTrigger string   `json:"safety_allowed_on_trigger,omitempty"`
 	ScheduleRules          []string `json:"schedule_rules,omitempty"`
 	MaxTime                float64  `json:"maxtime,omitempty"`
 	Power                  float64  `json:"power,omitempty"`
@@ -453,7 +454,6 @@ type RollerSettings struct {
 	BtnReverse             int      `json:"btn_reverse,omitempty"`
 	SafetySwitch           bool     `json:"safety_switch,omitempty"`
 	Swap                   bool     `json:"swap,omitempty"`
-	SafetyAllowedOnTrigger bool     `json:"safety_allowed_on_trigger,omitempty"`
 	SwapInputs             bool     `json:"swap_inputs,omitempty"`
 	Positioning            bool     `json:"positioning,omitempty"`
 }

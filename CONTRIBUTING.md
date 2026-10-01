@@ -54,6 +54,27 @@ To add support for a new Shelly device:
 4. Update `DEVICES.md` with device information
 5. Add example usage in `examples/`
 
+### Backup and Restore Coverage
+
+A backup holds every setting the device reports, and a restore writes all of
+them except the ones that identify the device (MAC, hostname, AP SSID, an MQTT
+id equal to the device id). After writing, the restore reads the device back
+and adds a `not applied: <path>` warning for each setting that differs.
+
+When you add or change a device type:
+
+1. Save a real `/settings` response as `backup/testdata/gen1/<model>.json`,
+   with the MAC, hostname, SSID, addresses and location replaced.
+2. Run `go test ./backup/ -run Gen1Settings`. Every key no table names fails
+   `TestGen1SettingsKeys_AllClassified`.
+3. Classify each new key in `backup/gen1_settings.go`. Use generic unless the
+   key identifies the device, is read-only, or already has a dedicated step.
+   Add a `gen1WriteOverrides` entry when the query parameter is not the key
+   name.
+4. Test mocks use the shapes a real device returns. Do not invent a response.
+
+Export reads never ignore an error, and restore writes never drop one.
+
 ### Pull Requests
 
 - Fill in the required template

@@ -1,0 +1,133 @@
+{
+ "wifi_ap": {
+  "enabled": false,
+  "ssid": "ShellyBulbDuo-DDEEFF",
+  "key": ""
+ },
+ "wifi_sta": {
+  "enabled": true,
+  "ssid": "HomeNet",
+  "ipv4_method": "static",
+  "ip": "192.168.1.50",
+  "gw": "192.168.1.1",
+  "mask": "255.255.255.0",
+  "dns": "192.168.1.1"
+ },
+ "wifi_sta1": {
+  "enabled": false,
+  "ssid": null,
+  "ipv4_method": "dhcp",
+  "ip": null,
+  "gw": null,
+  "mask": null,
+  "dns": null
+ },
+ "ap_roaming": {
+  "enabled": false,
+  "threshold": -70
+ },
+ "mqtt": {
+  "enable": false,
+  "server": "",
+  "user": "",
+  "id": "ShellyBulbDuo-DDEEFF",
+  "reconnect_timeout_max": 60.0,
+  "reconnect_timeout_min": 2.0,
+  "clean_session": true,
+  "keep_alive": 60,
+  "max_qos": 0,
+  "retain": false,
+  "update_period": 30
+ },
+ "coiot": {
+  "enabled": true,
+  "update_period": 15,
+  "peer": ""
+ },
+ "sntp": {
+  "server": "time.google.com",
+  "enabled": true
+ },
+ "login": {
+  "enabled": false,
+  "unprotected": false,
+  "username": "admin"
+ },
+ "pin_code": "",
+ "name": null,
+ "fw": "20230913-111821/v1.14.0-gcb84623",
+ "discoverable": true,
+ "build_info": {
+  "build_id": "20230913-111821/v1.14.0-gcb84623",
+  "build_timestamp": "2023-09-13T11:18:21Z",
+  "build_version": "1.0"
+ },
+ "cloud": {
+  "enabled": true,
+  "connected": true
+ },
+ "timezone": "America/Los_Angeles",
+ "lat": 40.0,
+ "lng": -100.0,
+ "tzautodetect": false,
+ "tz_utc_offset": -25200,
+ "tz_dst": false,
+ "tz_dst_auto": true,
+ "time": "06:59",
+ "unixtime": 1790863168,
+ "debug_enable": false,
+ "allow_cross_origin": false,
+ "wifirecovery_reboot_enabled": true,
+ "device": {
+  "type": "SHRGBW2",
+  "mac": "AABBCCDDEEFF",
+  "hostname": "shelly-DDEEFF",
+  "num_outputs": 1
+ },
+ "hwinfo": {
+  "hw_revision": "prod-2019",
+  "batch_id": 1
+ },
+ "mode": "color",
+ "fw_mode": "SHRGBW2-color",
+ "coiot_execute_enable": false,
+ "led_status_disable": true,
+ "device_submodel": 0,
+ "actions": {
+  "active": false,
+  "names": [
+   "btn_on_url",
+   "out_on_url"
+  ]
+ },
+ "night_mode": {
+  "enabled": true,
+  "start_time": "22:00",
+  "end_time": "06:00",
+  "brightness": 10
+ },
+ "lights": [
+  {
+   "name": "Strip",
+   "ison": true,
+   "red": 255,
+   "green": 100,
+   "blue": 0,
+   "white": 0,
+   "gain": 80,
+   "effect": 0,
+   "transition": 500,
+   "default_state": "last",
+   "auto_on": 0,
+   "auto_off": 0,
+   "schedule": false,
+   "schedule_rules": [],
+   "btn_type": "detached",
+   "btn_reverse": 0,
+   "power": 1.2,
+   "overpower": false,
+   "has_timer": false,
+   "source": "http"
+  }
+ ]
+}

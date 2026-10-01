@@ -1,0 +1,160 @@
+{
+ "wifi_ap": {
+  "enabled": false,
+  "ssid": "ShellyBulbDuo-DDEEFF",
+  "key": ""
+ },
+ "wifi_sta": {
+  "enabled": true,
+  "ssid": "HomeNet",
+  "ipv4_method": "static",
+  "ip": "192.168.1.50",
+  "gw": "192.168.1.1",
+  "mask": "255.255.255.0",
+  "dns": "192.168.1.1"
+ },
+ "wifi_sta1": {
+  "enabled": false,
+  "ssid": null,
+  "ipv4_method": "dhcp",
+  "ip": null,
+  "gw": null,
+  "mask": null,
+  "dns": null
+ },
+ "ap_roaming": {
+  "enabled": false,
+  "threshold": -70
+ },
+ "mqtt": {
+  "enable": false,
+  "server": "",
+  "user": "",
+  "id": "ShellyBulbDuo-DDEEFF",
+  "reconnect_timeout_max": 60.0,
+  "reconnect_timeout_min": 2.0,
+  "clean_session": true,
+  "keep_alive": 60,
+  "max_qos": 0,
+  "retain": false,
+  "update_period": 30
+ },
+ "coiot": {
+  "enabled": true,
+  "update_period": 15,
+  "peer": ""
+ },
+ "sntp": {
+  "server": "time.google.com",
+  "enabled": true
+ },
+ "login": {
+  "enabled": false,
+  "unprotected": false,
+  "username": "admin"
+ },
+ "pin_code": "",
+ "name": null,
+ "fw": "20230913-111821/v1.14.0-gcb84623",
+ "discoverable": true,
+ "build_info": {
+  "build_id": "20230913-111821/v1.14.0-gcb84623",
+  "build_timestamp": "2023-09-13T11:18:21Z",
+  "build_version": "1.0"
+ },
+ "cloud": {
+  "enabled": true,
+  "connected": true
+ },
+ "timezone": "America/Los_Angeles",
+ "lat": 40.0,
+ "lng": -100.0,
+ "tzautodetect": false,
+ "tz_utc_offset": -25200,
+ "tz_dst": false,
+ "tz_dst_auto": true,
+ "time": "06:59",
+ "unixtime": 1790863168,
+ "debug_enable": false,
+ "allow_cross_origin": false,
+ "wifirecovery_reboot_enabled": true,
+ "device": {
+  "type": "SHSW-PM",
+  "mac": "AABBCCDDEEFF",
+  "hostname": "shelly-DDEEFF",
+  "num_outputs": 1
+ },
+ "hwinfo": {
+  "hw_revision": "prod-2019",
+  "batch_id": 1
+ },
+ "mode": "relay",
+ "max_power": 3500,
+ "supply_voltage": 0,
+ "power_correction": 1.0,
+ "led_status_disable": true,
+ "longpush_time": 800,
+ "factory_reset_from_switch": true,
+ "actions": {
+  "active": false,
+  "names": [
+   "btn_on_url",
+   "out_on_url"
+  ]
+ },
+ "relays": [
+  {
+   "name": "R",
+   "appliance_type": "General",
+   "ison": false,
+   "has_timer": false,
+   "default_state": "last",
+   "btn_type": "toggle",
+   "btn_reverse": 0,
+   "auto_on": 0,
+   "auto_off": 30,
+   "max_power": 3500,
+   "schedule": true,
+   "schedule_rules": [
+    "0700-0123456-on"
+   ]
+  }
+ ],
+ "meters": [
+  {
+   "power": 0,
+   "is_valid": true
+  }
+ ],
+ "ext_switch_enable": false,
+ "ext_switch_reverse": false,
+ "ext_switch": {
+  "0": {
+   "relay_num": -1
+  }
+ },
+ "ext_sensors": {
+  "temperature_unit": "C"
+ },
+ "ext_temperature": {
+  "0": {
+   "overtemp_threshold_tC": 30.0,
+   "overtemp_threshold_tF": 86.0,
+   "undertemp_threshold_tC": 5.0,
+   "undertemp_threshold_tF": 41.0,
+   "overtemp_act": "disabled",
+   "undertemp_act": "relay_on",
+   "offset_tC": 0.5,
+   "offset_tF": 0.9
+  }
+ },
+ "ext_humidity": {
+  "0": {
+   "overhumidity_threshold": 70.0,
+   "underhumidity_threshold": 30.0,
+   "overhumidity_act": "disabled",
+   "underhumidity_act": "disabled",
+   "offset": 1.0
+  }
+ }
+}
