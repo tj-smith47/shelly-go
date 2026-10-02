@@ -223,9 +223,7 @@ func (r *runner) resolveJoinNetwork(ctx context.Context, fromBackup, override *N
 		}
 	}
 	if join.Password == "" {
-		return Network{}, fmt.Errorf(
-			"%w for %q: Shelly devices return no station key and none was found in this "+
-				"host's stored credentials; set Network.Password", ErrNoPassphrase, join.SSID)
+		return Network{}, &NoPassphraseError{SSID: join.SSID}
 	}
 	return join, nil
 }

@@ -358,7 +358,24 @@ func TestResolveJoinNetwork_NoPassphrase(t *testing.T) {
 			if !strings.Contains(err.Error(), "Network.Password") {
 				t.Errorf("err = %q, want it to name Network.Password", err)
 			}
+			var pwErr *NoPassphraseError
+			if !errors.As(err, &pwErr) || pwErr.SSID != "Some" {
+				t.Errorf("err = %#v, want a NoPassphraseError for %q", err, "Some")
+			}
 		})
+	}
+}
+
+func TestResolveJoinNetwork_NoPassphraseNamesHostNetwork(t *testing.T) {
+	t.Parallel()
+	r := testRunner(t, &fakeScanner{current: &discovery.WiFiNetwork{SSID: homeSSID}}, "")
+	_, err := r.resolveJoinNetwork(context.Background(), &Network{}, &Network{})
+	var pwErr *NoPassphraseError
+	if !errors.As(err, &pwErr) {
+		t.Fatalf("err = %v, want a NoPassphraseError", err)
+	}
+	if pwErr.SSID != homeSSID {
+		t.Errorf("SSID = %q, want the host's network %q", pwErr.SSID, homeSSID)
 	}
 }
 

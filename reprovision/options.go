@@ -21,7 +21,8 @@ import (
 // Errors a caller can test for with errors.Is.
 var (
 	// ErrNoPassphrase means no WiFi passphrase was given and none could be found
-	// in the backup or in the host's stored credentials.
+	// in the backup or in the host's stored credentials. The error carrying it
+	// is a *NoPassphraseError, which names the network.
 	ErrNoPassphrase = errors.New("no WiFi passphrase")
 
 	// ErrIdentityMismatch means the device answering at the access point is not
@@ -93,6 +94,33 @@ func (e *FirmwareUnavailableError) Error() string {
 
 // Unwrap returns ErrFirmwareUnavailable, so errors.Is matches it.
 func (e *FirmwareUnavailableError) Unwrap() error { return ErrFirmwareUnavailable }
+
+// NoPassphraseError reports a network to join for which no passphrase was
+// given and none was found in the host's stored credentials. It matches
+// ErrNoPassphrase with errors.Is; read it with errors.As to learn which network
+// was resolved:
+//
+//	var pwErr *reprovision.NoPassphraseError
+//	if errors.As(err, &pwErr) {
+//		fmt.Printf("no passphrase for %s\n", pwErr.SSID)
+//	}
+type NoPassphraseError struct {
+	// SSID is the network the device was to join. It is empty when no network
+	// was named and the host is not on one.
+	SSID string
+}
+
+// Error names the network and the two ways to get past the refusal.
+func (e *NoPassphraseError) Error() string {
+	return fmt.Sprintf(
+		"%v for %q: Shelly devices return no station key and none was found in this "+
+			"host's stored credentials; set Network.Password, or Network.Open for a "+
+			"network with no passphrase",
+		ErrNoPassphrase, e.SSID)
+}
+
+// Unwrap returns ErrNoPassphrase, so errors.Is matches it.
+func (e *NoPassphraseError) Unwrap() error { return ErrNoPassphrase }
 
 // Network is the WiFi network a device joins when it leaves its access point.
 // Every field is optional. SSID and Password default to the backup's, then to
