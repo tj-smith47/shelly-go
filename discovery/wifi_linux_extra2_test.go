@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"net"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -500,5 +502,23 @@ func TestConfigureWpaNetwork_SelectNetworkFails(t *testing.T) {
 	_, _, err := s.configureWpaNetwork(context.Background(), "ShellyBulbDuo-D0DCFF", "")
 	if err == nil {
 		t.Fatal("expected error when select_network fails")
+	}
+}
+
+func TestWpaClientSocketArgs(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	if got := wpaClientSocketArgs(dir, "wlan0"); got != nil {
+		t.Errorf("no control socket: got %v, want none", got)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "wlan0"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := wpaClientSocketArgs(dir, "wlan0")
+	if len(got) != 2 || got[0] != "-s" || got[1] != dir {
+		t.Errorf("writable control dir: got %v, want [-s %s]", got, dir)
+	}
+	if got := wpaClientSocketArgs(filepath.Join(dir, "missing"), "wlan0"); got != nil {
+		t.Errorf("missing dir: got %v, want none", got)
 	}
 }

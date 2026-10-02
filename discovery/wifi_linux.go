@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	gnm "github.com/Wifx/gonetworkmanager/v2"
@@ -1097,9 +1098,37 @@ func (s *platformWiFiScanner) wpa(ctx context.Context, args ...string) (string, 
 	if s.wpaRun != nil {
 		return s.wpaRun(ctx, args...)
 	}
-	full := append([]string{"-i", s.iface}, args...)
-	out, err := exec.CommandContext(ctx, methodWpaCli, full...).Output()
+	out, err := exec.CommandContext(ctx, methodWpaCli, s.wpaCliArgs(args...)...).Output()
 	return strings.TrimSpace(string(out)), err
+}
+
+// wpaCtrlDir is where wpa_supplicant keeps its per-interface control sockets.
+const wpaCtrlDir = "/run/wpa_supplicant"
+
+// wpaClientSocketArgs returns the wpa_cli flags that place its reply socket in
+// ctrlDir, next to the control socket of iface. wpa_supplicant answers by
+// writing to the client's socket path, and wpa_cli's default (/tmp) is invisible
+// to a supplicant running in another mount namespace: from a container sharing
+// only the control directory, every command would time out. A socket inside the
+// shared directory is reachable from both sides. The flags are omitted when the
+// control socket is not there or the directory is not writable (a non-root user
+// in the control group), where the default path is the only one that works.
+func wpaClientSocketArgs(ctrlDir, iface string) []string {
+	if _, err := os.Stat(filepath.Join(ctrlDir, iface)); err != nil {
+		return nil
+	}
+	const writeOK = 2
+	if syscall.Access(ctrlDir, writeOK) != nil {
+		return nil
+	}
+	return []string{"-s", ctrlDir}
+}
+
+// wpaCliArgs builds the full wpa_cli argument list for a subcommand on this
+// scanner's interface.
+func (s *platformWiFiScanner) wpaCliArgs(args ...string) []string {
+	full := append(wpaClientSocketArgs(wpaCtrlDir, s.iface), "-i", s.iface)
+	return append(full, args...)
 }
 
 // tryWpa runs a wpa_cli subcommand for its side effect only, used on best-effort
@@ -1164,12 +1193,6 @@ func parseWpaNetworkList(out string) []wpaNetwork {
 	return nets
 }
 
-// connectWpaCli connects using wpa_supplicant's wpa_cli. It reuses an existing
-// network block for the SSID when one is present (so repeated AP hops do not leak
-// a duplicate block per hop), and on any failure it rolls the supplicant back to
-// the network it was on before — removing only a block it actually added and
-// re-enabling the prior networks — so a failed hop never strands the host with
-// every network disabled.
 // wpaSupplicantManages reports whether a live wpa_supplicant instance is driving
 // this scanner's interface. When it is, the interface must be associated through
 // wpa_cli rather than a raw nl80211 connect, which the kernel would reject with
@@ -1183,6 +1206,12 @@ func (s *platformWiFiScanner) wpaSupplicantManages(ctx context.Context) bool {
 	return strings.Contains(strings.ToUpper(out), "PONG")
 }
 
+// connectWpaCli connects using wpa_supplicant's wpa_cli. It reuses an existing
+// network block for the SSID when one is present (so repeated AP hops do not leak
+// a duplicate block per hop), and on any failure it rolls the supplicant back to
+// the network it was on before — removing only a block it actually added and
+// re-enabling the prior networks — so a failed hop never strands the host with
+// every network disabled.
 func (s *platformWiFiScanner) connectWpaCli(ctx context.Context, ssid, password string) error {
 	_, rollback, err := s.configureWpaNetwork(ctx, ssid, password)
 	if err != nil {
@@ -1361,7 +1390,7 @@ func (s *platformWiFiScanner) Disconnect(ctx context.Context) error {
 	}
 
 	if hasCommand(methodWpaCli) {
-		if _, err := s.runHostCmd(ctx, methodWpaCli, "-i", s.iface, "disconnect"); err == nil {
+		if _, err := s.runHostCmd(ctx, methodWpaCli, s.wpaCliArgs("disconnect")...); err == nil {
 			return nil
 		}
 	}
