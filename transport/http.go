@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -45,15 +46,16 @@ func NewHTTP(baseURL string, opts ...Option) *HTTP {
 
 	client := options.client
 	if client == nil {
-		client = &http.Client{
-			Timeout: options.timeout,
-			Transport: &http.Transport{
-				TLSClientConfig:     options.tlsConfig,
-				MaxIdleConns:        10,
-				MaxIdleConnsPerHost: 10,
-				IdleConnTimeout:     90 * time.Second,
-			},
+		tr := &http.Transport{
+			TLSClientConfig:     options.tlsConfig,
+			MaxIdleConns:        10,
+			MaxIdleConnsPerHost: 10,
+			IdleConnTimeout:     90 * time.Second,
 		}
+		if options.bindIface != "" {
+			tr.DialContext = (&net.Dialer{Control: bindControl(options.bindIface)}).DialContext
+		}
+		client = &http.Client{Timeout: options.timeout, Transport: tr}
 	}
 
 	// Normalize baseURL - add http:// if no scheme provided
@@ -75,6 +77,12 @@ func NewHTTP(baseURL string, opts ...Option) *HTTP {
 // For Gen2+ RPC: req contains the RPC method, params, and optional auth.
 // For Gen1 REST: req is a SimpleRequest with the URL path.
 func (h *HTTP) Call(ctx context.Context, req RPCRequest) (json.RawMessage, error) {
+	// A caller-supplied client owns its own dialer, so the bind cannot be applied;
+	// sending over the default route would reach the wrong device.
+	if h.opts.client != nil && h.opts.bindIface != "" {
+		return nil, fmt.Errorf("%w: WithBindInterface cannot be combined with WithClient", types.ErrInvalidParam)
+	}
+
 	var lastErr error
 	retries := h.opts.maxRetries
 	delay := h.opts.retryDelay
@@ -410,6 +418,11 @@ func sha256Hash(input string) string {
 func (h *HTTP) shouldRetry(err error) bool {
 	// Don't retry auth errors or not found errors (use errors.Is for wrapped errors)
 	if errors.Is(err, types.ErrAuth) || errors.Is(err, types.ErrNotFound) {
+		return false
+	}
+
+	// A platform that cannot bind to an interface will not gain the ability on a retry.
+	if errors.Is(err, types.ErrNotSupported) {
 		return false
 	}
 

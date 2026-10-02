@@ -16,6 +16,7 @@ type options struct {
 	tlsConfig     *tls.Config
 	mqttTopic     string
 	mqttClientID  string
+	bindIface     string
 	username      string
 	password      string
 	retryDelay    time.Duration
@@ -93,6 +94,18 @@ func WithDigestAuth(username, password string) Option {
 		o.authType = authTypeDigest
 		o.username = username
 		o.password = password
+	}
+}
+
+// WithBindInterface binds every connection of the HTTP transport to the named
+// host network interface (Linux SO_BINDTODEVICE, needs CAP_NET_RAW or root).
+// An empty name leaves the default routing in place. On other platforms every
+// request fails with an error wrapping types.ErrNotSupported. Combining it with
+// WithClient fails every request with an error wrapping types.ErrInvalidParam,
+// because a caller-supplied client owns its own dialer.
+func WithBindInterface(iface string) Option {
+	return func(o *options) {
+		o.bindIface = iface
 	}
 }
 
