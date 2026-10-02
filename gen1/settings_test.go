@@ -3,12 +3,14 @@ package gen1
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/url"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/tj-smith47/shelly-go/internal/testutil"
+	"github.com/tj-smith47/shelly-go/types"
 )
 
 // recordedScheduleRules returns the decoded schedule_rules query value from the
@@ -54,6 +56,40 @@ func TestSetWiFiStation(t *testing.T) {
 	err := device.SetWiFiStation(context.Background(), true, "MyNetwork", "pass123")
 	if err != nil {
 		t.Fatalf("SetWiFiStation failed: %v", err)
+	}
+}
+
+func TestSetWiFiStationOpen(t *testing.T) {
+	mock := testutil.NewMockTransport()
+	defer mock.ClearMatchers()
+	device := NewDevice(mock)
+
+	mock.OnPathContains("/settings/sta?enabled=true&key=&ssid=GuestNet", json.RawMessage(`{}`), nil)
+
+	if err := device.SetWiFiStationOpen(context.Background(), "GuestNet"); err != nil {
+		t.Fatalf("SetWiFiStationOpen failed: %v", err)
+	}
+}
+
+func TestSetWiFiStationOpenEmptySSID(t *testing.T) {
+	mock := testutil.NewMockTransport()
+	defer mock.ClearMatchers()
+	device := NewDevice(mock)
+
+	if err := device.SetWiFiStationOpen(context.Background(), ""); !errors.Is(err, types.ErrInvalidParam) {
+		t.Fatalf("err = %v, want ErrInvalidParam", err)
+	}
+}
+
+func TestSetWiFiStationOpenError(t *testing.T) {
+	mock := testutil.NewMockTransport()
+	defer mock.ClearMatchers()
+	device := NewDevice(mock)
+
+	mock.OnPathContains("/settings/sta?enabled=true", nil, errTest)
+
+	if err := device.SetWiFiStationOpen(context.Background(), "GuestNet"); err == nil {
+		t.Fatal("expected error")
 	}
 }
 

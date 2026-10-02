@@ -533,7 +533,7 @@ func TestRestoreGen1WiFiStation_DHCPBranch(t *testing.T) {
 	dev, sets := gen1ColorDevice(t, `{}`)
 	sta := &gen1.WiFiStaSettings{Enabled: true, SSID: "Home", Key: "secret", Ipv4Method: "dhcp"}
 	result := &RestoreResult{Success: true}
-	restoreGen1WiFiStation(t.Context(), dev, sta, result)
+	restoreGen1WiFiStation(t.Context(), dev, sta, false, result)
 	if len(result.Warnings) != 0 {
 		t.Errorf("unexpected warnings: %v", result.Warnings)
 	}
@@ -554,7 +554,7 @@ func TestRestoreGen1WiFiStation_StaticBranch(t *testing.T) {
 		Ipv4Method: "static", IP: "10.0.0.5", Gw: "10.0.0.1", Mask: "255.255.255.0", DNS: "10.0.0.1",
 	}
 	result := &RestoreResult{Success: true}
-	restoreGen1WiFiStation(t.Context(), dev, sta, result)
+	restoreGen1WiFiStation(t.Context(), dev, sta, false, result)
 	if len(result.Warnings) != 0 {
 		t.Errorf("unexpected warnings: %v", result.Warnings)
 	}
@@ -571,7 +571,7 @@ func TestRestoreGen1WiFiStation_StaticError(t *testing.T) {
 	dev := failingDevice(t)
 	sta := &gen1.WiFiStaSettings{SSID: "x", Ipv4Method: "static", IP: "10.0.0.5", Gw: "10.0.0.1", Mask: "255.255.255.0"}
 	result := &RestoreResult{Success: true}
-	restoreGen1WiFiStation(t.Context(), dev, sta, result)
+	restoreGen1WiFiStation(t.Context(), dev, sta, false, result)
 	if len(result.Warnings) == 0 {
 		t.Error("expected a warning on static wifi station write failure")
 	}
@@ -582,7 +582,7 @@ func TestRestoreGen1WiFiStation_DHCPError(t *testing.T) {
 	dev := failingDevice(t)
 	sta := &gen1.WiFiStaSettings{SSID: "x", Key: "k"}
 	result := &RestoreResult{Success: true}
-	restoreGen1WiFiStation(t.Context(), dev, sta, result)
+	restoreGen1WiFiStation(t.Context(), dev, sta, false, result)
 	if len(result.Warnings) == 0 {
 		t.Error("expected a warning on dhcp wifi station write failure")
 	}

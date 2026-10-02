@@ -92,7 +92,7 @@ func TestRestore_EndToEnd(t *testing.T) {
 			if err != nil {
 				t.Fatalf("restore: %v", err)
 			}
-			if res.Address != d.addr() || res.MAC != fakeMAC || res.Restore == nil {
+			if res.Address != d.addr() || res.MAC != fakeMAC || res.Restore == nil || res.SeenVia != viaProbe {
 				t.Errorf("result = %+v, want address %q, MAC %q and a restore result", res, d.addr(), fakeMAC)
 			}
 			assertReturnedHome(t, s, fakeAPSSID)
@@ -212,7 +212,9 @@ func TestRestore_NoRoute(t *testing.T) {
 	r.rejoinTimeout = 200 * time.Millisecond
 	r.probeTimeout = 20 * time.Millisecond
 	seen := refusingAddr(t)
-	r.scanPresence = func(context.Context, string, string, bool, time.Duration) (string, error) { return seen, nil }
+	r.scanPresence = func(context.Context, string, string, bool, time.Duration) (addr, via string, err error) {
+		return seen, viaCoIoT, nil
+	}
 
 	res, err := r.restore(context.Background(), &RestoreOptions{
 		APSSID: fakeAPSSID, Backup: testBackup(1), AllowFirmwareDowngrade: true,
@@ -220,8 +222,8 @@ func TestRestore_NoRoute(t *testing.T) {
 	if !errors.Is(err, ErrNoRoute) {
 		t.Fatalf("err = %v, want ErrNoRoute", err)
 	}
-	if res.Address != seen || res.Reachable {
-		t.Errorf("result = %+v, want address %s with Reachable false", res, seen)
+	if res.Address != seen || res.Reachable || res.SeenVia != viaCoIoT {
+		t.Errorf("result = %+v, want address %s seen via %s with Reachable false", res, seen, viaCoIoT)
 	}
 }
 
@@ -380,6 +382,135 @@ func TestApplyGen2WiFiOverride(t *testing.T) {
 	}
 }
 
+func TestApplyGen2WiFiOverride_Open(t *testing.T) {
+	t.Parallel()
+	decodeSta := func(t *testing.T, out json.RawMessage) map[string]any {
+		t.Helper()
+		var got map[string]map[string]any
+		if err := json.Unmarshal(out, &got); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		return got["sta"]
+	}
+	out, err := applyGen2WiFiOverride(json.RawMessage(`{"sta":{"ssid":"Old","pass":"x"}}`),
+		&Network{SSID: "Guest", Open: true})
+	if err != nil {
+		t.Fatalf("applyGen2WiFiOverride: %v", err)
+	}
+	if sta := decodeSta(t, out); sta["ssid"] != "Guest" || sta["pass"] != "" || hasIsOpen(sta) {
+		t.Errorf("sta = %v, want Guest with an empty pass and no is_open", sta)
+	}
+
+	out, err = applyGen2WiFiOverride(json.RawMessage(`{"sta":{"ssid":"Guest","is_open":true}}`),
+		&Network{Password: "secret"})
+	if err != nil {
+		t.Fatalf("applyGen2WiFiOverride: %v", err)
+	}
+	if sta := decodeSta(t, out); sta["pass"] != "secret" || hasIsOpen(sta) {
+		t.Errorf("sta = %v, want the passphrase and no is_open", sta)
+	}
+}
+
+func TestRestore_OpenNetwork(t *testing.T) {
+	t.Parallel()
+	for _, gen := range []int{1, 2} {
+		t.Run(fmt.Sprintf("gen%d", gen), func(t *testing.T) {
+			t.Parallel()
+			d := newFakeDevice(t, gen)
+			// No stored passphrase: an open network must not ask for one.
+			s := &fakeScanner{current: &discovery.WiFiNetwork{SSID: homeSSID}}
+			r := testRunner(t, s, d.addr())
+			res, err := r.restore(context.Background(), &RestoreOptions{
+				APSSID: fakeAPSSID, Backup: testBackup(gen), AllowFirmwareDowngrade: true,
+				Network: Network{
+					Open: true, StaticIP: d.addr(), Gateway: "192.0.2.1", Netmask: "255.255.255.0",
+				},
+			})
+			if err != nil {
+				t.Fatalf("restore: %v", err)
+			}
+			if res.SeenVia != viaProbe {
+				t.Errorf("SeenVia = %q, want %q", res.SeenVia, viaProbe)
+			}
+			if gen == 1 {
+				if q := d.args("/settings/sta"); !strings.Contains(q, "key=&") {
+					t.Errorf("station write %q, want an empty key", q)
+				}
+			} else if sta := writtenSta(t, d); sta["pass"] != "" || hasIsOpen(sta) {
+				t.Errorf("written sta = %v, want an empty pass and no is_open", sta)
+			}
+		})
+	}
+}
+
+// hasIsOpen reports whether a written station carries is_open.
+func hasIsOpen(sta map[string]any) bool {
+	_, ok := sta["is_open"]
+	return ok
+}
+
+// writtenSta decodes the station of the last WiFi.SetConfig the fake received.
+func writtenSta(t *testing.T, d *fakeDevice) map[string]any {
+	t.Helper()
+	var params struct {
+		Config struct {
+			Sta map[string]any `json:"sta"`
+		} `json:"config"`
+	}
+	if err := json.Unmarshal([]byte(d.args("WiFi.SetConfig")), &params); err != nil {
+		t.Fatalf("decode WiFi.SetConfig params: %v", err)
+	}
+	return params.Config.Sta
+}
+
+func TestRestore_OpenBackupStation(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		override Network
+		wantPass string
+	}{
+		{name: "no override rejoins open", wantPass: ""},
+		{name: "a passphrase override joins secured", override: Network{Password: "secret"}, wantPass: "secret"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			d := newFakeDevice(t, 2)
+			s := &fakeScanner{current: &discovery.WiFiNetwork{SSID: homeSSID}}
+			r := testRunner(t, s, d.addr())
+			bkp := testBackup(2)
+			bkp.WiFi = json.RawMessage(`{"sta":{"ssid":"Guest","enable":true,"is_open":true,"ipv4mode":"static",` +
+				`"ip":"` + d.addr() + `","gw":"192.0.2.1","netmask":"255.255.255.0"}}`)
+			_, err := r.restore(context.Background(), &RestoreOptions{
+				APSSID: fakeAPSSID, Backup: bkp, Network: tt.override,
+			})
+			if err != nil {
+				t.Fatalf("restore: %v", err)
+			}
+			sta := writtenSta(t, d)
+			if sta["ssid"] != "Guest" || sta["pass"] != tt.wantPass || hasIsOpen(sta) {
+				t.Errorf("written sta = %v, want Guest with pass %q and no is_open", sta, tt.wantPass)
+			}
+		})
+	}
+}
+
+func TestRestore_OpenWithPasswordRefused(t *testing.T) {
+	t.Parallel()
+	s := homeScanner()
+	_, err := Restore(context.Background(), &RestoreOptions{
+		APSSID: fakeAPSSID, Backup: testBackup(2), Scanner: s,
+		Network: Network{SSID: homeSSID, Open: true, Password: "x"},
+	})
+	if !errors.Is(err, types.ErrInvalidParam) {
+		t.Fatalf("err = %v, want ErrInvalidParam", err)
+	}
+	if calls := s.connectCalls(); len(calls) != 0 {
+		t.Errorf("connects = %v, want none", calls)
+	}
+}
+
 func TestNetworkFromBackup(t *testing.T) {
 	t.Parallel()
 	gen1Static := `{"ssid":"Home","key":"k1","ipv4_method":"static","ip":"192.0.2.10","gw":"192.0.2.1",` +
@@ -426,7 +557,24 @@ func TestNetworkFromBackup(t *testing.T) {
 				Config:     json.RawMessage(`{"wifi_sta":` + gen1Static + `}`),
 			},
 		},
+		{
+			name: "gen2 open station",
+			bkp:  &backup.Backup{WiFi: json.RawMessage(`{"sta":{"ssid":"Guest","is_open":true,"ipv4mode":"dhcp"}}`)},
+			want: Network{SSID: "Guest", Open: true},
+		},
 		{name: "empty ssid blob", bkp: &backup.Backup{WiFi: json.RawMessage(`{"sta":{"ssid":""}}`)}},
+		{
+			name: "gen1 blob with empty ssid falls back to config",
+			bkp: &backup.Backup{
+				DeviceInfo: &backup.DeviceInfo{Generation: 1},
+				WiFi:       json.RawMessage(`{"sta":{"ssid":"","ipv4_method":"static","ip":"192.0.2.99"}}`),
+				Config:     json.RawMessage(`{"wifi_sta":` + gen1Static + `}`),
+			},
+			want: Network{
+				SSID: "Home", Password: "k1", StaticIP: "192.0.2.10", Gateway: "192.0.2.1",
+				Netmask: "255.255.255.0", DNS: "192.0.2.53",
+			},
+		},
 		{name: "invalid blob", bkp: &backup.Backup{WiFi: json.RawMessage(`nope`)}},
 		{name: "nothing", bkp: &backup.Backup{}},
 	}

@@ -1,6 +1,7 @@
 package reprovision
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -133,6 +134,7 @@ func (r *runner) restore(ctx context.Context, opts *RestoreOptions) (*RestoreRes
 			opts.APSSID, confErr)
 	}
 	res.Address = conf.addr
+	res.SeenVia = conf.via
 	if !conf.writeable {
 		return res, fmt.Errorf(
 			"%w: restore applied at AP %q and the device rejoined the LAN at %s (seen via %s), but this host "+
@@ -221,6 +223,7 @@ func (r *runner) restoreGen1(
 			Gateway:  ov.Gateway,
 			Netmask:  ov.Netmask,
 			DNS:      ov.DNS,
+			Open:     ov.Open,
 		}
 	}
 	var result *backup.RestoreResult
@@ -303,7 +306,8 @@ func (r *runner) restoreGen2(
 
 // applyGen2WiFiOverride overlays a network onto a Gen2+ WiFi config blob (the raw
 // WiFi.GetConfig result) and returns the rewritten blob. SSID and password are
-// replaced only when set; a static IP switches the station to static addressing.
+// replaced only when set; an open network is written as an empty passphrase; a
+// static IP switches the station to static addressing.
 // The {ap, sta, sta1} shape is kept so it round-trips through WiFi.SetConfig.
 func applyGen2WiFiOverride(wifiBlob json.RawMessage, ov *Network) (json.RawMessage, error) {
 	cfg := map[string]any{}
@@ -323,6 +327,12 @@ func applyGen2WiFiOverride(wifiBlob json.RawMessage, ov *Network) (json.RawMessa
 	if ov.Password != "" {
 		sta["pass"] = ov.Password
 	}
+	if ov.Open {
+		sta["pass"] = ""
+	}
+	// The device derives is_open from the passphrase and ignores a write to it,
+	// so the backup's read-back value is dropped rather than sent.
+	delete(sta, "is_open")
 	if ov.StaticIP != "" {
 		sta["ipv4mode"] = ipv4ModeStatic
 		sta["ip"] = ov.StaticIP
@@ -466,48 +476,27 @@ type backupStation struct {
 	Netmask    string `json:"netmask"`
 	DNS        string `json:"dns"`
 	Nameserver string `json:"nameserver"`
+	IsOpen     bool   `json:"is_open"`
 }
 
 // NetworkFromBackup reads the station network recorded in a backup: SSID,
-// passphrase (unmasked Gen1 only) and static addressing. It prefers the backup's
-// WiFi blob and falls back to a Gen1 backup's full settings. StaticIP is empty
-// when the backup's station uses DHCP. This is the network Restore joins the
-// device to when RestoreOptions.Network overrides nothing.
+// passphrase (unmasked Gen1 only), whether it is open (Gen2+ only; a Gen1
+// backup does not record it) and static addressing. The station is the one
+// backup.Backup.Station picks. StaticIP is empty when the backup's station uses
+// DHCP. This is the network Restore joins the device to when
+// RestoreOptions.Network overrides nothing.
 func NetworkFromBackup(bkp *backup.Backup) Network {
-	var sta *backupStation
-	var blob struct {
-		Sta *backupStation `json:"sta"`
-	}
-	if len(bkp.WiFi) > 0 && json.Unmarshal(bkp.WiFi, &blob) == nil && blob.Sta != nil && blob.Sta.SSID != "" {
-		sta = blob.Sta
-	}
-	if sta == nil && bkp.DeviceInfo != nil && bkp.DeviceInfo.Generation == 1 && len(bkp.Config) > 0 {
-		var settings struct {
-			Sta *backupStation `json:"wifi_sta"`
-		}
-		if json.Unmarshal(bkp.Config, &settings) == nil && settings.Sta != nil && settings.Sta.SSID != "" {
-			sta = settings.Sta
-		}
-	}
-	if sta == nil {
+	raw := bkp.Station()
+	var sta backupStation
+	if raw == nil || json.Unmarshal(raw, &sta) != nil {
 		return Network{}
 	}
-	n := Network{SSID: sta.SSID, Password: sta.Key}
+	n := Network{SSID: sta.SSID, Password: sta.Key, Open: sta.IsOpen}
 	if sta.Ipv4Method == ipv4ModeStatic || sta.IPv4Mode == ipv4ModeStatic {
 		n.StaticIP = sta.IP
 		n.Gateway = sta.Gw
-		n.Netmask = firstNonEmpty(sta.Mask, sta.Netmask)
-		n.DNS = firstNonEmpty(sta.DNS, sta.Nameserver)
+		n.Netmask = cmp.Or(sta.Mask, sta.Netmask)
+		n.DNS = cmp.Or(sta.DNS, sta.Nameserver)
 	}
 	return n
-}
-
-// firstNonEmpty returns the first non-empty string.
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
 }

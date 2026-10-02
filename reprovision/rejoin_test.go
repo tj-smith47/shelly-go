@@ -27,7 +27,9 @@ func fastRejoinConfig() rejoinConfig {
 	}
 }
 
-func neverSeen(context.Context, string, string, bool, time.Duration) (string, error) { return "", nil }
+func neverSeen(context.Context, string, string, bool, time.Duration) (addr, via string, err error) {
+	return "", "", nil
+}
 
 func noRoute(context.Context, string, string, int) error { return errors.New("no route to host") }
 
@@ -60,8 +62,8 @@ func TestRaceRejoin(t *testing.T) {
 		cfg := fastRejoinConfig()
 		cfg.staticIP = "192.0.2.10"
 		cfg.candidates = []string{""}
-		cfg.scanPresence = func(context.Context, string, string, bool, time.Duration) (string, error) {
-			return "192.0.2.10", errors.New("partial sweep")
+		cfg.scanPresence = func(context.Context, string, string, bool, time.Duration) (addr, via string, err error) {
+			return "192.0.2.10", viaCoIoT, errors.New("partial sweep")
 		}
 		cfg.probe = noRoute
 		conf, err := raceRejoin(context.Background(), &cfg)
@@ -93,11 +95,11 @@ func TestRaceRejoin(t *testing.T) {
 		t.Parallel()
 		cfg := fastRejoinConfig()
 		cfg.candidates = []string{"", "wlan0"}
-		cfg.scanPresence = func(_ context.Context, _, iface string, _ bool, _ time.Duration) (string, error) {
+		cfg.scanPresence = func(_ context.Context, _, iface string, _ bool, _ time.Duration) (addr, via string, err error) {
 			if iface == "wlan0" {
-				return "192.0.2.55", nil
+				return "192.0.2.55", viaMDNS, nil
 			}
-			return "", nil
+			return "", "", nil
 		}
 		cfg.probe = func(_ context.Context, addr, _ string, _ int) error {
 			if addr == "192.0.2.55" {
@@ -149,10 +151,10 @@ func TestRejoinCandidateInterfaces(t *testing.T) {
 func TestScanPresenceOnce_InputValidation(t *testing.T) {
 	t.Parallel()
 	r := testRunner(t, nil, "")
-	if _, err := r.scanPresenceOnce(context.Background(), "not-a-mac", "", true, time.Second); err == nil {
+	if _, _, err := r.scanPresenceOnce(context.Background(), "not-a-mac", "", true, time.Second); err == nil {
 		t.Error("expected an error for an unparseable MAC")
 	}
-	_, err := r.scanPresenceOnce(context.Background(), fakeMAC, "definitely-not-a-real-iface", true, time.Second)
+	_, _, err := r.scanPresenceOnce(context.Background(), fakeMAC, "definitely-not-a-real-iface", true, time.Second)
 	if err == nil || !strings.Contains(err.Error(), "resolve interface") {
 		t.Errorf("err = %v, want a 'resolve interface' failure", err)
 	}
@@ -188,11 +190,8 @@ func TestRejoinRaceSharedAddr(t *testing.T) {
 	}
 }
 
-func TestPresenceProtoAndIfaceLabel(t *testing.T) {
+func TestIfaceLabel(t *testing.T) {
 	t.Parallel()
-	if presenceProto(true) != viaCoIoT || presenceProto(false) != viaMDNS {
-		t.Error("presenceProto attributes Gen1 to CoIoT and others to mDNS")
-	}
 	if ifaceLabel("") != "default route" || ifaceLabel("wlan0") != "wlan0" {
 		t.Error("ifaceLabel names the default route and keeps other names")
 	}
@@ -269,15 +268,16 @@ func TestScanPresenceOnce_Sweeps(t *testing.T) {
 		isGen1       bool
 		mdns, coiot  *fakeSweeper
 		want         string
+		wantVia      string
 		coiotStarted bool
 	}{
 		{
 			name: "found via mDNS", mdns: &fakeSweeper{devices: device(fakeMAC, "192.0.2.10")},
-			coiot: &fakeSweeper{}, want: "192.0.2.10",
+			coiot: &fakeSweeper{}, want: "192.0.2.10", wantVia: viaMDNS,
 		},
 		{
 			name: "found via CoIoT for Gen1", isGen1: true, mdns: &fakeSweeper{err: errors.New("no mDNS")},
-			coiot: &fakeSweeper{devices: device(fakeMAC, "192.0.2.11")}, want: "192.0.2.11", coiotStarted: true,
+			coiot: &fakeSweeper{devices: device(fakeMAC, "192.0.2.11")}, want: "192.0.2.11", wantVia: viaCoIoT, coiotStarted: true,
 		},
 		{
 			name: "CoIoT skipped for Gen2", mdns: &fakeSweeper{},
@@ -300,12 +300,12 @@ func TestScanPresenceOnce_Sweeps(t *testing.T) {
 				return tt.mdns
 			}
 			r.newCoIoT = func(*net.Interface) presenceSweeper { coiotStarted = true; return tt.coiot }
-			got, err := r.scanPresenceOnce(context.Background(), fakeMAC, "", tt.isGen1, time.Second)
+			got, via, err := r.scanPresenceOnce(context.Background(), fakeMAC, "", tt.isGen1, time.Second)
 			if err != nil {
 				t.Fatalf("scanPresenceOnce: %v", err)
 			}
-			if got != tt.want {
-				t.Errorf("address = %q, want %q", got, tt.want)
+			if got != tt.want || via != tt.wantVia {
+				t.Errorf("sighting = %q via %q, want %q via %q", got, via, tt.want, tt.wantVia)
 			}
 			if coiotStarted != tt.coiotStarted {
 				t.Errorf("CoIoT sweep started = %v, want %v", coiotStarted, tt.coiotStarted)
@@ -335,7 +335,7 @@ func TestScanPresenceOnce_BindsNamedInterface(t *testing.T) {
 		}
 		return &fakeSweeper{}
 	}
-	if _, err := r.scanPresenceOnce(context.Background(), fakeMAC, name, false, time.Second); err != nil {
+	if _, _, err := r.scanPresenceOnce(context.Background(), fakeMAC, name, false, time.Second); err != nil {
 		t.Fatalf("scanPresenceOnce: %v", err)
 	}
 	if bound != name {

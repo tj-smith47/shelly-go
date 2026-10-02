@@ -1,11 +1,13 @@
 package reprovision
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"net"
 	"time"
 
+	"github.com/tj-smith47/shelly-go/backup"
 	"github.com/tj-smith47/shelly-go/discovery"
 	"github.com/tj-smith47/shelly-go/types"
 )
@@ -143,6 +145,33 @@ func (r *runner) waitForAPReady(ctx context.Context, timeout time.Duration) {
 	}
 }
 
+// mergeJoinNetwork lays the override over the backup's network: the open flag,
+// SSID, passphrase and static addressing. It refuses an open network with a
+// passphrase and a static address with no gateway or netmask.
+func mergeJoinNetwork(fromBackup, override *Network) (Network, error) {
+	if override.Open && override.Password != "" {
+		return Network{}, fmt.Errorf("%w: Network.Open is set, and an open network takes no Network.Password",
+			types.ErrInvalidParam)
+	}
+	join := *fromBackup
+	// The backup's open flag belongs to the backup's network, so a password or
+	// a different SSID in the override means a secured network.
+	join.Open = override.Open || (fromBackup.Open && override.Password == "" &&
+		(override.SSID == "" || override.SSID == fromBackup.SSID))
+	join.SSID = cmp.Or(override.SSID, join.SSID)
+	join.Password = cmp.Or(override.Password, join.Password)
+	static, err := backup.ResolveStaticNetwork(
+		backup.StaticNetwork{
+			IP: override.StaticIP, Gateway: override.Gateway, Netmask: override.Netmask, DNS: override.DNS,
+		},
+		backup.StaticNetwork{IP: join.StaticIP, Gateway: join.Gateway, Netmask: join.Netmask, DNS: join.DNS})
+	if err != nil {
+		return Network{}, fmt.Errorf("%w; set Network.Gateway and Network.Netmask", err)
+	}
+	join.StaticIP, join.Gateway, join.Netmask, join.DNS = static.IP, static.Gateway, static.Netmask, static.DNS
+	return join, nil
+}
+
 // hostWiFiPassword recovers the passphrase the host has stored for ssid from the
 // OS credential store, when the scanner supports it. No Shelly device returns its
 // station key, so this lets a device join the network the host is already on.
@@ -162,29 +191,13 @@ func (r *runner) hostWiFiPassword(ctx context.Context, ssid string) (string, err
 // passphrase comes by precedence: the override, then the backup's own key
 // (unmasked Gen1 only), then the host's stored credentials for that network. The
 // SSID comes from the override, then the backup, then the host's current network.
-// A static IP in the override replaces the backup's; its gateway, netmask and
-// DNS fall back, each on its own, to the backup's static settings. A static
-// address with no gateway or netmask from either source is refused, because a
-// device written that way cannot be reached again.
+// An open network (the override's Open, or an open backup station the override
+// leaves alone) takes no passphrase. The static addressing follows
+// backup.ResolveStaticNetwork.
 func (r *runner) resolveJoinNetwork(ctx context.Context, fromBackup, override *Network) (Network, error) {
-	join := *fromBackup
-	if override.SSID != "" {
-		join.SSID = override.SSID
-	}
-	if override.Password != "" {
-		join.Password = override.Password
-	}
-	if override.StaticIP != "" {
-		join.StaticIP = override.StaticIP
-		join.Gateway = firstNonEmpty(override.Gateway, join.Gateway)
-		join.Netmask = firstNonEmpty(override.Netmask, join.Netmask)
-		join.DNS = firstNonEmpty(override.DNS, join.DNS)
-	}
-	if join.StaticIP != "" && (join.Gateway == "" || join.Netmask == "") {
-		return Network{}, fmt.Errorf(
-			"%w: %w: %s needs a gateway and a netmask, and the backup has none; "+
-				"set Network.Gateway and Network.Netmask",
-			types.ErrInvalidParam, ErrIncompleteStaticNetwork, join.StaticIP)
+	join, err := mergeJoinNetwork(fromBackup, override)
+	if err != nil {
+		return Network{}, err
 	}
 	if join.SSID == "" && r.scanner != nil {
 		if current, err := r.scanner.CurrentNetwork(ctx); err == nil && current != nil {
@@ -192,6 +205,14 @@ func (r *runner) resolveJoinNetwork(ctx context.Context, fromBackup, override *N
 		} else {
 			r.log.Debug("host is not on a WiFi network", "error", err)
 		}
+	}
+	if join.Open {
+		if join.SSID == "" {
+			return Network{}, fmt.Errorf("%w: Network.Open is set but there is no SSID to join; set Network.SSID",
+				types.ErrInvalidParam)
+		}
+		join.Password = ""
+		return join, nil
 	}
 	if join.Password == "" && join.SSID != "" {
 		if pw, lookupErr := r.hostWiFiPassword(ctx, join.SSID); lookupErr != nil {

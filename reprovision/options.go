@@ -36,6 +36,8 @@ var (
 	// ErrFirmwareUnavailable means a Gen1 device runs older firmware than the
 	// backup and needs an update at the access point, but no firmware image
 	// could be downloaded before the hop. Nothing was written to the device.
+	// The error carrying it is a *FirmwareUnavailableError, which names both
+	// firmware versions.
 	ErrFirmwareUnavailable = errors.New("firmware image unavailable")
 
 	// ErrFirmwareUpdate means the firmware check or update at the access point
@@ -58,16 +60,56 @@ var (
 
 	// ErrIncompleteStaticNetwork means the network to join has a static address
 	// with no gateway or no netmask, from neither the options nor the backup.
-	// Errors carrying it also match types.ErrInvalidParam.
-	ErrIncompleteStaticNetwork = errors.New("static address without a gateway or netmask")
+	// Errors carrying it also match types.ErrInvalidParam. It is the same value
+	// as backup.ErrIncompleteStaticNetwork, so either name matches.
+	ErrIncompleteStaticNetwork = backup.ErrIncompleteStaticNetwork
 )
+
+// FirmwareUnavailableError reports a Gen1 device whose firmware is older than
+// the backup's when no firmware image was available to update it. It matches
+// ErrFirmwareUnavailable with errors.Is; read it with errors.As:
+//
+//	var fwErr *reprovision.FirmwareUnavailableError
+//	if errors.As(err, &fwErr) {
+//		fmt.Printf("device runs %s, backup needs %s\n", fwErr.Current, fwErr.Required)
+//	}
+type FirmwareUnavailableError struct {
+	// Current is the firmware the device runs.
+	Current string
+	// Required is the firmware the backup was taken on.
+	Required string
+}
+
+// Error describes the missing update and how to get past it.
+func (e *FirmwareUnavailableError) Error() string {
+	return fmt.Sprintf(
+		"%v: device on firmware %q needs an update to the backup's %q before restore, but no "+
+			"firmware image is available (the factory AP has no internet, so the image is "+
+			"prefetched before the hop; its URL was underivable or the download failed); "+
+			"retry with connectivity, set FirmwareURL, or set AllowFirmwareDowngrade to "+
+			"force the downgrade and accept the reboot-loop risk",
+		ErrFirmwareUnavailable, e.Current, e.Required)
+}
+
+// Unwrap returns ErrFirmwareUnavailable, so errors.Is matches it.
+func (e *FirmwareUnavailableError) Unwrap() error { return ErrFirmwareUnavailable }
 
 // Network is the WiFi network a device joins when it leaves its access point.
 // Every field is optional. SSID and Password default to the backup's, then to
 // the host's current network and stored passphrase. An empty StaticIP keeps the
 // backup's addressing (static or DHCP). With a StaticIP, an empty Gateway,
-// Netmask or DNS is taken from the backup's static settings; a static address
-// that ends up with no gateway or netmask is refused with ErrIncompleteStaticNetwork.
+// Netmask or DNS is taken from the backup's static settings (the rule is
+// backup.ResolveStaticNetwork); a static address that ends up with no gateway
+// or netmask is refused with ErrIncompleteStaticNetwork.
+//
+// Open joins a network that takes no passphrase: none is required and none is
+// looked up on the host, and the SSID is resolved as above. Open together with
+// a Password is refused with types.ErrInvalidParam. An open network is written
+// as an empty passphrase; Gen2+ devices derive "is_open" from it. A backup
+// whose station was open (Gen2+ "is_open") yields Open from NetworkFromBackup,
+// and a restore with no SSID or Password override rejoins it as open. Gen1
+// backups do not record whether the station was open, so a Gen1 device joins an
+// open network only when Open is set.
 type Network struct {
 	SSID     string
 	Password string
@@ -75,6 +117,7 @@ type Network struct {
 	Gateway  string
 	Netmask  string
 	DNS      string
+	Open     bool
 }
 
 // RestoreOptions configures Restore. APSSID and Backup are required.
@@ -141,6 +184,10 @@ type RestoreResult struct {
 	Address string
 	// MAC is the device's MAC address, upper-case without separators.
 	MAC string
+	// SeenVia says how the device was seen back on the LAN: "probe" (it
+	// answered a unicast HTTP request), "mdns" or "coiot" (it announced itself
+	// but this host has no route to it). Empty when it was not seen.
+	SeenVia string
 	// Reachable reports that this host reached the device at Address over
 	// unicast. False with a non-empty Address means the device announced itself
 	// on the LAN (mDNS or CoIoT) but this host has no route to it, so the full
@@ -162,7 +209,8 @@ type OnboardOptions struct {
 	// discovery.DefaultAPHostIP.
 	APHostIP string
 	// Network is the WiFi network the device joins. An empty SSID or Password
-	// is taken from the host's current network and stored passphrase.
+	// is taken from the host's current network and stored passphrase; with
+	// Network.Open no passphrase is used.
 	Network Network
 	// Generation is the device generation, used only when the device's
 	// identity cannot be read at the access point. Zero reads it from the
@@ -183,6 +231,10 @@ type OnboardResult struct {
 	// Note explains a partial success: the WiFi settings were written but the
 	// device was not found on the LAN afterwards.
 	Note string
+	// SeenVia says how the device was seen on the LAN: "probe" (it answered a
+	// unicast HTTP request), "mdns" or "coiot" (it announced itself but this
+	// host has no route to it). Empty when it was not seen.
+	SeenVia string
 	// Generation is the device generation (1 for Gen1, 2 and up for RPC devices).
 	Generation int
 	// Reachable reports that this host reached the device at Address over

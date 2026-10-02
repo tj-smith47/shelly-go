@@ -197,6 +197,9 @@ func main() {
 }
 ```
 
+For a network that takes no passphrase, set `Network: reprovision.Network{SSID: "GuestNet", Open: true}`;
+no passphrase is then required or looked up on the host.
+
 `reprovision.Restore` applies a `backup.Backup` the same way: it writes only the
 WiFi settings at the access point, then the full configuration once the device
 is back on the LAN. It checks the device's MAC against the access point name

@@ -31,7 +31,15 @@
 //	fmt.Println("device is at", res.Address)
 //
 // The WiFi network defaults to the backup's station settings, then to the host's
-// current network with the passphrase the host has stored for it.
+// current network with the passphrase the host has stored for it. Set
+// Network.Open to join a network that takes no passphrase. A static address
+// given without a gateway, netmask or DNS takes each one from the backup's
+// static settings (backup.ResolveStaticNetwork) and is refused with
+// ErrIncompleteStaticNetwork when no gateway or netmask is found.
+//
+// The result's SeenVia says how the device was seen back on the LAN, and a
+// missing Gen1 firmware image is reported as a *FirmwareUnavailableError naming
+// the device's firmware and the backup's.
 //
 // # Host requirements
 //

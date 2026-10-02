@@ -362,3 +362,22 @@ func TestLoopbackOnlyBlocksTheCDN(t *testing.T) {
 		t.Error("a loopback download was blocked")
 	}
 }
+
+func TestEnsureGen1FirmwareAtAP_UnavailableNamesBothVersions(t *testing.T) {
+	t.Parallel()
+	d := newFakeDevice(t, 1)
+	d.setFW("20200101-000000/v0.9")
+	err := testRunner(t, nil, d.addr()).ensureGen1FirmwareAtAP(context.Background(), "127.0.0.1", "",
+		"20210601-000000/v1.5", false)
+	var fwErr *FirmwareUnavailableError
+	if !errors.As(err, &fwErr) {
+		t.Fatalf("err = %v, want a *FirmwareUnavailableError", err)
+	}
+	if fwErr.Current != "20200101-000000/v0.9" || fwErr.Required != "20210601-000000/v1.5" {
+		t.Errorf("versions = %q -> %q, want the device's and the backup's", fwErr.Current, fwErr.Required)
+	}
+	wrapped := fmt.Errorf("restore at AP: %w", err)
+	if !errors.Is(wrapped, ErrFirmwareUnavailable) || !errors.As(wrapped, &fwErr) {
+		t.Errorf("wrapped error %v lost ErrFirmwareUnavailable or the typed error", wrapped)
+	}
+}

@@ -47,6 +47,11 @@ var (
 
 	// ErrDeviceMismatch indicates the backup is for a different device model.
 	ErrDeviceMismatch = errors.New("backup device model mismatch")
+
+	// ErrIncompleteStaticNetwork means a network override sets a static address
+	// that has no gateway or no netmask, from neither the override nor the
+	// backup. Errors carrying it also match types.ErrInvalidParam.
+	ErrIncompleteStaticNetwork = errors.New("static address without a gateway or netmask")
 )
 
 // Manager handles backup and restore operations.

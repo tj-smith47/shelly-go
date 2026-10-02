@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/tj-smith47/shelly-go/internal/jsonx"
+	"github.com/tj-smith47/shelly-go/types"
 )
 
 // WiFi settings methods
@@ -42,6 +43,27 @@ func (d *Device) SetWiFiStation(ctx context.Context, enabled bool, ssid, passwor
 	_, err := d.restCall(ctx, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to set WiFi station: %w", err)
+	}
+	return nil
+}
+
+// SetWiFiStationOpen enables the WiFi station and joins it to an open network,
+// one that takes no passphrase. Unlike SetWiFiStation with an empty password,
+// which keeps the device's stored key, it clears that key.
+//
+// Example:
+//
+//	err := device.SetWiFiStationOpen(ctx, "GuestNet")
+func (d *Device) SetWiFiStationOpen(ctx context.Context, ssid string) error {
+	if ssid == "" {
+		return fmt.Errorf("%w: an open WiFi station needs an SSID", types.ErrInvalidParam)
+	}
+	params := url.Values{}
+	params.Set(actionFieldEnabled, "true")
+	params.Set("ssid", ssid)
+	params.Set("key", "")
+	if _, err := d.restCall(ctx, "/settings/sta?"+params.Encode()); err != nil {
+		return fmt.Errorf("failed to set open WiFi station: %w", err)
 	}
 	return nil
 }

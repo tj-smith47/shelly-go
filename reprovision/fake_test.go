@@ -42,6 +42,9 @@ type fakeDevice struct {
 	paths      []string
 	rpcMethods []string
 	uptime     int
+	// lastArgs is the last query string per Gen1 path, or the last params per
+	// RPC method.
+	lastArgs map[string]string
 
 	// failMethod makes that RPC method answer with an error.
 	failMethod string
@@ -56,7 +59,7 @@ type fakeDevice struct {
 // newFakeDevice starts a fake device of the given generation.
 func newFakeDevice(t *testing.T, generation int) *fakeDevice {
 	t.Helper()
-	d := &fakeDevice{fw: "20210101-000000/v1.0", uptime: 99}
+	d := &fakeDevice{fw: "20210101-000000/v1.0", uptime: 99, lastArgs: map[string]string{}}
 	mux := http.NewServeMux()
 	if generation == 1 {
 		d.registerGen1(mux)
@@ -80,6 +83,20 @@ func (d *fakeDevice) recordRPC(method string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.rpcMethods = append(d.rpcMethods, method)
+}
+
+func (d *fakeDevice) recordArgs(key, args string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.lastArgs[key] = args
+}
+
+// args returns the last query string sent to a Gen1 path, or the last params
+// sent to an RPC method.
+func (d *fakeDevice) args(key string) string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.lastArgs[key]
 }
 
 func (d *fakeDevice) currentFW() string {
@@ -189,6 +206,7 @@ func (d *fakeDevice) registerGen1(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		d.record(r.URL.Path)
+		d.recordArgs(r.URL.Path, r.URL.RawQuery)
 		writeJSON(w, map[string]any{})
 	})
 }
@@ -213,14 +231,16 @@ func (d *fakeDevice) registerGen2(t *testing.T, mux *http.ServeMux) {
 			return
 		}
 		var req struct {
-			ID     any    `json:"id"`
-			Method string `json:"method"`
+			ID     any             `json:"id"`
+			Method string          `json:"method"`
+			Params json.RawMessage `json:"params"`
 		}
 		if uerr := json.Unmarshal(body, &req); uerr != nil {
 			t.Errorf("decode rpc body: %v", uerr)
 			return
 		}
 		d.recordRPC(req.Method)
+		d.recordArgs(req.Method, string(req.Params))
 		if req.Method == d.failMethod {
 			writeJSON(w, map[string]any{
 				"id": req.ID, "jsonrpc": "2.0",
@@ -366,8 +386,8 @@ func testRunner(t *testing.T, scanner discovery.WiFiScanner, apAddr string) *run
 	r.presenceTimeout = 10 * time.Millisecond
 	r.probeTimeout = time.Second
 	r.hostIfaces = func() ([]probeIface, error) { return nil, nil }
-	r.scanPresence = func(context.Context, string, string, bool, time.Duration) (string, error) {
-		return "", nil
+	r.scanPresence = func(context.Context, string, string, bool, time.Duration) (addr, via string, err error) {
+		return "", "", nil
 	}
 	r.newMDNS = func(*net.Interface) presenceSweeper { return &fakeSweeper{} }
 	r.newCoIoT = func(*net.Interface) presenceSweeper { return &fakeSweeper{} }

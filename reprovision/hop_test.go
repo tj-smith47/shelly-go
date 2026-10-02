@@ -373,3 +373,89 @@ func TestHostWiFiPassword_NilScanner(t *testing.T) {
 		t.Errorf("err = %v, want ErrNoPassphrase", err)
 	}
 }
+
+func TestResolveJoinNetwork_Open(t *testing.T) {
+	t.Parallel()
+	const guest = "GuestNet"
+	tests := []struct {
+		name       string
+		fromBackup Network
+		override   Network
+		want       Network
+	}{
+		{
+			name:     "open override takes no passphrase",
+			override: Network{SSID: homeSSID, Open: true},
+			want:     Network{SSID: homeSSID, Open: true},
+		},
+		{
+			name:       "open override takes the backup's SSID",
+			fromBackup: Network{SSID: guest},
+			override:   Network{Open: true},
+			want:       Network{SSID: guest, Open: true},
+		},
+		{
+			name:     "open override takes the host's SSID",
+			override: Network{Open: true},
+			want:     Network{SSID: homeSSID, Open: true},
+		},
+		{
+			name:       "open backup rejoins open",
+			fromBackup: Network{SSID: homeSSID, Open: true},
+			want:       Network{SSID: homeSSID, Open: true},
+		},
+		{
+			name:       "open backup with a password override is secured",
+			fromBackup: Network{SSID: guest, Open: true},
+			override:   Network{Password: "secret"},
+			want:       Network{SSID: guest, Password: "secret"},
+		},
+		{
+			name:       "open backup with another SSID is secured",
+			fromBackup: Network{SSID: guest, Open: true},
+			override:   Network{SSID: homeSSID},
+			want:       Network{SSID: homeSSID, Password: homePass},
+		},
+		{
+			name:       "open with a static override still follows the static rule",
+			fromBackup: Network{SSID: guest, Open: true, StaticIP: "192.0.2.99", Gateway: "192.0.2.1", Netmask: "255.255.255.0"},
+			override:   Network{StaticIP: "192.0.2.10"},
+			want: Network{
+				SSID: guest, Open: true, StaticIP: "192.0.2.10", Gateway: "192.0.2.1", Netmask: "255.255.255.0",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := testRunner(t, homeScanner(), "")
+			got, err := r.resolveJoinNetwork(context.Background(), &tt.fromBackup, &tt.override)
+			if err != nil {
+				t.Fatalf("resolveJoinNetwork: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("got %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestResolveJoinNetwork_OpenRefusals(t *testing.T) {
+	t.Parallel()
+	t.Run("open with a password", func(t *testing.T) {
+		t.Parallel()
+		r := testRunner(t, homeScanner(), "")
+		_, err := r.resolveJoinNetwork(context.Background(), &Network{}, &Network{SSID: homeSSID, Open: true, Password: "x"})
+		if !errors.Is(err, types.ErrInvalidParam) {
+			t.Fatalf("err = %v, want ErrInvalidParam", err)
+		}
+	})
+	t.Run("open with no SSID anywhere", func(t *testing.T) {
+		t.Parallel()
+		r := testRunner(t, &fakeScanner{currentErr: errors.New("not connected")}, "")
+		_, err := r.resolveJoinNetwork(context.Background(), &Network{}, &Network{Open: true})
+		if !errors.Is(err, types.ErrInvalidParam) || !strings.Contains(err.Error(), "Network.SSID") {
+			t.Fatalf("err = %v, want ErrInvalidParam naming Network.SSID", err)
+		}
+	})
+}

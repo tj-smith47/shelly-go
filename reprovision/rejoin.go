@@ -74,7 +74,9 @@ func newCoIoTSweeper(ifi *net.Interface) presenceSweeper {
 // device with MAC mac over host interface iface ("" = kernel default), returning
 // the device's announced address or "" if it was not seen within timeout. gen1
 // enables the CoIoT listener (Gen1-only) alongside mDNS.
-type presenceScanFunc func(ctx context.Context, mac, iface string, isGen1 bool, timeout time.Duration) (string, error)
+type presenceScanFunc func(
+	ctx context.Context, mac, iface string, isGen1 bool, timeout time.Duration,
+) (addr, via string, err error)
 
 // rejoinProbeFunc runs one unicast reachability probe against addr over host
 // interface iface, returning nil when the device answered. A nil return is what
@@ -163,14 +165,14 @@ func (r *rejoinRace) tick(ctx context.Context, iface string) (rejoinConfirmation
 		return rejoinConfirmation{addr: target, bindIface: iface, via: viaProbe, writeable: true}, true
 	}
 
-	addr, err := r.cfg.scanPresence(ctx, r.cfg.mac, iface, r.cfg.generation == 1, r.cfg.presenceTimeout)
+	addr, via, err := r.cfg.scanPresence(ctx, r.cfg.mac, iface, r.cfg.generation == 1, r.cfg.presenceTimeout)
 	if err != nil {
 		r.cfg.log.Debug("rejoin: presence scan failed", "iface", ifaceLabel(iface), "error", err)
 	}
 	if addr == "" {
 		return rejoinConfirmation{}, false
 	}
-	r.recordWeak(addr, presenceProto(r.cfg.generation == 1))
+	r.recordWeak(addr, via)
 	if target == "" && r.probeOnce(ctx, addr, iface) == nil {
 		return rejoinConfirmation{addr: addr, bindIface: iface, via: viaProbe, writeable: true}, true
 	}
@@ -234,16 +236,6 @@ func raceRejoin(ctx context.Context, cfg *rejoinConfig) (rejoinConfirmation, err
 		}
 		return rejoinConfirmation{}, fmt.Errorf("%w within %s", ErrNotRejoined, cfg.timeout)
 	}
-}
-
-// presenceProto names the route-independent protocol a weak sighting came from,
-// for diagnostics. Gen1 devices announce over both mDNS and CoIoT; the CoIoT
-// listener is the Gen1-specific addition, so Gen1 sightings are attributed to it.
-func presenceProto(isGen1 bool) string {
-	if isGen1 {
-		return viaCoIoT
-	}
-	return viaMDNS
 }
 
 // ifaceLabel renders an interface name for logs, naming the default route explicitly.
@@ -348,32 +340,32 @@ func (r *runner) scanPresenceOnce(
 	mac, iface string,
 	isGen1 bool,
 	timeout time.Duration,
-) (string, error) {
+) (addr, via string, err error) {
 	want := normalizeMAC(mac)
 	if want == "" {
-		return "", fmt.Errorf("invalid MAC address: %q", mac)
+		return "", "", fmt.Errorf("invalid MAC address: %q", mac)
 	}
 
 	var ifi *net.Interface
 	if iface != "" {
-		var err error
 		ifi, err = net.InterfaceByName(iface)
 		if err != nil {
-			return "", fmt.Errorf("resolve interface %q: %w", iface, err)
+			return "", "", fmt.Errorf("resolve interface %q: %w", iface, err)
 		}
 	}
 
 	scanCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	found := make(chan string, 2)
+	type sighting struct{ addr, via string }
+	found := make(chan sighting, 2)
 	var wg sync.WaitGroup
-	report := func(addr string) {
+	report := func(addr, via string) {
 		if addr == "" {
 			return
 		}
 		select {
-		case found <- addr:
+		case found <- sighting{addr: addr, via: via}:
 		default:
 		}
 	}
@@ -385,7 +377,7 @@ func (r *runner) scanPresenceOnce(
 					r.log.Debug("stopping presence scan", "proto", proto, "error", err)
 				}
 			}()
-			report(r.scanForMAC(scanCtx, d.DiscoverWithContext, want))
+			report(r.scanForMAC(scanCtx, d.DiscoverWithContext, want), proto)
 		})
 	}
 	sweep(viaMDNS, r.newMDNS(ifi))
@@ -395,11 +387,11 @@ func (r *runner) scanPresenceOnce(
 
 	go func() { wg.Wait(); close(found) }()
 
-	addr, ok := <-found
+	seen, ok := <-found
 	if !ok {
-		return "", nil
+		return "", "", nil
 	}
-	return addr, nil
+	return seen.addr, seen.via, nil
 }
 
 // scanForMAC runs a single context-bounded discovery sweep and returns the address

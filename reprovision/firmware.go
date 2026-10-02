@@ -188,13 +188,7 @@ func (r *runner) ensureGen1FirmwareAtAP(
 			return nil
 		}
 		if fwPath == "" {
-			return fmt.Errorf(
-				"%w: device on firmware %q needs an update to the backup's %q before restore, but no "+
-					"firmware image is available (the factory AP has no internet, so the image is "+
-					"prefetched before the hop; its URL was underivable or the download failed); "+
-					"retry with connectivity, set FirmwareURL, or set AllowFirmwareDowngrade to "+
-					"force the downgrade and accept the reboot-loop risk",
-				ErrFirmwareUnavailable, liveFW, backupFW)
+			return &FirmwareUnavailableError{Current: liveFW, Required: backupFW}
 		}
 		fwURL, stop, err := r.serveFirmwareFile(ctx, bindIP, fwPath)
 		if err != nil {

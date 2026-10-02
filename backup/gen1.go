@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,20 +11,27 @@ import (
 	"time"
 
 	"github.com/tj-smith47/shelly-go/gen1"
+	"github.com/tj-smith47/shelly-go/types"
 )
 
 // Gen1NetworkOverride replaces the WiFi station settings applied during a Gen1
 // restore. It lets one device's configuration be cloned onto another without
 // copying the source's IP address, so both devices stay online with distinct
 // addresses. SSID and Password are optional: when empty, the backup's own
-// station credentials are kept.
+// station credentials are kept. With a StaticIP, an empty Gateway, Netmask or
+// DNS is taken from the backup's static station settings (see
+// ResolveStaticNetwork). A backup whose station is static with no gateway or
+// no netmask is refused with ErrIncompleteStaticNetwork unless the override
+// supplies them, also when the override sets no StaticIP, because the backup's
+// static address would be written as it is.
 type Gen1NetworkOverride struct {
 	// SSID overrides the station SSID; empty keeps the backup's SSID.
 	SSID string
 	// Password overrides the station key; empty keeps the backup's key.
 	Password string
-	// StaticIP, when set, switches the station to a static IPv4 address.
-	// Gateway and Netmask are required alongside it.
+	// StaticIP, when set, switches the station to a static IPv4 address. A
+	// static address that has no gateway or netmask from either the override
+	// or the backup is refused with ErrIncompleteStaticNetwork.
 	StaticIP string
 	// Gateway is the static IPv4 default gateway.
 	Gateway string
@@ -31,11 +39,21 @@ type Gen1NetworkOverride struct {
 	Netmask string
 	// DNS is the static IPv4 nameserver (optional).
 	DNS string
+	// Open joins SSID as an open network: the device's stored key is cleared.
+	// The SSID is the override's, else the backup's station SSID; Open with
+	// neither, or together with a Password, is refused with
+	// types.ErrInvalidParam.
+	Open bool
 }
 
 // IsStatic reports whether a static IPv4 address was requested.
 func (o *Gen1NetworkOverride) IsStatic() bool {
 	return o != nil && o.StaticIP != ""
+}
+
+// open reports whether an open network was requested.
+func (o *Gen1NetworkOverride) open() bool {
+	return o != nil && o.Open
 }
 
 // Gen1RestoreOptions configures a Gen1 restore.
@@ -649,17 +667,11 @@ func RestoreGen1(ctx context.Context, dev *gen1.Device, bkp *Backup, opts *Gen1R
 		Success: true,
 	}
 
-	// Parse the full settings from backup Config
-	var settings gen1.Settings
-	if bkp.Config != nil {
-		if err := json.Unmarshal(bkp.Config, &settings); err != nil {
-			return nil, fmt.Errorf("failed to parse backup config: %w", err)
-		}
-	}
-
-	// A name override replaces the backup's stored name (e.g. for a clone).
-	if opts.Name != "" {
-		settings.Name = opts.Name
+	// The settings and network override are checked before the first device
+	// call, so a refused restore leaves the device untouched.
+	settings, override, err := prepareGen1Restore(bkp, opts)
+	if err != nil {
+		return nil, err
 	}
 
 	// Read the device's live firmware once: it selects the pacing aggressiveness
@@ -677,7 +689,7 @@ func RestoreGen1(ctx context.Context, dev *gen1.Device, bkp *Backup, opts *Gen1R
 	if opts.NetworkOnly {
 		runGen1RestoreStep(ctx, dev, pacer, opts, gen1RestoreStep{
 			name: componentWiFi, probe: false, write: func() {
-				restoreGen1WiFi(ctx, dev, bkp, &settings, opts.NetworkOverride, result)
+				restoreGen1WiFi(ctx, dev, bkp, &settings, override, result)
 			},
 		}, result)
 		return result, nil
@@ -733,7 +745,7 @@ func RestoreGen1(ctx context.Context, dev *gen1.Device, bkp *Backup, opts *Gen1R
 			restoreGen1DeviceSettings(ctx, dev, &settings, gen1ConfigHasKey(bkp.Config, "discoverable"), result)
 		}},
 		{name: componentWiFi, skip: opts.SkipNetwork, probe: false, write: func() {
-			restoreGen1WiFi(ctx, dev, bkp, &settings, opts.NetworkOverride, result)
+			restoreGen1WiFi(ctx, dev, bkp, &settings, override, result)
 		}},
 		{name: componentMQTT, probe: true, write: func() { restoreGen1MQTT(ctx, dev, &settings, result) }},
 		{name: componentCloud, probe: true, write: func() { restoreGen1Cloud(ctx, dev, &settings, result) }},
@@ -1253,7 +1265,7 @@ func restoreGen1WiFi(
 	}
 
 	if wifi.Sta != nil {
-		restoreGen1WiFiStation(ctx, dev, wifi.Sta, result)
+		restoreGen1WiFiStation(ctx, dev, wifi.Sta, override.open(), result)
 		result.RestartRequired = true
 	}
 	// Restore the secondary (backup) station so the device keeps its failover
@@ -1289,6 +1301,9 @@ func applyGen1WiFiOverride(sta *gen1.WiFiStaSettings, ov *Gen1NetworkOverride) {
 	if ov.Password != "" {
 		sta.Key = ov.Password
 	}
+	if ov.Open {
+		sta.Key = ""
+	}
 	if ov.IsStatic() {
 		sta.Ipv4Method = gen1IPv4ModeStatic
 		sta.IP = ov.StaticIP
@@ -1298,8 +1313,37 @@ func applyGen1WiFiOverride(sta *gen1.WiFiStaSettings, ov *Gen1NetworkOverride) {
 	}
 }
 
-// restoreGen1WiFiStation restores a WiFi station configuration.
-func restoreGen1WiFiStation(ctx context.Context, dev *gen1.Device, sta *gen1.WiFiStaSettings, result *RestoreResult) {
+// prepareGen1Restore parses the backup's full settings, applies a name override
+// and resolves the network override, which is nil when there is none or the
+// network is skipped.
+func prepareGen1Restore(bkp *Backup, opts *Gen1RestoreOptions) (gen1.Settings, *Gen1NetworkOverride, error) {
+	var settings gen1.Settings
+	if bkp.Config != nil {
+		if err := json.Unmarshal(bkp.Config, &settings); err != nil {
+			return settings, nil, fmt.Errorf("failed to parse backup config: %w", err)
+		}
+	}
+	// A name override replaces the backup's stored name (e.g. for a clone).
+	if opts.Name != "" {
+		settings.Name = opts.Name
+	}
+	if opts.NetworkOverride == nil || opts.SkipNetwork {
+		return settings, nil, nil
+	}
+	override, err := resolveGen1NetworkOverride(bkp, opts.NetworkOverride)
+	return settings, override, err
+}
+
+// restoreGen1WiFiStation restores a WiFi station configuration. open joins an
+// open network; a static write already sends the (empty) key, so only the DHCP
+// write needs the open form.
+func restoreGen1WiFiStation(
+	ctx context.Context,
+	dev *gen1.Device,
+	sta *gen1.WiFiStaSettings,
+	open bool,
+	result *RestoreResult,
+) {
 	if sta.Ipv4Method == gen1IPv4ModeStatic {
 		err := dev.SetWiFiStationStatic(ctx, sta.SSID, sta.Key, sta.IP, sta.Gw, sta.Mask, sta.DNS)
 		if err != nil {
@@ -1307,9 +1351,55 @@ func restoreGen1WiFiStation(ctx context.Context, dev *gen1.Device, sta *gen1.WiF
 		}
 		return
 	}
+	if open {
+		if err := dev.SetWiFiStationOpen(ctx, sta.SSID); err != nil {
+			addWarningf(result, "set WiFi station: %v", err)
+		}
+		return
+	}
 	if err := dev.SetWiFiStation(ctx, sta.Enabled, sta.SSID, sta.Key); err != nil {
 		addWarningf(result, "set WiFi station: %v", err)
 	}
+}
+
+// resolveGen1NetworkOverride refuses an open override that carries a password
+// or names no SSID, and returns a copy of ov whose open SSID and static
+// addressing are completed from the backup's station (Backup.Station) by
+// ResolveStaticNetwork.
+func resolveGen1NetworkOverride(bkp *Backup, ov *Gen1NetworkOverride) (*Gen1NetworkOverride, error) {
+	if ov.Open && ov.Password != "" {
+		return nil, fmt.Errorf("%w: an open network takes no password", types.ErrInvalidParam)
+	}
+	var sta gen1.WiFiStaSettings
+	if raw := bkp.Station(); raw != nil {
+		if err := json.Unmarshal(raw, &sta); err != nil {
+			return nil, fmt.Errorf("parse backup WiFi station: %w", err)
+		}
+	}
+	resolved := *ov
+	if ov.Open {
+		// The station write may start from an empty config when the backup
+		// has no WiFi blob, so the open SSID is carried on the override.
+		resolved.SSID = cmp.Or(ov.SSID, sta.SSID)
+		if resolved.SSID == "" {
+			return nil, fmt.Errorf(
+				"%w: Gen1NetworkOverride.Open is set but neither the override nor the backup names an SSID; "+
+					"set Gen1NetworkOverride.SSID", types.ErrInvalidParam)
+		}
+	}
+	var fromBackup StaticNetwork
+	if sta.Ipv4Method == gen1IPv4ModeStatic {
+		fromBackup = StaticNetwork{IP: sta.IP, Gateway: sta.Gw, Netmask: sta.Mask, DNS: sta.DNS}
+	}
+	static, err := ResolveStaticNetwork(
+		StaticNetwork{IP: ov.StaticIP, Gateway: ov.Gateway, Netmask: ov.Netmask, DNS: ov.DNS}, fromBackup)
+	if err != nil {
+		return nil, fmt.Errorf("%w; set Gen1NetworkOverride.Gateway and Gen1NetworkOverride.Netmask", err)
+	}
+	if ov.IsStatic() {
+		resolved.Gateway, resolved.Netmask, resolved.DNS = static.Gateway, static.Netmask, static.DNS
+	}
+	return &resolved, nil
 }
 
 // restoreGen1WiFiStation1 restores the secondary (backup) WiFi station, mirroring

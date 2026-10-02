@@ -57,8 +57,8 @@ func TestOnboard_EndToEnd(t *testing.T) {
 				if static {
 					n = Network{StaticIP: d.addr(), Gateway: "192.0.2.1", Netmask: "255.255.255.0", DNS: "192.0.2.53"}
 				} else {
-					r.scanPresence = func(context.Context, string, string, bool, time.Duration) (string, error) {
-						return d.addr(), nil
+					r.scanPresence = func(context.Context, string, string, bool, time.Duration) (addr, via string, err error) {
+						return d.addr(), viaMDNS, nil
 					}
 				}
 
@@ -102,10 +102,41 @@ func TestOnboard_PresenceOnlyStillGivesAddress(t *testing.T) {
 	r.rejoinTimeout = 100 * time.Millisecond
 	r.probeTimeout = 20 * time.Millisecond
 	seen := refusingAddr(t)
-	r.scanPresence = func(context.Context, string, string, bool, time.Duration) (string, error) { return seen, nil }
+	r.scanPresence = func(context.Context, string, string, bool, time.Duration) (addr, via string, err error) {
+		return seen, viaCoIoT, nil
+	}
 	res, err := r.onboard(context.Background(), fakeAPSSID, &Network{}, 0)
-	if err != nil || res.Address != seen || res.Reachable {
-		t.Errorf("got (%+v, %v), want unreachable address %s", res, err, seen)
+	if err != nil || res.Address != seen || res.Reachable || res.SeenVia != viaCoIoT {
+		t.Errorf("got (%+v, %v), want unreachable address %s seen via %s", res, err, seen, viaCoIoT)
+	}
+}
+
+func TestOnboard_OpenNetwork(t *testing.T) {
+	t.Parallel()
+	for _, gen := range []int{1, 2} {
+		t.Run(fmt.Sprintf("gen%d", gen), func(t *testing.T) {
+			t.Parallel()
+			d := newFakeDevice(t, gen)
+			s := &fakeScanner{current: &discovery.WiFiNetwork{SSID: homeSSID}}
+			r := testRunner(t, s, d.addr())
+			r.scanPresence = func(context.Context, string, string, bool, time.Duration) (addr, via string, err error) {
+				return d.addr(), viaMDNS, nil
+			}
+			res, err := r.onboard(context.Background(), fakeAPSSID, &Network{SSID: "Guest", Open: true}, 0)
+			if err != nil {
+				t.Fatalf("onboard: %v", err)
+			}
+			if res.SeenVia != viaProbe || !res.Reachable {
+				t.Errorf("result = %+v, want a reachable device seen via %s", res, viaProbe)
+			}
+			if gen == 1 {
+				if q := d.args("/settings/sta"); !strings.Contains(q, "key=&") || !strings.Contains(q, "ssid=Guest") {
+					t.Errorf("station write %q, want Guest with an empty key", q)
+				}
+			} else if sta := writtenSta(t, d); sta["ssid"] != "Guest" || sta["pass"] != "" || hasIsOpen(sta) {
+				t.Errorf("written sta = %v, want Guest with an empty pass and no is_open", sta)
+			}
+		})
 	}
 }
 
