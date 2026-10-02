@@ -136,8 +136,9 @@ func (r *runner) onboard(
 func (r *runner) configureWiFiAtAP(ctx context.Context, generation int, n *Network) error {
 	if generation == 1 {
 		return r.withGen1(ctx, r.apAddr, "", func(dev *gen1.Device, _ string) error {
-			// The static write always sends the key, so an open network's empty
-			// password already clears it there.
+			if n.StaticIP != "" && n.Open {
+				return dev.SetWiFiStationStaticOpen(ctx, n.SSID, n.StaticIP, n.Gateway, n.Netmask, n.DNS)
+			}
 			if n.StaticIP != "" {
 				return dev.SetWiFiStationStatic(ctx, n.SSID, n.Password, n.StaticIP, n.Gateway, n.Netmask, n.DNS)
 			}

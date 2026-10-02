@@ -164,6 +164,21 @@ func TestRestoreGen1_OpenOverride(t *testing.T) {
 			t.Errorf("open static write %q must carry an empty key", w)
 		}
 	})
+	t.Run("static without open leaves the key out", func(t *testing.T) {
+		t.Parallel()
+		dev, writes := gen1ColorDevice(t, `{}`)
+		_, err := RestoreGen1(context.Background(), dev, staticGen1Backup(), &Gen1RestoreOptions{
+			NetworkOnly:     true,
+			NetworkOverride: &Gen1NetworkOverride{StaticIP: "10.0.0.9"},
+		})
+		if err != nil {
+			t.Fatalf("RestoreGen1: %v", err)
+		}
+		w := staWrite(t, *writes)
+		if strings.Contains(w, "key=") || !strings.Contains(w, "ipv4_method=static") {
+			t.Errorf("static write %q must not carry a key the backup does not hold", w)
+		}
+	})
 	t.Run("password is refused", func(t *testing.T) {
 		t.Parallel()
 		dev, writes := gen1ColorDevice(t, `{}`)

@@ -49,7 +49,7 @@ func (d *Device) SetWiFiStation(ctx context.Context, enabled bool, ssid, passwor
 
 // SetWiFiStationOpen enables the WiFi station and joins it to an open network,
 // one that takes no passphrase. Unlike SetWiFiStation with an empty password,
-// which keeps the device's stored key, it clears that key.
+// which leaves the key out of the request, it sends an empty key.
 //
 // Example:
 //
@@ -72,41 +72,47 @@ func (d *Device) SetWiFiStationOpen(ctx context.Context, ssid string) error {
 //
 // Parameters:
 //   - ssid: Network name
-//   - password: Network password
+//   - password: Network password (empty keeps the device's stored key)
 //   - ip: Static IP address
 //   - gateway: Gateway address
 //   - mask: Subnet mask
 //   - dns: DNS server (optional, empty string to skip)
 func (d *Device) SetWiFiStationStatic(ctx context.Context, ssid, password, ip, gateway, mask, dns string) error {
-	return d.setStaticWiFi(ctx, "/settings/sta", &staticWiFiKeys{
-		enabled: actionFieldEnabled, ssid: "ssid", key: "key", method: "ipv4_method",
-		ip: "ip", gateway: "gateway", mask: "netmask", dns: "dns",
-	}, ssid, password, ip, gateway, mask, dns)
+	return d.setStaticWiFi(ctx, "/settings/sta", ssid, password, false, ip, gateway, mask, dns)
 }
 
-// staticWiFiKeys names the form parameters a static-WiFi write uses. The primary
-// station (/settings) and the secondary station (/settings/sta1) share the same
-// shape but spell their keys differently.
-type staticWiFiKeys struct {
-	enabled, ssid, key, method, ip, gateway, mask, dns string
+// SetWiFiStationStaticOpen configures the WiFi station with a static IP on an
+// open network, one that takes no passphrase. It is the static counterpart of
+// SetWiFiStationOpen; an empty dns is omitted.
+//
+// Example:
+//
+//	err := device.SetWiFiStationStaticOpen(ctx, "GuestNet", "192.168.1.50", "192.168.1.1", "255.255.255.0", "")
+func (d *Device) SetWiFiStationStaticOpen(ctx context.Context, ssid, ip, gateway, mask, dns string) error {
+	if ssid == "" {
+		return fmt.Errorf("%w: an open WiFi station needs an SSID", types.ErrInvalidParam)
+	}
+	return d.setStaticWiFi(ctx, "/settings/sta", ssid, "", true, ip, gateway, mask, dns)
 }
 
-// setStaticWiFi writes a static-IP WiFi station config to endpoint using the given
-// parameter names. An empty dns is omitted.
+// setStaticWiFi writes a static-IP WiFi station config to endpoint. An empty
+// dns is omitted. The key is sent only with a password or for an open network:
+// an empty key on a secured network would ask the device to drop its passphrase.
 func (d *Device) setStaticWiFi(
-	ctx context.Context, endpoint string, k *staticWiFiKeys,
-	ssid, password, ip, gateway, mask, dns string,
+	ctx context.Context, endpoint, ssid, password string, open bool, ip, gateway, mask, dns string,
 ) error {
 	params := url.Values{}
-	params.Set(k.enabled, "true")
-	params.Set(k.ssid, ssid)
-	params.Set(k.key, password)
-	params.Set(k.method, "static")
-	params.Set(k.ip, ip)
-	params.Set(k.gateway, gateway)
-	params.Set(k.mask, mask)
+	params.Set(actionFieldEnabled, "true")
+	params.Set("ssid", ssid)
+	if password != "" || open {
+		params.Set("key", password)
+	}
+	params.Set("ipv4_method", "static")
+	params.Set("ip", ip)
+	params.Set("gateway", gateway)
+	params.Set("netmask", mask)
 	if dns != "" {
-		params.Set(k.dns, dns)
+		params.Set("dns", dns)
 	}
 	if _, err := d.restCall(ctx, endpoint+"?"+params.Encode()); err != nil {
 		return fmt.Errorf("failed to set static WiFi at %s: %w", endpoint, err)
@@ -160,12 +166,10 @@ func (d *Device) SetWiFiStation1(ctx context.Context, enabled bool, ssid, passwo
 }
 
 // SetWiFiStation1Static configures the secondary WiFi station with a static IP.
-// It is the sta1 counterpart of SetWiFiStationStatic; an empty dns is omitted.
+// It is the sta1 counterpart of SetWiFiStationStatic; an empty dns is omitted
+// and an empty password keeps the device's stored key.
 func (d *Device) SetWiFiStation1Static(ctx context.Context, ssid, password, ip, gateway, mask, dns string) error {
-	return d.setStaticWiFi(ctx, "/settings/sta1", &staticWiFiKeys{
-		enabled: actionFieldEnabled, ssid: "ssid", key: "key", method: "ipv4_method",
-		ip: "ip", gateway: "gateway", mask: "netmask", dns: "dns",
-	}, ssid, password, ip, gateway, mask, dns)
+	return d.setStaticWiFi(ctx, "/settings/sta1", ssid, password, false, ip, gateway, mask, dns)
 }
 
 // SetApRoaming enables or disables AP roaming and sets its RSSI threshold (in

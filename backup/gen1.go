@@ -1335,8 +1335,8 @@ func prepareGen1Restore(bkp *Backup, opts *Gen1RestoreOptions) (gen1.Settings, *
 }
 
 // restoreGen1WiFiStation restores a WiFi station configuration. open joins an
-// open network; a static write already sends the (empty) key, so only the DHCP
-// write needs the open form.
+// open network; without it an unknown key is left out of the write, so the
+// device keeps the one it has.
 func restoreGen1WiFiStation(
 	ctx context.Context,
 	dev *gen1.Device,
@@ -1345,7 +1345,12 @@ func restoreGen1WiFiStation(
 	result *RestoreResult,
 ) {
 	if sta.Ipv4Method == gen1IPv4ModeStatic {
-		err := dev.SetWiFiStationStatic(ctx, sta.SSID, sta.Key, sta.IP, sta.Gw, sta.Mask, sta.DNS)
+		var err error
+		if open {
+			err = dev.SetWiFiStationStaticOpen(ctx, sta.SSID, sta.IP, sta.Gw, sta.Mask, sta.DNS)
+		} else {
+			err = dev.SetWiFiStationStatic(ctx, sta.SSID, sta.Key, sta.IP, sta.Gw, sta.Mask, sta.DNS)
+		}
 		if err != nil {
 			addWarningf(result, "set WiFi station static: %v", err)
 		}

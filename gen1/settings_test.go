@@ -106,6 +106,38 @@ func TestSetWiFiStationStatic(t *testing.T) {
 	}
 }
 
+func TestSetWiFiStationStatic_EmptyPasswordLeavesKeyOut(t *testing.T) {
+	mock := testutil.NewMockTransport()
+	defer mock.ClearMatchers()
+	device := NewDevice(mock)
+
+	// Parameters are encoded in name order, so netmask right after ipv4_method
+	// means no key was sent.
+	mock.OnPathContains("/settings/sta?enabled=true&gateway=192.168.1.1&ip=192.168.1.100&ipv4_method=static&netmask=255.255.255.0&ssid=Network", json.RawMessage(`{}`), nil)
+
+	err := device.SetWiFiStationStatic(context.Background(), "Network", "", "192.168.1.100", "192.168.1.1", "255.255.255.0", "")
+	if err != nil {
+		t.Fatalf("SetWiFiStationStatic failed: %v", err)
+	}
+}
+
+func TestSetWiFiStationStaticOpen(t *testing.T) {
+	mock := testutil.NewMockTransport()
+	defer mock.ClearMatchers()
+	device := NewDevice(mock)
+
+	mock.OnPathContains("/settings/sta?enabled=true&gateway=192.168.1.1&ip=192.168.1.100&ipv4_method=static&key=&netmask=255.255.255.0&ssid=GuestNet", json.RawMessage(`{}`), nil)
+
+	err := device.SetWiFiStationStaticOpen(context.Background(), "GuestNet", "192.168.1.100", "192.168.1.1", "255.255.255.0", "")
+	if err != nil {
+		t.Fatalf("SetWiFiStationStaticOpen failed: %v", err)
+	}
+	err = device.SetWiFiStationStaticOpen(context.Background(), "", "192.168.1.100", "192.168.1.1", "255.255.255.0", "")
+	if !errors.Is(err, types.ErrInvalidParam) {
+		t.Errorf("err = %v, want ErrInvalidParam for an empty SSID", err)
+	}
+}
+
 func TestSetWiFiAP(t *testing.T) {
 	mock := testutil.NewMockTransport()
 	defer mock.ClearMatchers()
