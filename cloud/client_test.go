@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -1487,4 +1488,24 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
+}
+
+func TestDoRequest_ErrorRedactsAuthKey(t *testing.T) {
+	// A closed server makes the request fail inside the HTTP client, whose
+	// error quotes the full URL, auth key included.
+	server := httptest.NewServer(http.NotFoundHandler())
+	addr := server.URL
+	server.Close()
+
+	client := NewClient(WithAuthKey("topsecretkey"), WithBaseURL(addr))
+	_, err := client.doRequest(context.Background(), http.MethodGet, "/device/status?id=abc", nil)
+	if err == nil {
+		t.Fatal("expected an error from a closed server")
+	}
+	if strings.Contains(err.Error(), "topsecretkey") {
+		t.Errorf("error leaks the auth key: %v", err)
+	}
+	if !strings.Contains(err.Error(), "auth_key=REDACTED") {
+		t.Errorf("error should keep the parameter name: %v", err)
+	}
 }

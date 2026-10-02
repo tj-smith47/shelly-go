@@ -3,9 +3,12 @@ package transport
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -1158,5 +1161,82 @@ func TestHTTP_Get_Error(t *testing.T) {
 	_, err := transport.Get(context.Background(), "/invalid")
 	if err == nil {
 		t.Fatal("Get() error = nil, want error")
+	}
+}
+
+func TestHTTPCall_ErrorRedactsQueryValues(t *testing.T) {
+	// A closed server makes the request fail inside the HTTP client, whose
+	// error quotes the full URL.
+	server := httptest.NewServer(http.NotFoundHandler())
+	addr := server.URL
+	server.Close()
+
+	h := NewHTTP(addr, WithRetry(0, time.Millisecond))
+	_, err := h.Call(context.Background(), NewSimpleRequest("/settings/sta?ssid=HomeNet&key=hunter2secret"))
+	if err == nil {
+		t.Fatal("expected an error from a closed server")
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "hunter2secret") || strings.Contains(msg, "HomeNet") {
+		t.Errorf("error leaks query values: %s", msg)
+	}
+	if !strings.Contains(msg, "key=REDACTED") || !strings.Contains(msg, "/settings/sta") {
+		t.Errorf("error should keep the path and parameter names: %s", msg)
+	}
+	var urlErr *url.Error
+	if !errors.As(err, &urlErr) {
+		t.Errorf("error chain lost the *url.Error: %v", err)
+	}
+}
+
+func TestRedactURLError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{
+			name: "query values hidden, names kept",
+			err:  &url.Error{Op: "Get", URL: "http://192.0.2.1/settings/sta?ssid=Home&key=secret", Err: errors.New("boom")},
+			want: `Get "http://192.0.2.1/settings/sta?ssid=REDACTED&key=REDACTED": boom`,
+		},
+		{
+			name: "unparseable url from a parse failure",
+			err:  &url.Error{Op: "parse", URL: "http://192.0.2.1/settings?key=se%zzcret", Err: errors.New("invalid URL escape")},
+			want: `parse "http://192.0.2.1/settings?key=REDACTED": invalid URL escape`,
+		},
+		{
+			name: "fragment kept",
+			err:  &url.Error{Op: "Get", URL: "http://192.0.2.1/a?key=secret#frag", Err: errors.New("boom")},
+			want: `Get "http://192.0.2.1/a?key=REDACTED#frag": boom`,
+		},
+		{
+			name: "no query is unchanged",
+			err:  &url.Error{Op: "Get", URL: "http://192.0.2.1/status", Err: errors.New("boom")},
+			want: `Get "http://192.0.2.1/status": boom`,
+		},
+		{
+			name: "other errors are unchanged",
+			err:  errors.New("plain"),
+			want: "plain",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := RedactURLError(tt.err).Error(); got != tt.want {
+				t.Errorf("got %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHTTPCall_BuildErrorRedactsQueryValues(t *testing.T) {
+	h := NewHTTP("http://192.0.2.1", WithRetry(0, time.Millisecond))
+	_, err := h.Call(context.Background(), NewSimpleRequest("/settings/%zz?password=hunter2secret"))
+	if err == nil {
+		t.Fatal("expected a request build error for an invalid escape")
+	}
+	if strings.Contains(err.Error(), "hunter2secret") {
+		t.Errorf("error leaks the query value: %v", err)
 	}
 }

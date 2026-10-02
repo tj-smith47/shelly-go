@@ -14,6 +14,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -145,7 +146,7 @@ func (h *HTTP) doCall(ctx context.Context, rpcReq RPCRequest) (json.RawMessage, 
 	// Execute request
 	resp, err := h.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("HTTP request failed: %w", err)
+		return nil, fmt.Errorf("HTTP request failed: %w", RedactURLError(err))
 	}
 	defer resp.Body.Close()
 
@@ -169,6 +170,35 @@ func (h *HTTP) doCall(ctx context.Context, rpcReq RPCRequest) (json.RawMessage, 
 	// Return raw body for both RPC and REST
 	// The RPC client will handle parsing RPC responses
 	return body, nil
+}
+
+// RedactURLError hides the query values of the URL quoted in a failed request's
+// error and returns the same error. Gen1 devices take settings as query
+// parameters and the cloud API takes its auth key as one, so the URL of such a
+// request carries a secret, and the error text reaches logs and callers'
+// messages. Parameter names are kept: they say which request failed. Errors
+// that are not a *url.Error, or whose URL has no query, are returned unchanged.
+func RedactURLError(err error) error {
+	var urlErr *url.Error
+	if !errors.As(err, &urlErr) {
+		return err
+	}
+	// Split by hand: the URL of a parse failure cannot be parsed again.
+	base, query, found := strings.Cut(urlErr.URL, "?")
+	if !found || query == "" {
+		return err
+	}
+	query, fragment, hasFragment := strings.Cut(query, "#")
+	names := make([]string, 0, strings.Count(query, "&")+1)
+	for pair := range strings.SplitSeq(query, "&") {
+		name, _, _ := strings.Cut(pair, "=")
+		names = append(names, name+"=REDACTED")
+	}
+	urlErr.URL = base + "?" + strings.Join(names, "&")
+	if hasFragment {
+		urlErr.URL += "#" + fragment
+	}
+	return err
 }
 
 // buildRPCRequest builds an RPC request (Gen2+).
@@ -210,11 +240,9 @@ func (h *HTTP) buildRPCRequest(ctx context.Context, rpcReq RPCRequest) (*http.Re
 
 // buildRESTRequest builds a REST request (Gen1).
 func (h *HTTP) buildRESTRequest(ctx context.Context, path string) (*http.Request, error) {
-	url := h.baseURL + path
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, "GET", h.baseURL+path, http.NoBody)
 	if err != nil {
-		return nil, err
+		return nil, RedactURLError(err)
 	}
 
 	return req, nil
@@ -266,7 +294,7 @@ func (h *HTTP) applyDigestAuth(req *http.Request) error {
 
 	resp, err := h.client.Do(challengeReq)
 	if err != nil {
-		return fmt.Errorf("challenge request: %w", err)
+		return fmt.Errorf("challenge request: %w", RedactURLError(err))
 	}
 	resp.Body.Close()
 

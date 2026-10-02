@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/tj-smith47/shelly-go/transport"
 )
 
 // Common client errors.
@@ -297,7 +299,7 @@ func (c *Client) doRequest(ctx context.Context, method, endpoint string, body an
 	// Execute request
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute request: %w", err)
+		return nil, fmt.Errorf("failed to execute request: %w", transport.RedactURLError(err))
 	}
 	defer resp.Body.Close()
 
