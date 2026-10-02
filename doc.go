@@ -33,6 +33,7 @@
 //   - gen2: Support for Gen2+ devices (Plus, Pro, Gen3, Gen4)
 //   - cloud: Shelly Cloud API integration
 //   - discovery: Device discovery via mDNS, BLE, and CoIoT
+//   - reprovision: Restore, onboard and inspect a device at its factory WiFi access point
 //   - events: Event bus and real-time notifications
 //   - helpers: Convenience utilities for batch operations, groups, and scenes
 //   - profiles: Device profiles and capability detection

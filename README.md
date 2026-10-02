@@ -155,6 +155,55 @@ func main() {
 }
 ```
 
+### Reprovision
+
+The `reprovision` package puts a device that sits at its factory WiFi access
+point back onto the LAN. Each call moves the host onto the device's access
+point, does its work there and returns the host to its home network, also when
+the work fails or the context is cancelled. The host needs a WiFi interface.
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+
+    "github.com/tj-smith47/shelly-go/reprovision"
+)
+
+func main() {
+    ctx := context.Background()
+
+    // List the factory access points in range (nil uses the platform scanner).
+    aps, err := reprovision.ScanAPs(ctx, nil)
+    if err != nil {
+        log.Fatal(err)
+    }
+    for _, ap := range aps {
+        fmt.Println(ap.SSID, ap.MACSuffix, ap.Signal)
+    }
+
+    // Join a new device to the network the host is on. The SSID and passphrase
+    // default to the host's current network and its stored passphrase.
+    res, err := reprovision.Onboard(ctx, &reprovision.OnboardOptions{
+        APSSID: "ShellyBulbDuo-D12965",
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Println("device is at", res.Address, res.Note)
+}
+```
+
+`reprovision.Restore` applies a `backup.Backup` the same way: it writes only the
+WiFi settings at the access point, then the full configuration once the device
+is back on the LAN. It checks the device's MAC against the access point name
+before any write, and flashes a Gen1 device that runs older firmware than the
+backup while it is still at the access point. `reprovision.Inspect` reads what a
+device at its access point has stored without writing anything.
+
 ## Supported Devices
 
 This library supports **all Shelly devices** across all generations:
@@ -182,6 +231,7 @@ shelly-go/
 ├── gen2/           Gen2+ device support (Plus, Pro, Gen3, Gen4)
 ├── cloud/          Shelly Cloud API
 ├── discovery/      Device discovery (mDNS, BLE, CoIoT)
+├── reprovision/    Restore, onboard and inspect a device at its factory WiFi AP
 ├── events/         Event bus and notification system
 ├── helpers/        Convenience utilities (batch, groups, scenes)
 ├── profiles/       Device profiles and capabilities

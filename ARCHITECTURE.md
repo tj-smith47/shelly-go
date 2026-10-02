@@ -13,6 +13,7 @@ shelly-go/
 ├── gen2/           # Gen2+ device support
 │   └── components/ # Type-safe component implementations
 ├── discovery/      # Device discovery (mDNS, CoIoT)
+├── reprovision/    # Restore, onboard and inspect a device at its factory WiFi AP
 ├── factory/        # Device creation utilities
 ├── helpers/        # High-level utilities
 ├── events/         # Event bus and handlers
