@@ -1292,10 +1292,14 @@ func restoreGen1WiFi(
 
 // applyGen1WiFiOverride overlays a Gen1NetworkOverride onto a Gen1 station config.
 // SSID and Key are replaced only when explicitly provided; a static IP switches
-// the station to static IPv4 addressing.
+// the station to static IPv4 addressing. A key the backup holds belongs to the
+// backup's SSID, so it is dropped when the override names a different one.
 func applyGen1WiFiOverride(sta *gen1.WiFiStaSettings, ov *Gen1NetworkOverride) {
 	sta.Enabled = true
 	if ov.SSID != "" {
+		if ov.SSID != sta.SSID {
+			sta.Key = ""
+		}
 		sta.SSID = ov.SSID
 	}
 	if ov.Password != "" {

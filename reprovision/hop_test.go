@@ -226,10 +226,10 @@ func TestResolveJoinNetwork(t *testing.T) {
 			want:       Network{SSID: "OverrideNet", Password: "overridekey"},
 		},
 		{
-			name:       "backup key fills an override ssid",
+			name:       "override ssid takes the host passphrase and drops the backup key",
 			fromBackup: Network{SSID: "BackupNet", Password: "backupkey"},
-			override:   Network{SSID: "OverrideNet"},
-			want:       Network{SSID: "OverrideNet", Password: "backupkey"},
+			override:   Network{SSID: homeSSID},
+			want:       Network{SSID: homeSSID, Password: homePass},
 		},
 		{
 			name:       "backup ssid and key",
@@ -337,6 +337,17 @@ func TestResolveJoinNetwork_StaticNeedsGatewayAndNetmask(t *testing.T) {
 	}
 }
 
+func TestResolveJoinNetwork_BackupKeyNeverJoinsAnotherNetwork(t *testing.T) {
+	t.Parallel()
+	r := testRunner(t, homeScanner(), "")
+	fromBackup := Network{SSID: "BackupNet", Password: "backupkey"}
+	_, err := r.resolveJoinNetwork(context.Background(), &fromBackup, &Network{SSID: "OverrideNet"})
+	var pwErr *NoPassphraseError
+	if !errors.As(err, &pwErr) || pwErr.SSID != "OverrideNet" {
+		t.Fatalf("err = %v, want a NoPassphraseError naming OverrideNet", err)
+	}
+}
+
 func TestResolveJoinNetwork_NoPassphrase(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -376,6 +387,46 @@ func TestResolveJoinNetwork_NoPassphraseNamesHostNetwork(t *testing.T) {
 	}
 	if pwErr.SSID != homeSSID {
 		t.Errorf("SSID = %q, want the host's network %q", pwErr.SSID, homeSSID)
+	}
+}
+
+func TestMergeNetwork_BackupKeyBelongsToBackupSSID(t *testing.T) {
+	t.Parallel()
+	fromBackup := Network{SSID: "Home", Password: "homekey"}
+	tests := []struct {
+		name     string
+		override Network
+		want     Network
+	}{
+		{"no override keeps the backup's key", Network{}, Network{SSID: "Home", Password: "homekey"}},
+		{"same SSID keeps the backup's key", Network{SSID: "Home"}, Network{SSID: "Home", Password: "homekey"}},
+		{"another SSID drops the backup's key", Network{SSID: "Other"}, Network{SSID: "Other"}},
+		{
+			"another SSID with a password uses it",
+			Network{SSID: "Other", Password: "otherkey"},
+			Network{SSID: "Other", Password: "otherkey"},
+		},
+		{"open drops the backup's key", Network{Open: true}, Network{SSID: "Home", Open: true}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := MergeNetwork(&fromBackup, &tt.override)
+			if err != nil {
+				t.Fatalf("MergeNetwork: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("got %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMergeNetwork_NilArguments(t *testing.T) {
+	t.Parallel()
+	got, err := MergeNetwork(nil, nil)
+	if err != nil || got != (Network{}) {
+		t.Errorf("got (%+v, %v), want an empty network and no error", got, err)
 	}
 }
 

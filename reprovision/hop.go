@@ -145,20 +145,35 @@ func (r *runner) waitForAPReady(ctx context.Context, timeout time.Duration) {
 	}
 }
 
-// mergeJoinNetwork lays the override over the backup's network: the open flag,
-// SSID, passphrase and static addressing. It refuses an open network with a
-// passphrase and a static address with no gateway or netmask.
+// MergeNetwork lays override over the network a backup records and returns the
+// network a device would be told to join: the open flag, SSID, passphrase and
+// static addressing. The backup's passphrase and open flag belong to the
+// backup's SSID, so they are dropped when override names a different one. It
+// refuses an open network with a passphrase and a static address with no
+// gateway or netmask. It looks nothing up on the host, so the result can have
+// an empty SSID or an empty Password.
+//
+// Restore and Onboard apply the same rule; a caller that plans a station write
+// outside them uses MergeNetwork to reach the same answer.
+//
+// A nil argument is read as an empty Network.
+func MergeNetwork(fromBackup, override *Network) (Network, error) {
+	return mergeJoinNetwork(cmp.Or(fromBackup, &Network{}), cmp.Or(override, &Network{}))
+}
+
+// mergeJoinNetwork is MergeNetwork for arguments known to be non-nil.
 func mergeJoinNetwork(fromBackup, override *Network) (Network, error) {
 	if override.Open && override.Password != "" {
 		return Network{}, fmt.Errorf("%w: Network.Open is set, and an open network takes no Network.Password",
 			types.ErrInvalidParam)
 	}
 	join := *fromBackup
-	// The backup's open flag belongs to the backup's network, so a password or
-	// a different SSID in the override means a secured network.
-	join.Open = override.Open || (fromBackup.Open && override.Password == "" &&
-		(override.SSID == "" || override.SSID == fromBackup.SSID))
+	sameSSID := override.SSID == "" || override.SSID == fromBackup.SSID
+	join.Open = override.Open || (fromBackup.Open && override.Password == "" && sameSSID)
 	join.SSID = cmp.Or(override.SSID, join.SSID)
+	if !sameSSID || join.Open {
+		join.Password = ""
+	}
 	join.Password = cmp.Or(override.Password, join.Password)
 	static, err := backup.ResolveStaticNetwork(
 		backup.StaticNetwork{

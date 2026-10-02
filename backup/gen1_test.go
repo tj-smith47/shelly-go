@@ -725,6 +725,18 @@ func TestApplyGen1WiFiOverride(t *testing.T) {
 		if sta.SSID != "net2" {
 			t.Errorf("ssid override not applied: %q", sta.SSID)
 		}
+		if sta.Key != "" {
+			t.Errorf("key %q of the backup's network kept for another SSID", sta.Key)
+		}
+	})
+
+	t.Run("same SSID keeps the backup's key", func(t *testing.T) {
+		t.Parallel()
+		sta := &gen1.WiFiStaSettings{SSID: "net", Key: "k"}
+		applyGen1WiFiOverride(sta, &Gen1NetworkOverride{SSID: "net"})
+		if sta.Key != "k" {
+			t.Errorf("key = %q, want the backup's key kept for its own SSID", sta.Key)
+		}
 	})
 }
 
