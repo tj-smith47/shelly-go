@@ -140,6 +140,23 @@ func TestOnboard_OpenNetwork(t *testing.T) {
 	}
 }
 
+func TestOnboard_Gen1StaticOpenNetwork(t *testing.T) {
+	t.Parallel()
+	d := newFakeDevice(t, 1)
+	r := testRunner(t, &fakeScanner{current: &discovery.WiFiNetwork{SSID: homeSSID}}, d.addr())
+	r.scanPresence = func(context.Context, string, string, bool, time.Duration) (addr, via string, err error) {
+		return d.addr(), viaMDNS, nil
+	}
+	n := &Network{SSID: "Guest", Open: true, StaticIP: d.addr(), Gateway: "192.0.2.1", Netmask: "255.255.255.0"}
+	if _, err := r.onboard(context.Background(), fakeAPSSID, n, 0); err != nil {
+		t.Fatalf("onboard: %v", err)
+	}
+	q := d.args("/settings/sta")
+	if !strings.Contains(q, "key=&") || !strings.Contains(q, "ipv4_method=static") || !strings.Contains(q, "ssid=Guest") {
+		t.Errorf("station write %q, want a static write for Guest with an empty key", q)
+	}
+}
+
 // The SSID carries no MAC suffix to check, so the identity read only supplies
 // the generation and MAC; onboarding proceeds.
 func TestOnboard_SSIDWithoutMACSuffix(t *testing.T) {
