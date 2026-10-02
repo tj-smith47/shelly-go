@@ -102,7 +102,10 @@ func TestFetchGen1Firmware_TempCreateError(t *testing.T) {
 	if err := os.WriteFile(notDir, []byte("x"), 0o600); err != nil {
 		t.Fatalf("seed non-dir: %v", err)
 	}
-	t.Setenv("TMPDIR", notDir+"/nope")
+	// os.TempDir reads TMPDIR on Unix and TMP, then TEMP, on Windows.
+	for _, key := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(key, notDir+"/nope")
+	}
 	if _, err := testRunner(t, nil, "").fetchGen1Firmware(context.Background(), srv.URL+"/fw.zip"); err == nil {
 		t.Fatal("expected a temp-file creation error when TMPDIR is unusable")
 	}
