@@ -116,6 +116,61 @@ func TestRestore_EndToEnd(t *testing.T) {
 	}
 }
 
+func TestRestore_ForeignBackupRefusedUnlessAllowed(t *testing.T) {
+	t.Parallel()
+	foreign := func(gen int) *backup.Backup {
+		b := testBackup(gen)
+		b.DeviceInfo.MAC = "112233445566"
+		return b
+	}
+	for _, gen := range []int{1, 2} {
+		t.Run(fmt.Sprintf("gen%d refused", gen), func(t *testing.T) {
+			t.Parallel()
+			d := newFakeDevice(t, gen)
+			s := homeScanner()
+			r := testRunner(t, s, d.addr())
+			_, err := r.restore(context.Background(), &RestoreOptions{
+				APSSID: fakeAPSSID, Backup: foreign(gen), AllowFirmwareDowngrade: true,
+			})
+			if !errors.Is(err, ErrIdentityMismatch) || !strings.Contains(err.Error(), "AllowForeignBackup") {
+				t.Fatalf("err = %v, want ErrIdentityMismatch naming AllowForeignBackup", err)
+			}
+			if w := d.writes(); len(w) != 0 {
+				t.Errorf("device received writes %v for a foreign backup", w)
+			}
+			assertReturnedHome(t, s, fakeAPSSID)
+		})
+		t.Run(fmt.Sprintf("gen%d allowed", gen), func(t *testing.T) {
+			t.Parallel()
+			d := newFakeDevice(t, gen)
+			r := testRunner(t, homeScanner(), d.addr())
+			res, err := r.restore(context.Background(), &RestoreOptions{
+				APSSID:                 fakeAPSSID,
+				Backup:                 foreign(gen),
+				Network:                Network{StaticIP: d.addr(), Gateway: "192.0.2.1", Netmask: "255.255.255.0"},
+				AllowFirmwareDowngrade: true,
+				AllowForeignBackup:     true,
+			})
+			if err != nil {
+				t.Fatalf("restore: %v", err)
+			}
+			if res.MAC != fakeMAC {
+				t.Errorf("res.MAC = %q, want the device's %q", res.MAC, fakeMAC)
+			}
+			if len(d.writes()) == 0 {
+				t.Error("device received no writes although the foreign backup was allowed")
+			}
+		})
+	}
+}
+
+func TestCheckForeignBackup_NoBackupMACPasses(t *testing.T) {
+	t.Parallel()
+	if err := checkForeignBackup(fakeAPSSID, "", fakeMAC, false); err != nil {
+		t.Errorf("err = %v, want nil for a backup without a MAC", err)
+	}
+}
+
 func TestRestore_IdentityMismatchStopsBeforeAnyWrite(t *testing.T) {
 	t.Parallel()
 	for _, gen := range []int{1, 2} {

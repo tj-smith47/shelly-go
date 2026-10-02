@@ -90,6 +90,11 @@ func (r *runner) restore(ctx context.Context, opts *RestoreOptions) (*RestoreRes
 			return idErr
 		}
 		if mac != "" {
+			fErr := checkForeignBackup(opts.APSSID, normalizeMAC(backupMAC), mac, opts.AllowForeignBackup)
+			if fErr != nil {
+				restoreErr = fErr
+				return fErr
+			}
 			res.MAC = mac
 		}
 		if generation == 1 {
@@ -376,6 +381,18 @@ func (r *runner) confirmAPDeviceIdentity(ctx context.Context, generation int, ap
 	r.step("confirming the device identity")
 	actual, err := r.readDeviceMACAtAP(ctx, generation)
 	return r.checkAPIdentity(apSSID, actual, err)
+}
+
+// checkForeignBackup refuses a backup recorded from one device when the device
+// at the access point reports another MAC, unless the caller allowed it. A
+// backup with no MAC cannot be checked and passes.
+func checkForeignBackup(apSSID, backupMAC, deviceMAC string, allow bool) error {
+	if allow || backupMAC == "" || backupMAC == deviceMAC {
+		return nil
+	}
+	return fmt.Errorf("%w: the backup was taken from device %s but AP %q is serving device %s; "+
+		"set AllowForeignBackup to write one device's backup onto another; nothing was written",
+		ErrIdentityMismatch, backupMAC, apSSID, deviceMAC)
 }
 
 // checkAPIdentity applies the identity rule to a MAC read at the access point

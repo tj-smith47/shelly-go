@@ -181,6 +181,11 @@ type RestoreOptions struct {
 	// AllowFirmwareDowngrade skips the firmware update and writes the backup
 	// onto older firmware, accepting the reboot-loop risk.
 	AllowFirmwareDowngrade bool
+	// AllowForeignBackup lets the backup of one device be written onto another:
+	// by default a backup whose recorded MAC differs from the MAC the device
+	// reports at its access point is refused with ErrIdentityMismatch before
+	// anything is written. Set it to clone a template backup onto a new device.
+	AllowForeignBackup bool
 	// SkipAuth leaves the device's authentication settings alone.
 	SkipAuth bool
 	// SkipScripts leaves the device's scripts alone (Gen2+).
