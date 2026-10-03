@@ -6,11 +6,12 @@ import (
 
 	"github.com/tj-smith47/shelly-go/discovery"
 	"github.com/tj-smith47/shelly-go/gen1"
+	"github.com/tj-smith47/shelly-go/rpc"
 	"github.com/tj-smith47/shelly-go/types"
 )
 
 // Inspection is the state read from a device at its factory access point: its
-// identity and, for Gen1, the WiFi station settings it would use to join a
+// identity and the WiFi station settings it would use to join a
 // network. It shows whether a provisioning write took without the device having
 // to reach the LAN first.
 type Inspection struct {
@@ -20,22 +21,23 @@ type Inspection struct {
 	MAC string
 	// Firmware is the device's firmware build.
 	Firmware string
-	// StaSSID is the WiFi network the device is set to join (Gen1 only).
+	// StaSSID is the WiFi network the device is set to join.
 	StaSSID string
-	// Ipv4Method is the station addressing mode, "dhcp" or "static" (Gen1 only).
+	// Ipv4Method is the station addressing mode, "dhcp" or "static".
 	Ipv4Method string
 	// StaIP is the station address: the live one when the device is connected,
-	// otherwise the configured static address (Gen1 only).
+	// otherwise the configured static address.
 	StaIP string
-	// StaGateway is the configured static gateway (Gen1 only).
+	// StaGateway is the configured static gateway.
 	StaGateway string
 	// Generation is the device generation (1 for Gen1, 2 and up for RPC devices).
 	Generation int
 	// StaKeySet reports that a station passphrase is stored; the device masks
-	// the key itself (Gen1 only).
+	// the key itself. An RPC device never returns its
+	// passphrase, so there this is true for any configured network that is not open.
 	StaKeySet bool
 	// StaConnected reports that the device is connected to its station network
-	// right now (Gen1 only).
+	// right now.
 	StaConnected bool
 }
 
@@ -43,7 +45,7 @@ type Inspection struct {
 // identity and stored WiFi station settings, and returns the host to its home
 // network. Nothing is written to the device.
 //
-// When the Gen1 WiFi read fails after the device was identified, the partial
+// When the WiFi read fails after the device was identified, the partial
 // Inspection is returned with the error.
 func Inspect(ctx context.Context, opts *InspectOptions) (*Inspection, error) {
 	if opts == nil {
@@ -77,8 +79,8 @@ func (r *runner) inspect(ctx context.Context, apSSID string) (*Inspection, error
 }
 
 // readDeviceAtAP identifies the device through the /shelly endpoint every
-// generation serves and, for a Gen1 device, reads its station settings. The
-// identity is returned even when the Gen1 WiFi read fails.
+// generation serves and reads its station settings. The identity is returned
+// even when the WiFi read fails.
 func (r *runner) readDeviceAtAP(ctx context.Context) (*Inspection, error) {
 	info, err := discovery.Identify(ctx, r.apAddr)
 	if err != nil {
@@ -94,8 +96,47 @@ func (r *runner) readDeviceAtAP(ctx context.Context) (*Inspection, error) {
 		if wifiErr := r.readGen1WiFiAtAP(ctx, insp); wifiErr != nil {
 			return insp, fmt.Errorf("read Gen1 WiFi config: %w", wifiErr)
 		}
+		return insp, nil
+	}
+	if wifiErr := r.readGen2WiFiAtAP(ctx, insp); wifiErr != nil {
+		return insp, fmt.Errorf("read WiFi config: %w", wifiErr)
 	}
 	return insp, nil
+}
+
+// readGen2WiFiAtAP fills insp with an RPC device's stored station settings and
+// its live connection state. As for Gen1, the live state is best-effort.
+func (r *runner) readGen2WiFiAtAP(ctx context.Context, insp *Inspection) error {
+	return r.withGen2(ctx, r.apAddr, "", func(client *rpc.Client, _ string) error {
+		var cfg struct {
+			Sta struct {
+				SSID     string `json:"ssid"`
+				Ipv4Mode string `json:"ipv4mode"`
+				IP       string `json:"ip"`
+				Gw       string `json:"gw"`
+				IsOpen   bool   `json:"is_open"`
+			} `json:"sta"`
+		}
+		if err := client.CallResult(ctx, "WiFi.GetConfig", nil, &cfg); err != nil {
+			return err
+		}
+		insp.StaSSID = cfg.Sta.SSID
+		insp.StaKeySet = cfg.Sta.SSID != "" && !cfg.Sta.IsOpen
+		insp.Ipv4Method = cfg.Sta.Ipv4Mode
+		insp.StaIP = cfg.Sta.IP
+		insp.StaGateway = cfg.Sta.Gw
+		var status struct {
+			StaIP  string `json:"sta_ip"`
+			Status string `json:"status"`
+		}
+		if err := client.CallResult(ctx, "WiFi.GetStatus", nil, &status); err == nil {
+			insp.StaConnected = status.Status == "got ip"
+			if status.StaIP != "" {
+				insp.StaIP = status.StaIP
+			}
+		}
+		return nil
+	})
 }
 
 // readGen1WiFiAtAP fills insp with the device's stored station settings and its

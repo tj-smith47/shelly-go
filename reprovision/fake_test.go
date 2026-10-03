@@ -48,6 +48,8 @@ type fakeDevice struct {
 
 	// failMethod makes that RPC method answer with an error.
 	failMethod string
+	// failArgs makes an RPC call whose params contain it answer with an error.
+	failArgs string
 
 	settingsErr bool
 	// shellyErr makes the /shelly identity endpoint fail.
@@ -241,7 +243,7 @@ func (d *fakeDevice) registerGen2(t *testing.T, mux *http.ServeMux) {
 		}
 		d.recordRPC(req.Method)
 		d.recordArgs(req.Method, string(req.Params))
-		if req.Method == d.failMethod {
+		if req.Method == d.failMethod || (d.failArgs != "" && strings.Contains(string(req.Params), d.failArgs)) {
 			writeJSON(w, map[string]any{
 				"id": req.ID, "jsonrpc": "2.0",
 				"error": map[string]any{"code": 500, "message": "refused"},
@@ -255,6 +257,10 @@ func (d *fakeDevice) registerGen2(t *testing.T, mux *http.ServeMux) {
 				"id": "shellyplus1-aabbccddeeff", "mac": fakeMAC, "gen": 2,
 				"model": "SNSW-001P16EU", "fw_id": "20230101-000000",
 			}
+		case "WiFi.GetConfig":
+			result = map[string]any{"sta": map[string]any{"ssid": "HomeNet", "is_open": false, "enable": true, "ipv4mode": "dhcp"}}
+		case "WiFi.GetStatus":
+			result = map[string]any{"sta_ip": "192.0.2.77", "status": "got ip", "ssid": "HomeNet"}
 		case "Shelly.Reboot":
 			if d.rebootErr {
 				writeJSON(w, map[string]any{

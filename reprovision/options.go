@@ -252,6 +252,11 @@ type OnboardOptions struct {
 	// suffix always needs the identity read, to confirm the target before
 	// writing.
 	Generation int
+	// DisableAP turns an RPC device's access point off once the device has
+	// answered on the LAN. It is done there, after the join is confirmed, so
+	// a device that failed to join can still be reached at its access point.
+	// Gen1 devices leave access point mode by themselves.
+	DisableAP bool
 }
 
 // OnboardResult reports an Onboard.
@@ -262,7 +267,8 @@ type OnboardResult struct {
 	// MAC is the device's MAC address, upper-case without separators.
 	MAC string
 	// Note explains a partial success: the WiFi settings were written but the
-	// device was not found on the LAN afterwards.
+	// device was not found on the LAN afterwards, or it joined but its access
+	// point could not be turned off.
 	Note string
 	// SeenVia says how the device was seen on the LAN: "probe" (it answered a
 	// unicast HTTP request), "mdns" or "coiot" (it announced itself but this
@@ -274,6 +280,8 @@ type OnboardResult struct {
 	// unicast. False with a non-empty Address means the device announced itself
 	// on the LAN but this host has no route to it.
 	Reachable bool
+	// APDisabled reports that DisableAP turned the access point off.
+	APDisabled bool
 }
 
 // InspectOptions configures Inspect. APSSID is required.
@@ -306,6 +314,8 @@ type runner struct {
 	// apAddr is where the device answers while the host is on its access point.
 	apAddr   string
 	apHostIP string
+	// disableAP is OnboardOptions.DisableAP.
+	disableAP bool
 
 	apReadyTimeout  time.Duration
 	lanSettleDelay  time.Duration

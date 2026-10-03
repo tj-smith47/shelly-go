@@ -299,3 +299,47 @@ func TestOnboard_DeviceGenerationWins(t *testing.T) {
 		t.Errorf("result = %+v, want the device's generation 2 used for the WiFi write", res)
 	}
 }
+
+func TestOnboard_DisableAP(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		gen        int
+		static     bool
+		fail       bool
+		wantOff    bool
+		wantCalled bool
+	}{
+		"RPC device reached on the LAN":       {gen: 2, static: true, wantOff: true, wantCalled: true},
+		"RPC device seen but not reachable":   {gen: 2},
+		"Gen1 leaves access point mode alone": {gen: 1, static: true},
+		"the device refuses":                  {gen: 2, static: true, fail: true, wantCalled: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			d := newFakeDevice(t, tc.gen)
+			r := testRunner(t, homeScanner(), d.addr())
+			r.disableAP = true
+			n := Network{}
+			if tc.static {
+				n = Network{StaticIP: d.addr(), Gateway: "192.0.2.1", Netmask: "255.255.255.0"}
+			} else {
+				r.scanPresence = func(context.Context, string, string, bool, time.Duration) (addr, via string, err error) {
+					return "192.0.2.9", viaMDNS, nil
+				}
+			}
+			if tc.fail {
+				d.failArgs = `"ap"`
+			}
+			res, err := r.onboard(context.Background(), fakeAPSSID, &n, 0)
+			if err != nil {
+				t.Fatalf("onboard: %v", err)
+			}
+			if res.APDisabled != tc.wantOff || (res.Note != "") != tc.fail {
+				t.Errorf("result = %+v, want APDisabled=%v", res, tc.wantOff)
+			}
+			if got := strings.Contains(d.args("WiFi.SetConfig"), `"ap":{"enable":false}`); got != tc.wantCalled {
+				t.Errorf("access point write sent = %v, want %v (last WiFi.SetConfig %s)", got, tc.wantCalled, d.args("WiFi.SetConfig"))
+			}
+		})
+	}
+}

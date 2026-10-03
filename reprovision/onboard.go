@@ -2,6 +2,7 @@ package reprovision
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 
@@ -64,6 +65,7 @@ func Onboard(ctx context.Context, opts *OnboardOptions) (*OnboardResult, error) 
 		return nil, fmt.Errorf("%w: APSSID is required", types.ErrInvalidParam)
 	}
 	r := newRunner(opts.Scanner, opts.Logger, opts.OnStep, opts.APHostIP)
+	r.disableAP = opts.DisableAP
 	return r.onboard(ctx, opts.APSSID, &opts.Network, opts.Generation)
 }
 
@@ -128,7 +130,25 @@ func (r *runner) onboard(
 	res.Address = conf.addr
 	res.Reachable = conf.writeable
 	res.SeenVia = conf.via
+	if r.disableAP && res.Generation != 1 && conf.writeable {
+		r.step("turning the device's access point off")
+		if apErr := r.disableGen2AP(ctx, conf.addr, conf.bindIface); apErr != nil {
+			res.Note = fmt.Sprintf("joined but its access point is still on: %v", apErr)
+		} else {
+			res.APDisabled = true
+		}
+	}
 	return res, nil
+}
+
+// disableGen2AP turns off an RPC device's access point over its LAN address.
+// A Gen1 device has no such step: it leaves access point mode by itself when
+// it joins a network.
+func (r *runner) disableGen2AP(ctx context.Context, addr, iface string) error {
+	return r.withGen2(ctx, addr, iface, func(client *rpc.Client, _ string) error {
+		_, err := client.Call(ctx, "WiFi.SetConfig", json.RawMessage(`{"config":{"ap":{"enable":false}}}`))
+		return err
+	})
 }
 
 // configureWiFiAtAP writes the station settings to the device at its access

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -406,11 +407,22 @@ func (r *runner) scanForMAC(
 		r.log.Debug("rejoin: presence sweep error", "error", err)
 	}
 	for i := range devices {
-		if normalizeMAC(devices[i].MACAddress) == want {
+		if announcesMAC(&devices[i], want) {
 			return devices[i].Address.String()
 		}
 	}
 	return ""
+}
+
+// announcesMAC reports whether a discovered device is the one with MAC want.
+// A Gen1 mDNS name carries only the last six digits of the MAC, so a device
+// with no full MAC is matched on that suffix of its ID.
+func announcesMAC(d *discovery.DiscoveredDevice, want string) bool {
+	if got := normalizeMAC(d.MACAddress); got != "" {
+		return got == want
+	}
+	suffix := macSuffixFromAPSSID(d.ID)
+	return len(suffix) >= 6 && strings.HasSuffix(want, suffix)
 }
 
 // normalizeMAC returns mac as 12 upper-case hex digits with separators removed,

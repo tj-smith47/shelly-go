@@ -199,6 +199,8 @@ func main() {
 
 For a network that takes no passphrase, set `Network: reprovision.Network{SSID: "GuestNet", Open: true}`;
 no passphrase is then required or looked up on the host.
+An RPC device keeps its open access point on after it joins a network; set `DisableAP: true`
+to turn it off once the device has answered on the LAN (`OnboardResult.APDisabled` reports it).
 
 `reprovision.Restore` applies a `backup.Backup` the same way: it writes only the
 WiFi settings at the access point, then the full configuration once the device

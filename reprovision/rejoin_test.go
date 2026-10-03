@@ -355,3 +355,23 @@ func TestPresenceSweeperConstructors(t *testing.T) {
 		t.Error("newCoIoTSweeper does not build a CoIoT discoverer")
 	}
 }
+
+// The shapes each discovery protocol really reports: a full MAC, an RPC mDNS
+// record, and a Gen1 mDNS record that names only the last six digits.
+func TestAnnouncesMAC(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		dev  discovery.DiscoveredDevice
+		want bool
+	}{
+		"full MAC":                 {discovery.DiscoveredDevice{MACAddress: "44:17:93:cc:da:ec"}, true},
+		"another full MAC":         {discovery.DiscoveredDevice{MACAddress: "441793CCDAED", ID: "shellypluswdus-441793ccdaec"}, false},
+		"Gen1 mDNS suffix":         {discovery.DiscoveredDevice{ID: "shellybulbduo-CCDAEC"}, true},
+		"another Gen1 mDNS suffix": {discovery.DiscoveredDevice{ID: "shellybulbduo-D12965"}, false},
+		"no MAC and no suffix":     {discovery.DiscoveredDevice{ID: "shellybulbduo"}, false},
+	} {
+		if got := announcesMAC(&tc.dev, "441793CCDAEC"); got != tc.want {
+			t.Errorf("%s: got %v, want %v", name, got, tc.want)
+		}
+	}
+}

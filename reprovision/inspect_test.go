@@ -61,8 +61,12 @@ func TestInspect_Gen2(t *testing.T) {
 	if err != nil {
 		t.Fatalf("inspect: %v", err)
 	}
-	if insp.Generation != 2 || insp.MAC != fakeMAC || insp.Model != "SNSW-001P16EU" || insp.StaSSID != "" {
-		t.Errorf("inspection = %+v, want Gen2 identity only", *insp)
+	want := Inspection{
+		Generation: 2, MAC: fakeMAC, Model: "SNSW-001P16EU", Firmware: insp.Firmware,
+		StaSSID: "HomeNet", StaKeySet: true, Ipv4Method: "dhcp", StaIP: "192.0.2.77", StaConnected: true,
+	}
+	if *insp != want {
+		t.Errorf("inspection = %+v, want %+v", *insp, want)
 	}
 }
 
@@ -86,5 +90,15 @@ func TestInspect_UnreachableDevice(t *testing.T) {
 	_, err := testRunner(t, homeScanner(), refusingAddr(t)).inspect(context.Background(), fakeAPSSID)
 	if err == nil || !strings.Contains(err.Error(), "identify device") {
 		t.Errorf("err = %v, want an identify failure", err)
+	}
+}
+
+func TestInspect_Gen2WiFiReadFailureKeepsIdentity(t *testing.T) {
+	t.Parallel()
+	d := newFakeDevice(t, 2)
+	d.failMethod = "WiFi.GetConfig"
+	insp, err := testRunner(t, homeScanner(), d.addr()).inspect(context.Background(), fakeAPSSID)
+	if err == nil || insp == nil || insp.MAC != fakeMAC || insp.StaSSID != "" {
+		t.Errorf("inspection = %+v err = %v, want the identity with an error", insp, err)
 	}
 }

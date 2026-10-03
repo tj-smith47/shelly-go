@@ -580,3 +580,17 @@ func TestMDNSDiscoverer_ParseResponse_DefaultGeneration(t *testing.T) {
 		t.Errorf("Generation = %v, want Gen2 (default)", device.Generation)
 	}
 }
+
+func TestMACFromInstanceID(t *testing.T) {
+	for id, want := range map[string]string{
+		"shellypluswdus-441793ccdaec": "441793CCDAEC",
+		"ShellyPlus1-7C87CE5582FC":    "7C87CE5582FC",
+		"shellybulbduo-D12965":        "",
+		"shellyplus1":                 "",
+		"shellyplus1-441793ccdaeg":    "",
+	} {
+		if got := macFromInstanceID(id); got != want {
+			t.Errorf("macFromInstanceID(%q) = %q, want %q", id, got, want)
+		}
+	}
+}

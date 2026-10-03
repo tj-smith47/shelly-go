@@ -246,8 +246,24 @@ func (m *MDNSDiscoverer) parseResponse(data []byte) *DiscoveredDevice {
 		return nil
 	}
 
-	device.MACAddress = device.ID
+	device.MACAddress = macFromInstanceID(device.ID)
 	return device
+}
+
+// macFromInstanceID returns the MAC a Shelly mDNS instance name ends with
+// ("shellyplus1-441793ccdaec" gives "441793CCDAEC"), or "" when the name ends
+// in something else, such as the six-digit suffix of a Gen1 name.
+func macFromInstanceID(id string) string {
+	token := strings.ToUpper(id[strings.LastIndex(id, "-")+1:])
+	if len(token) != 12 {
+		return ""
+	}
+	for _, c := range token {
+		if (c < '0' || c > '9') && (c < 'A' || c > 'F') {
+			return ""
+		}
+	}
+	return token
 }
 
 // parseResourceRecord parses a single DNS resource record and updates the device.
