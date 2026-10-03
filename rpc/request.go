@@ -20,16 +20,20 @@ type Request struct {
 	Params  json.RawMessage `json:"params,omitempty"`
 }
 
-// AuthData contains authentication credentials for RPC requests.
+// AuthData is the auth object of an RPC request frame (see DigestAuth). Its
+// JSON form is the one Shelly documents: realm, username, nonce (echoing the
+// challenge's JSON type), cnonce (a number), nc (8 hex digits), response and
+// algorithm.
 type AuthData struct {
-	Username  string `json:"username,omitempty"`
-	Password  string `json:"password,omitempty"`
-	Realm     string `json:"realm,omitempty"`
-	Nonce     string `json:"nonce,omitempty"`
-	CNonce    string `json:"cnonce,omitempty"`
-	Algorithm string `json:"algorithm,omitempty"`
-	Response  string `json:"response,omitempty"`
-	NC        int    `json:"nc,omitempty"`
+	Username string `json:"username,omitempty"`
+	// Password is never sent; a device takes no password in a frame.
+	Password  string          `json:"-"`
+	Realm     string          `json:"realm,omitempty"`
+	NC        string          `json:"nc,omitempty"`
+	Algorithm string          `json:"algorithm,omitempty"`
+	Response  string          `json:"response,omitempty"`
+	Nonce     json.RawMessage `json:"nonce,omitempty"`
+	CNonce    uint32          `json:"cnonce,omitempty"`
 }
 
 // RequestBuilder builds JSON-RPC requests with automatic ID management.

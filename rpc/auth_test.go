@@ -1,12 +1,19 @@
 package rpc
 
 import (
-	"crypto/md5" //nolint:gosec // G501: MD5 is required by HTTP Digest Auth RFC 7616
-	"crypto/sha256"
-	"encoding/hex"
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/tj-smith47/shelly-go/internal/authtest"
+	"github.com/tj-smith47/shelly-go/types"
 )
+
+const testPassword = "s3cret"
 
 func TestAuthMethod_String(t *testing.T) {
 	tests := []struct {
@@ -29,533 +36,192 @@ func TestAuthMethod_String(t *testing.T) {
 	}
 }
 
-func TestBasicAuth(t *testing.T) {
+func TestBasicAuth_PasswordNeverSent(t *testing.T) {
 	auth := BasicAuth("admin", "password")
-
-	if auth == nil {
-		t.Fatal("BasicAuth() returned nil")
+	if auth.Username != "admin" || auth.Password != "password" {
+		t.Fatalf("BasicAuth() = %+v", auth)
 	}
-
-	if auth.Username != "admin" {
-		t.Errorf("Username = %v, want admin", auth.Username)
-	}
-
-	if auth.Password != "password" {
-		t.Errorf("Password = %v, want password", auth.Password)
-	}
-}
-
-func TestDigestAuth(t *testing.T) {
-	auth, err := DigestAuth(
-		"admin",
-		"password",
-		"shelly",
-		"abc123",
-		"POST",
-		"/rpc",
-		"MD5",
-	)
+	data, err := json.Marshal(auth)
 	if err != nil {
-		t.Fatalf("DigestAuth() error = %v", err)
+		t.Fatal(err)
 	}
-
-	if auth == nil {
-		t.Fatal("DigestAuth() returned nil")
-	}
-
-	if auth.Username != "admin" {
-		t.Errorf("Username = %v, want admin", auth.Username)
-	}
-
-	if auth.Realm != "shelly" {
-		t.Errorf("Realm = %v, want shelly", auth.Realm)
-	}
-
-	if auth.Nonce != "abc123" {
-		t.Errorf("Nonce = %v, want abc123", auth.Nonce)
-	}
-
-	if auth.CNonce == "" {
-		t.Error("CNonce should not be empty")
-	}
-
-	if auth.NC != 1 {
-		t.Errorf("NC = %v, want 1", auth.NC)
-	}
-
-	if auth.Algorithm != "MD5" {
-		t.Errorf("Algorithm = %v, want MD5", auth.Algorithm)
-	}
-
-	if auth.Response == "" {
-		t.Error("Response should not be empty")
+	if strings.Contains(string(data), "password") {
+		t.Errorf("auth object %s carries the password", data)
 	}
 }
 
-func TestDigestAuth_SHA256(t *testing.T) {
-	auth, err := DigestAuth(
-		"admin",
-		"password",
-		"shelly",
-		"abc123",
-		"POST",
-		"/rpc",
-		"SHA-256",
-	)
-	if err != nil {
-		t.Fatalf("DigestAuth() error = %v", err)
+// TestDigestAuth_DeviceAccepts checks DigestAuth's frame against a verifier
+// written from Shelly's documentation, for both nonce types.
+func TestDigestAuth_DeviceAccepts(t *testing.T) {
+	nonces := map[string]any{
+		"string nonce (fw >= 2.0.0)": "AAAAAABnZWVrc2Zvcmdl",
+		"numeric nonce (fw < 2.0.0)": 1625214011,
 	}
-
-	if auth.Algorithm != "SHA-256" {
-		t.Errorf("Algorithm = %v, want SHA-256", auth.Algorithm)
-	}
-
-	// SHA-256 response should be 64 characters (256 bits in hex)
-	if len(auth.Response) != 64 {
-		t.Errorf("Response length = %v, want 64", len(auth.Response))
-	}
-}
-
-func TestCalculateHA1(t *testing.T) {
-	tests := []struct {
-		name      string
-		username  string
-		password  string
-		realm     string
-		algorithm string
-		wantLen   int
-	}{
-		{
-			name:      "MD5",
-			username:  "admin",
-			password:  "password",
-			realm:     "shelly",
-			algorithm: "MD5",
-			wantLen:   32, // MD5 is 128 bits = 32 hex chars
-		},
-		{
-			name:      "SHA-256",
-			username:  "admin",
-			password:  "password",
-			realm:     "shelly",
-			algorithm: "SHA-256",
-			wantLen:   64, // SHA-256 is 256 bits = 64 hex chars
-		},
-		{
-			name:      "empty algorithm defaults to MD5",
-			username:  "admin",
-			password:  "password",
-			realm:     "shelly",
-			algorithm: "",
-			wantLen:   32,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ha1 := CalculateHA1(tt.username, tt.password, tt.realm, tt.algorithm)
-
-			if len(ha1) != tt.wantLen {
-				t.Errorf("HA1 length = %v, want %v", len(ha1), tt.wantLen)
+	for name, nonce := range nonces {
+		t.Run(name, func(t *testing.T) {
+			auth, err := DigestAuth("", testPassword, authtest.Realm, nonce)
+			if err != nil {
+				t.Fatalf("DigestAuth() error = %v", err)
 			}
-
-			// Verify it's valid hex
-			if _, err := hex.DecodeString(ha1); err != nil {
-				t.Errorf("HA1 is not valid hex: %v", err)
+			frame, err := json.Marshal(auth)
+			if err != nil {
+				t.Fatal(err)
+			}
+			nc, err := authtest.FrameAuth(frame, authtest.Realm, nonce, testPassword)
+			if err != nil {
+				t.Fatalf("device rejects %s: %v", frame, err)
+			}
+			if nc != "00000001" {
+				t.Errorf("nc = %q, want 00000001", nc)
+			}
+			if err := ValidateAuthData(auth); err != nil {
+				t.Errorf("ValidateAuthData() = %v", err)
 			}
 		})
 	}
 }
 
-func TestCalculateHA1_Deterministic(t *testing.T) {
-	// Same inputs should always produce the same HA1
-	ha1_1 := CalculateHA1("admin", "password", "shelly", "MD5")
-	ha1_2 := CalculateHA1("admin", "password", "shelly", "MD5")
-
-	if ha1_1 != ha1_2 {
-		t.Error("HA1 calculation should be deterministic")
+func TestDigestAuth_RawMessageNonce(t *testing.T) {
+	auth, err := DigestAuth("admin", testPassword, authtest.Realm, json.RawMessage(`42`))
+	if err != nil {
+		t.Fatal(err)
 	}
+	frame, err := json.Marshal(auth)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := authtest.FrameAuth(frame, authtest.Realm, 42, testPassword); err != nil {
+		t.Errorf("device rejects %s: %v", frame, err)
+	}
+}
 
-	// Different inputs should produce different HA1
-	ha1_3 := CalculateHA1("admin", "different", "shelly", "MD5")
-	if ha1_1 == ha1_3 {
-		t.Error("Different passwords should produce different HA1")
+func TestDigestAuth_WrongPassword(t *testing.T) {
+	auth, err := DigestAuth("admin", "wrong", authtest.Realm, "n1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	frame, err := json.Marshal(auth)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := authtest.FrameAuth(frame, authtest.Realm, "n1", testPassword); err == nil {
+		t.Error("device accepted a frame built with the wrong password")
 	}
 }
 
 func TestDigestAuthFromHA1(t *testing.T) {
-	// Pre-calculate HA1
-	ha1 := CalculateHA1("admin", "password", "shelly", "MD5")
-
-	auth, err := DigestAuthFromHA1(
-		"admin",
-		ha1,
-		"shelly",
-		"abc123",
-		"POST",
-		"/rpc",
-		"MD5",
-	)
+	ha1 := CalculateHA1("admin", testPassword, authtest.Realm)
+	if ha1 != authtest.HA1(authtest.Realm, testPassword) {
+		t.Fatalf("CalculateHA1() = %s, want SHA256(admin:realm:password)", ha1)
+	}
+	auth, err := DigestAuthFromHA1("admin", ha1, authtest.Realm, "n2")
 	if err != nil {
-		t.Fatalf("DigestAuthFromHA1() error = %v", err)
+		t.Fatal(err)
 	}
-
-	if auth == nil {
-		t.Fatal("DigestAuthFromHA1() returned nil")
-	}
-
-	if auth.Username != "admin" {
-		t.Errorf("Username = %v, want admin", auth.Username)
-	}
-
-	if auth.Response == "" {
-		t.Error("Response should not be empty")
-	}
-
-	// Verify the response is the same as if we used DigestAuth directly
-	auth2, err := DigestAuth(
-		"admin",
-		"password",
-		"shelly",
-		"abc123",
-		"POST",
-		"/rpc",
-		"MD5",
-	)
+	frame, err := json.Marshal(auth)
 	if err != nil {
-		t.Fatalf("DigestAuth() error = %v", err)
+		t.Fatal(err)
 	}
-
-	// The responses won't be exactly the same because cnonce is random,
-	// but both should be valid 32-character hex strings for MD5
-	if len(auth.Response) != len(auth2.Response) {
-		t.Errorf("Response lengths differ: %v vs %v", len(auth.Response), len(auth2.Response))
+	if _, err := authtest.FrameAuth(frame, authtest.Realm, "n2", testPassword); err != nil {
+		t.Errorf("device rejects %s: %v", frame, err)
 	}
+}
 
-	if len(auth.Response) != 32 {
-		t.Errorf("Response length = %v, want 32", len(auth.Response))
+func TestDigestAuth_InvalidInput(t *testing.T) {
+	tests := map[string]struct {
+		nonce any
+		realm string
+	}{
+		"no realm":         {realm: "", nonce: "n"},
+		"empty nonce":      {realm: authtest.Realm, nonce: ""},
+		"object nonce":     {realm: authtest.Realm, nonce: map[string]int{"a": 1}},
+		"unmarshalable":    {realm: authtest.Realm, nonce: func() {}},
+		"bool nonce":       {realm: authtest.Realm, nonce: true},
+		"null nonce (nil)": {realm: authtest.Realm, nonce: nil},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			_, err := DigestAuth("admin", testPassword, tt.realm, tt.nonce)
+			if !errors.Is(err, types.ErrInvalidParam) {
+				t.Errorf("DigestAuth() error = %v, want ErrInvalidParam", err)
+			}
+		})
+	}
+}
+
+func TestDigestAuth_FreshCNonce(t *testing.T) {
+	a, err := DigestAuth("admin", testPassword, authtest.Realm, "n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := DigestAuth("admin", testPassword, authtest.Realm, "n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.CNonce == 0 || a.CNonce == b.CNonce {
+		t.Errorf("cnonces %d and %d, want two different non-zero values", a.CNonce, b.CNonce)
 	}
 }
 
 func TestValidateAuthData(t *testing.T) {
+	valid := func() *AuthData {
+		return &AuthData{
+			Username: "admin", Realm: authtest.Realm, Nonce: json.RawMessage(`"n"`),
+			CNonce: 7, NC: "00000001", Algorithm: AlgorithmSHA256, Response: "r",
+		}
+	}
 	tests := []struct {
 		auth    *AuthData
 		name    string
 		wantErr bool
 	}{
-		{
-			name:    "nil auth data",
-			auth:    nil,
-			wantErr: true,
-		},
-		{
-			name: "basic auth valid",
-			auth: &AuthData{
-				Username: "admin",
-				Password: "password",
-			},
-			wantErr: false,
-		},
-		{
-			name: "basic auth missing username",
-			auth: &AuthData{
-				Password: "password",
-			},
-			wantErr: true,
-		},
-		{
-			name: "basic auth missing password",
-			auth: &AuthData{
-				Username: "admin",
-			},
-			wantErr: true,
-		},
-		{
-			name: "digest auth valid",
-			auth: &AuthData{
-				Username:  "admin",
-				Realm:     "shelly",
-				Nonce:     "abc123",
-				CNonce:    "def456",
-				NC:        1,
-				Algorithm: "MD5",
-				Response:  "hash123",
-			},
-			wantErr: false,
-		},
-		{
-			name: "digest auth missing realm",
-			auth: &AuthData{
-				Username: "admin",
-				Nonce:    "abc123",
-				CNonce:   "def456",
-				NC:       1,
-				Response: "hash123",
-			},
-			wantErr: true,
-		},
-		{
-			name: "digest auth missing nonce",
-			auth: &AuthData{
-				Username: "admin",
-				Realm:    "shelly",
-				CNonce:   "def456",
-				NC:       1,
-				Response: "hash123",
-			},
-			wantErr: true,
-		},
-		{
-			name: "digest auth missing cnonce",
-			auth: &AuthData{
-				Username: "admin",
-				Realm:    "shelly",
-				Nonce:    "abc123",
-				NC:       1,
-				Response: "hash123",
-			},
-			wantErr: true,
-		},
-		{
-			name: "digest auth invalid nc",
-			auth: &AuthData{
-				Username: "admin",
-				Realm:    "shelly",
-				Nonce:    "abc123",
-				CNonce:   "def456",
-				NC:       0,
-				Response: "hash123",
-			},
-			wantErr: true,
-		},
+		{name: "nil", auth: nil, wantErr: true},
+		{name: "no username", auth: &AuthData{Password: "p"}, wantErr: true},
+		{name: "username and password", auth: &AuthData{Username: "admin", Password: "p"}},
+		{name: "username without password", auth: &AuthData{Username: "admin"}, wantErr: true},
+		{name: "documented frame", auth: valid()},
+		{name: "no realm", auth: func() *AuthData { a := valid(); a.Realm = ""; return a }(), wantErr: true},
+		{name: "no nonce", auth: func() *AuthData { a := valid(); a.Nonce = nil; return a }(), wantErr: true},
+		{name: "no cnonce", auth: func() *AuthData { a := valid(); a.CNonce = 0; return a }(), wantErr: true},
+		{name: "no nc", auth: func() *AuthData { a := valid(); a.NC = ""; return a }(), wantErr: true},
+		{name: "md5", auth: func() *AuthData { a := valid(); a.Algorithm = "MD5"; return a }(), wantErr: true},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateAuthData(tt.auth)
-
-			if (err != nil) != tt.wantErr {
+			if err := ValidateAuthData(tt.auth); (err != nil) != tt.wantErr {
 				t.Errorf("ValidateAuthData() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
 }
 
-func TestGenerateNonce(t *testing.T) {
-	nonce1, err := generateNonce()
+// TestNewHTTPClient_DigestAuth runs a call through a fake device that
+// requires the documented HTTP digest header.
+func TestNewHTTPClient_DigestAuth(t *testing.T) {
+	const nonce = "AAAAAABnZWVrc2Zvcmdl"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := authtest.HeaderAuth(r, authtest.Realm, nonce, testPassword); err != nil {
+			w.Header().Set("WWW-Authenticate", authtest.HeaderChallenge(authtest.Realm, nonce))
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_, _ = w.Write([]byte(`{"id":1,"result":{"ok":true}}`))
+	}))
+	defer srv.Close()
+
+	client, err := NewHTTPClient(srv.URL, WithDigestAuth("admin", testPassword))
 	if err != nil {
-		t.Fatalf("generateNonce() error = %v", err)
+		t.Fatal(err)
+	}
+	if _, err := client.Call(context.Background(), "Shelly.GetStatus", nil); err != nil {
+		t.Fatalf("Call() error = %v", err)
 	}
 
-	// Nonce should be 32 characters (16 bytes in hex)
-	if len(nonce1) != 32 {
-		t.Errorf("nonce length = %v, want 32", len(nonce1))
-	}
-
-	// Verify it's valid hex
-	if _, err := hex.DecodeString(nonce1); err != nil {
-		t.Errorf("nonce is not valid hex: %v", err)
-	}
-
-	// Generate another nonce and verify it's different
-	nonce2, err := generateNonce()
+	wrong, err := NewHTTPClient(srv.URL, WithDigestAuth("admin", "wrong"))
 	if err != nil {
-		t.Fatalf("generateNonce() error = %v", err)
+		t.Fatal(err)
 	}
-
-	if nonce1 == nonce2 {
-		t.Error("nonces should be unique")
-	}
-}
-
-func TestCalculateHash(t *testing.T) {
-	tests := []struct {
-		name      string
-		data      string
-		algorithm string
-		want      string
-	}{
-		{
-			name:      "MD5",
-			data:      "test",
-			algorithm: "MD5",
-			want:      calculateMD5("test"),
-		},
-		{
-			name:      "SHA-256",
-			data:      "test",
-			algorithm: "SHA-256",
-			want:      calculateSHA256("test"),
-		},
-		{
-			name:      "empty algorithm defaults to MD5",
-			data:      "test",
-			algorithm: "",
-			want:      calculateMD5("test"),
-		},
-		{
-			name:      "unknown algorithm defaults to MD5",
-			data:      "test",
-			algorithm: "UNKNOWN",
-			want:      calculateMD5("test"),
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := calculateHash(tt.data, tt.algorithm)
-
-			if got != tt.want {
-				t.Errorf("calculateHash() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestCalculateDigestResponse(t *testing.T) {
-	// Test with known values
-	response := calculateDigestResponse(
-		"admin",
-		"password",
-		"shelly",
-		"abc123",
-		"def456",
-		"POST",
-		"/rpc",
-		"MD5",
-	)
-
-	// Response should be 32 characters for MD5
-	if len(response) != 32 {
-		t.Errorf("response length = %v, want 32", len(response))
-	}
-
-	// Verify it's valid hex
-	if _, err := hex.DecodeString(response); err != nil {
-		t.Errorf("response is not valid hex: %v", err)
-	}
-
-	// Same inputs should produce same response
-	response2 := calculateDigestResponse(
-		"admin",
-		"password",
-		"shelly",
-		"abc123",
-		"def456",
-		"POST",
-		"/rpc",
-		"MD5",
-	)
-
-	if response != response2 {
-		t.Error("digest response calculation should be deterministic")
-	}
-}
-
-func TestCalculateDigestResponse_SHA256(t *testing.T) {
-	response := calculateDigestResponse(
-		"admin",
-		"password",
-		"shelly",
-		"abc123",
-		"def456",
-		"POST",
-		"/rpc",
-		"SHA-256",
-	)
-
-	// Response should be 64 characters for SHA-256
-	if len(response) != 64 {
-		t.Errorf("response length = %v, want 64", len(response))
-	}
-
-	// Verify it's valid hex
-	if _, err := hex.DecodeString(response); err != nil {
-		t.Errorf("response is not valid hex: %v", err)
-	}
-}
-
-// Helper functions for testing
-func calculateMD5(data string) string {
-	//nolint:gosec // G401: MD5 is required by HTTP Digest Auth RFC 7616
-	hash := md5.Sum([]byte(data))
-	return hex.EncodeToString(hash[:])
-}
-
-func calculateSHA256(data string) string {
-	hash := sha256.Sum256([]byte(data))
-	return hex.EncodeToString(hash[:])
-}
-
-func TestAuthDataJSONMarshaling(t *testing.T) {
-	// This test verifies that AuthData can be marshaled/unmarshaled correctly
-	// when included in a Request
-	req := &Request{
-		JSONRPC: "2.0",
-		ID:      1,
-		Method:  "Test",
-		Auth: &AuthData{
-			Username: "admin",
-			Password: "password",
-		},
-	}
-
-	data, err := req.MarshalJSON()
-	if err != nil {
-		t.Fatalf("MarshalJSON() error = %v", err)
-	}
-
-	// Verify the JSON contains the auth field
-	jsonStr := string(data)
-	if !strings.Contains(jsonStr, "auth") {
-		t.Error("marshaled JSON should contain auth field")
-	}
-
-	if !strings.Contains(jsonStr, "admin") {
-		t.Error("marshaled JSON should contain username")
-	}
-}
-
-func TestDigestAuth_DifferentMethods(t *testing.T) {
-	// Different HTTP methods should produce different responses
-	auth1, err := DigestAuth("admin", "password", "shelly", "abc123", "GET", "/rpc", "MD5")
-	if err != nil {
-		t.Fatalf("DigestAuth() error = %v", err)
-	}
-
-	auth2, err := DigestAuth("admin", "password", "shelly", "abc123", "POST", "/rpc", "MD5")
-	if err != nil {
-		t.Fatalf("DigestAuth() error = %v", err)
-	}
-
-	// Responses will differ due to random cnonce, but we can verify both are valid
-	if len(auth1.Response) != 32 {
-		t.Errorf("auth1 response length = %v, want 32", len(auth1.Response))
-	}
-
-	if len(auth2.Response) != 32 {
-		t.Errorf("auth2 response length = %v, want 32", len(auth2.Response))
-	}
-}
-
-func TestDigestAuth_DifferentURIs(t *testing.T) {
-	// Different URIs should produce different responses
-	auth1, err := DigestAuth("admin", "password", "shelly", "abc123", "POST", "/rpc", "MD5")
-	if err != nil {
-		t.Fatalf("DigestAuth() error = %v", err)
-	}
-
-	auth2, err := DigestAuth("admin", "password", "shelly", "abc123", "POST", "/settings", "MD5")
-	if err != nil {
-		t.Fatalf("DigestAuth() error = %v", err)
-	}
-
-	// Both should be valid
-	if len(auth1.Response) != 32 {
-		t.Errorf("auth1 response length = %v, want 32", len(auth1.Response))
-	}
-
-	if len(auth2.Response) != 32 {
-		t.Errorf("auth2 response length = %v, want 32", len(auth2.Response))
+	if _, err := wrong.Call(context.Background(), "Shelly.GetStatus", nil); !errors.Is(err, types.ErrAuth) {
+		t.Errorf("Call() with a wrong password error = %v, want ErrAuth", err)
 	}
 }

@@ -64,23 +64,13 @@ func main() {
 	transportOpts = append(transportOpts, transport.WithTimeout(10*time.Second))
 
 	if *user != "" && *pass != "" {
-		transportOpts = append(transportOpts, transport.WithAuth(*user, *pass))
+		transportOpts = append(transportOpts, transport.WithDigestAuth(*user, *pass))
 	}
 
 	httpTransport := transport.NewHTTP(transportURL, transportOpts...)
 
 	// Create RPC client
-	var client *rpc.Client
-	if *user != "" && *pass != "" {
-		auth := &rpc.AuthData{
-			Realm:    "shelly",
-			Username: *user,
-			Password: *pass,
-		}
-		client = rpc.NewClientWithAuth(httpTransport, auth)
-	} else {
-		client = rpc.NewClient(httpTransport)
-	}
+	client := rpc.NewClient(httpTransport)
 	defer client.Close()
 
 	// Create Gen2 device

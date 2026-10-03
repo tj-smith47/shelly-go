@@ -91,7 +91,7 @@
 //	// HTTP transport (most common)
 //	http := transport.NewHTTP("http://192.168.1.100",
 //	    transport.WithTimeout(30*time.Second),
-//	    transport.WithAuth("admin", "password"))
+//	    transport.WithDigestAuth("admin", "password")) // Gen2+; Gen1 uses WithAuth
 //
 //	// WebSocket transport for real-time communication
 //	ws := transport.NewWebSocket("ws://192.168.1.100/rpc")

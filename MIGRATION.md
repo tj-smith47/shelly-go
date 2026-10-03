@@ -120,14 +120,11 @@ POST /rpc: {"method":"Switch.SetConfig","params":{"id":0,"name":"Kitchen"}}
 transport.WithAuth("admin", "password") // Basic auth
 ```
 
-**Gen2+:** Digest Authentication with realm
+**Gen2+:** SHA-256 Digest Authentication (user `admin`, realm = device id),
+answered by the HTTP and WebSocket transports
 ```go
-auth := &rpc.AuthData{
-    Realm:    "shelly",
-    Username: "admin",
-    Password: "password",
-}
-client := rpc.NewClientWithAuth(transport, auth)
+t := transport.NewHTTP("192.168.1.100", transport.WithDigestAuth("admin", "password"))
+client := rpc.NewClient(t)
 ```
 
 ## Breaking Changes

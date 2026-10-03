@@ -17,6 +17,7 @@ type clientOptions struct {
 	username string
 	password string
 	timeout  time.Duration
+	digest   bool
 }
 
 func defaultClientOptions() *clientOptions {
@@ -32,11 +33,25 @@ func WithTimeout(timeout time.Duration) ClientOption {
 	}
 }
 
-// WithBasicAuth sets basic authentication credentials.
+// WithBasicAuth sets HTTP Basic authentication credentials.
+//
+// Deprecated: Gen2+ devices accept only digest authentication; use
+// WithDigestAuth.
 func WithBasicAuth(username, password string) ClientOption {
 	return func(o *clientOptions) {
 		o.username = username
 		o.password = password
+		o.digest = false
+	}
+}
+
+// WithDigestAuth sets the credentials the HTTP transport answers a Gen2+
+// device's digest challenge with (username "admin" on every Gen2+ device).
+func WithDigestAuth(username, password string) ClientOption {
+	return func(o *clientOptions) {
+		o.username = username
+		o.password = password
+		o.digest = true
 	}
 }
 
@@ -49,7 +64,7 @@ func WithBasicAuth(username, password string) ClientOption {
 //
 //	client, err := rpc.NewHTTPClient("192.168.1.100",
 //	    rpc.WithTimeout(30*time.Second),
-//	    rpc.WithBasicAuth("admin", "password"))
+//	    rpc.WithDigestAuth("admin", "password"))
 func NewHTTPClient(addr string, opts ...ClientOption) (*Client, error) {
 	options := defaultClientOptions()
 	for _, opt := range opts {
@@ -59,7 +74,10 @@ func NewHTTPClient(addr string, opts ...ClientOption) (*Client, error) {
 	// Build transport options
 	var transportOpts []transport.Option
 	transportOpts = append(transportOpts, transport.WithTimeout(options.timeout))
-	if options.username != "" {
+	switch {
+	case options.digest:
+		transportOpts = append(transportOpts, transport.WithDigestAuth(options.username, options.password))
+	case options.username != "":
 		transportOpts = append(transportOpts, transport.WithAuth(options.username, options.password))
 	}
 

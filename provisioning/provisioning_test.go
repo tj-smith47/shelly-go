@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
+	"github.com/tj-smith47/shelly-go/internal/authtest"
 	"github.com/tj-smith47/shelly-go/rpc"
 	"github.com/tj-smith47/shelly-go/transport"
+	"github.com/tj-smith47/shelly-go/types"
 )
 
 // mockTransport implements transport.Transport for testing.
@@ -177,46 +180,67 @@ func TestProvisioner_ConfigureAP_Error(t *testing.T) {
 	}
 }
 
-func TestProvisioner_SetAuth(t *testing.T) {
-	transport := &mockTransport{
+// setAuthDevice answers Shelly.GetDeviceInfo with deviceID and records the
+// params of Shelly.SetAuth.
+func setAuthDevice(deviceID string, got *map[string]any) *mockTransport {
+	return &mockTransport{
 		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-			method := req.GetMethod()
-			if method != "Shelly.SetAuth" {
-				t.Errorf("unexpected method: %s", method)
+			switch req.GetMethod() {
+			case "Shelly.GetDeviceInfo":
+				return jsonrpcResponse(`{"id":"` + deviceID + `","gen":2}`)
+			case "Shelly.SetAuth":
+				if err := json.Unmarshal(req.GetParams(), got); err != nil {
+					return nil, err
+				}
+				return jsonrpcResponse(`null`)
 			}
-			return jsonrpcResponse(`null`)
+			return nil, errTest
 		},
 	}
+}
 
-	client := rpc.NewClient(transport)
-	prov := New(client)
+// TestProvisioner_SetAuth checks the Shelly.SetAuth params against the
+// documented shape: user admin, realm the device id, ha1 SHA256(user:realm:password).
+func TestProvisioner_SetAuth(t *testing.T) {
+	var got map[string]any
+	prov := New(rpc.NewClient(setAuthDevice(authtest.Realm, &got)))
 
 	enable := true
-	err := prov.SetAuth(context.Background(), &AuthConfig{
-		Enable:   &enable,
-		User:     "admin",
-		Password: "secret",
-	})
-	if err != nil {
-		t.Errorf("SetAuth() error = %v", err)
+	if err := prov.SetAuth(context.Background(), &AuthConfig{Enable: &enable, Password: "secret"}); err != nil {
+		t.Fatalf("SetAuth() error = %v", err)
+	}
+	want := map[string]any{"user": "admin", "realm": authtest.Realm, "ha1": authtest.HA1(authtest.Realm, "secret")}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Shelly.SetAuth params = %v, want %v", got, want)
 	}
 }
 
 func TestProvisioner_SetAuth_Disable(t *testing.T) {
-	transport := &mockTransport{
-		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
-			_ = req.GetMethod()
-			return jsonrpcResponse(`null`)
-		},
-	}
-
-	client := rpc.NewClient(transport)
-	prov := New(client)
+	var got map[string]any
+	prov := New(rpc.NewClient(setAuthDevice(authtest.Realm, &got)))
 
 	enable := false
-	err := prov.SetAuth(context.Background(), &AuthConfig{Enable: &enable})
-	if err != nil {
-		t.Errorf("SetAuth() error = %v", err)
+	if err := prov.SetAuth(context.Background(), &AuthConfig{Enable: &enable}); err != nil {
+		t.Fatalf("SetAuth() error = %v", err)
+	}
+	want := map[string]any{"user": "admin", "realm": authtest.Realm, "ha1": nil}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Shelly.SetAuth params = %v, want %v", got, want)
+	}
+}
+
+func TestProvisioner_SetAuth_Invalid(t *testing.T) {
+	var got map[string]any
+	err := New(rpc.NewClient(setAuthDevice(authtest.Realm, &got))).SetAuth(context.Background(), &AuthConfig{})
+	if !errors.Is(err, types.ErrInvalidParam) {
+		t.Errorf("SetAuth() without a password error = %v, want ErrInvalidParam", err)
+	}
+	err = New(rpc.NewClient(setAuthDevice("", &got))).SetAuth(context.Background(), &AuthConfig{Password: "p"})
+	if !errors.Is(err, types.ErrInvalidResponse) {
+		t.Errorf("SetAuth() with no device id error = %v, want ErrInvalidResponse", err)
+	}
+	if got != nil {
+		t.Errorf("Shelly.SetAuth was called with %v", got)
 	}
 }
 

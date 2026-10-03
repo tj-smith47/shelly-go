@@ -93,11 +93,11 @@
 //
 // # Authentication
 //
-// Authentication is handled by the underlying transport. Configure
-// authentication options when creating the transport:
+// Authentication is handled by the underlying transport. Gen2+ devices use
+// SHA-256 digest authentication, which the HTTP and WebSocket transports
+// answer when given the password:
 //
 //	httpTransport := transport.NewHTTP("http://192.168.1.100",
-//		transport.WithAuth("admin", "password"),
 //		transport.WithDigestAuth("admin", "password"))
 //
 //	client := rpc.NewClient(httpTransport)

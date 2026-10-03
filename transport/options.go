@@ -4,6 +4,8 @@ import (
 	"crypto/tls"
 	"net/http"
 	"time"
+
+	"github.com/tj-smith47/shelly-go/internal/digest"
 )
 
 // Option is a function that configures a transport.
@@ -88,7 +90,10 @@ func WithAuth(username, password string) Option {
 	}
 }
 
-// WithDigestAuth sets digest authentication credentials.
+// WithDigestAuth sets the credentials the HTTP and WebSocket transports
+// answer a Gen2+ device's SHA-256 digest challenge with. username is "admin"
+// on every Gen2+ device and may be left empty. The device's nonce is reused
+// for later requests, and a fresh challenge is answered once per request.
 func WithDigestAuth(username, password string) Option {
 	return func(o *options) {
 		o.authType = authTypeDigest
@@ -201,6 +206,15 @@ func WithCoAPPort(port int) Option {
 	return func(o *options) {
 		o.coapPort = port
 	}
+}
+
+// digestSession returns a digest session for the configured credentials, or
+// nil when digest auth is not configured.
+func (o *options) digestSession() *digest.Session {
+	if o.authType != authTypeDigest {
+		return nil
+	}
+	return digest.NewSession(o.username, o.password)
 }
 
 // applyOptions applies option functions to an options struct.

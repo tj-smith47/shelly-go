@@ -3,13 +3,16 @@ package factory
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/tj-smith47/shelly-go/discovery"
+	"github.com/tj-smith47/shelly-go/internal/authtest"
 	"github.com/tj-smith47/shelly-go/types"
 )
 
@@ -146,6 +149,37 @@ func TestFromAddress_WithAuth(t *testing.T) {
 
 	if device == nil {
 		t.Error("device should not be nil")
+	}
+}
+
+// TestFromAddress_Gen2DigestAuth calls a fake Gen2+ device that requires the
+// documented SHA-256 digest header, and checks no password goes in the body.
+func TestFromAddress_Gen2DigestAuth(t *testing.T) {
+	const nonce = "AAAAAABnZWVrc2Zvcmdl"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil || strings.Contains(string(body), "password") {
+			t.Errorf("request body %s carries the password", body)
+		}
+		if _, err := authtest.HeaderAuth(r, authtest.Realm, nonce, "password"); err != nil {
+			w.Header().Set("WWW-Authenticate", authtest.HeaderChallenge(authtest.Realm, nonce))
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_, _ = w.Write([]byte(`{"id":1,"result":{}}`))
+	}))
+	defer server.Close()
+
+	device, err := FromAddress(server.URL, WithGeneration(types.Gen2), WithAuth("admin", "password"))
+	if err != nil {
+		t.Fatalf("FromAddress() error = %v", err)
+	}
+	gen2Device, ok := device.(*Gen2Device)
+	if !ok {
+		t.Fatalf("device is %T, want *Gen2Device", device)
+	}
+	if _, err := gen2Device.Client().Call(context.Background(), "Shelly.GetStatus", nil); err != nil {
+		t.Fatalf("Call() error = %v", err)
 	}
 }
 

@@ -254,21 +254,14 @@ func createGen2Device(address string, generation types.Generation, options *Opti
 		transportOpts = append(transportOpts, transport.WithRetry(options.MaxRetries, options.RetryDelay))
 	}
 
-	t := transport.NewHTTP(address, transportOpts...)
-
-	var client *rpc.Client
+	// Gen2+ devices accept only digest auth, answered per request by the
+	// transport; a password in the request frame is never accepted.
 	if options.Username != "" && options.Password != "" {
-		auth := &rpc.AuthData{
-			Realm:    "shelly",
-			Username: options.Username,
-			Password: options.Password,
-		}
-		client = rpc.NewClientWithAuth(t, auth)
-	} else {
-		client = rpc.NewClient(t)
+		transportOpts = append(transportOpts, transport.WithDigestAuth(options.Username, options.Password))
 	}
 
-	device := gen2.NewDevice(client)
+	t := transport.NewHTTP(address, transportOpts...)
+	device := gen2.NewDevice(rpc.NewClient(t))
 
 	return &Gen2Device{
 		Device:     device,

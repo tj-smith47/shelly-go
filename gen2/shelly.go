@@ -234,25 +234,37 @@ func (s *Shelly) Update(ctx context.Context, params *UpdateParams) error {
 	return err
 }
 
-// SetAuthParams contains parameters for setting authentication.
+// SetAuthParams contains the parameters of Shelly.SetAuth.
 type SetAuthParams struct {
-	// User is the username
+	// User must be "admin", the only user a Gen2+ device has.
 	User string `json:"user,omitempty"`
 
-	// Realm is the authentication realm
+	// Realm must be the device id.
 	Realm string `json:"realm,omitempty"`
 
-	// HA1 is the pre-calculated HA1 hash (username:realm:password)
-	HA1 string `json:"ha1,omitempty"`
+	// HA1 is SHA256("user:realm:password") in hex (see rpc.CalculateHA1).
+	// Empty disables authentication: it is sent as null.
+	HA1 string `json:"ha1"`
 }
 
-// SetAuth configures device authentication.
+// MarshalJSON sends an empty HA1 as null, which is how Shelly.SetAuth turns
+// authentication off.
+func (p SetAuthParams) MarshalJSON() ([]byte, error) {
+	type plain SetAuthParams
+	var ha1 *string
+	if p.HA1 != "" {
+		ha1 = &p.HA1
+	}
+	return json.Marshal(struct {
+		HA1 *string `json:"ha1"`
+		plain
+	}{HA1: ha1, plain: plain(p)})
+}
+
+// SetAuth configures device authentication through Shelly.SetAuth.
 //
-// This sets the username and password for the device. After calling this,
-// all subsequent requests must include authentication.
-//
-// Note: The HA1 parameter should be calculated as:
-// MD5(username:realm:password)
+// After authentication is enabled every request must answer the device's
+// SHA-256 digest challenge (see transport.WithDigestAuth).
 func (s *Shelly) SetAuth(ctx context.Context, params *SetAuthParams) error {
 	_, err := s.client.Call(ctx, "Shelly.SetAuth", params)
 	return err

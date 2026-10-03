@@ -22,9 +22,6 @@ package transport
 //   http.go:110   doCall (87%)                        -> buildRequest error path
 //   http.go:161   buildRPCRequest (87.5%)             -> no-scheme URL  marshal fail is already covered
 //   http.go:198   buildRESTRequest (80%)              -> invalid URL path
-//   http.go:246   applyDigestAuth (84.4%)             -> no-auth-header, challenge-req-error paths
-//   http.go:344   generateCNonce (75%)                -> crypto/rand always succeeds; fallback is dead
-//   http.go:357   calculateDigestResponse (85.7%)     -> no-qop branch
 
 import (
 	"context"
@@ -878,123 +875,6 @@ func TestHTTP_buildRESTRequest_BadURL(t *testing.T) {
 	_, err := h.buildRESTRequest(context.Background(), "/relay/0")
 	if err == nil {
 		t.Error("buildRESTRequest() with bad base URL = nil, want error")
-	}
-}
-
-func TestHTTP_applyDigestAuth_ChallengeRequestError(t *testing.T) {
-	// Use a server that immediately closes the connection so the challenge
-	// HTTP request fails entirely.
-	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hj, ok := w.(http.Hijacker)
-		if !ok {
-			http.Error(w, "no hijack", 500)
-			return
-		}
-		conn, _, _ := hj.Hijack()
-		conn.Close() // abrupt close forces client-side error
-	}))
-	defer svr.Close()
-
-	h := NewHTTP(svr.URL, WithDigestAuth("user", "pass"))
-
-	// Build a dummy request pointing to the closing server.
-	req, err := http.NewRequestWithContext(context.Background(), "GET", svr.URL+"/rpc", http.NoBody)
-	if err != nil {
-		t.Fatalf("NewRequestWithContext: %v", err)
-	}
-
-	// applyDigestAuth is called via applyAuth.
-	// Directly invoke the method under test.
-	err = h.applyDigestAuth(req)
-	if err == nil {
-		t.Error("applyDigestAuth() error = nil, want error from challenge request failure")
-	}
-}
-
-func TestHTTP_applyDigestAuth_NoWWWAuthHeader(t *testing.T) {
-	// Server responds 401 but with no WWW-Authenticate header.
-	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusUnauthorized)
-	}))
-	defer svr.Close()
-
-	h := NewHTTP(svr.URL, WithDigestAuth("user", "pass"))
-	req, _ := http.NewRequestWithContext(context.Background(), "GET", svr.URL+"/rpc", http.NoBody)
-
-	err := h.applyDigestAuth(req)
-	if err == nil {
-		t.Error("applyDigestAuth() error = nil, want 'no digest challenge' error")
-	}
-	if !strings.Contains(err.Error(), "no digest challenge") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestHTTP_applyDigestAuth_WWWAuthNotDigest(t *testing.T) {
-	// Server responds 401 with a non-Digest WWW-Authenticate header.
-	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("WWW-Authenticate", `Bearer realm="example"`)
-		w.WriteHeader(http.StatusUnauthorized)
-	}))
-	defer svr.Close()
-
-	h := NewHTTP(svr.URL, WithDigestAuth("user", "pass"))
-	req, _ := http.NewRequestWithContext(context.Background(), "GET", svr.URL+"/rpc", http.NoBody)
-
-	err := h.applyDigestAuth(req)
-	if err == nil {
-		t.Error("applyDigestAuth() error = nil, want 'no digest challenge' error")
-	}
-}
-
-func TestHTTP_applyDigestAuth_NoRealmOrNonce(t *testing.T) {
-	// Server responds 401 with a Digest header that is missing realm/nonce.
-	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("WWW-Authenticate", `Digest algorithm="MD5"`)
-		w.WriteHeader(http.StatusUnauthorized)
-	}))
-	defer svr.Close()
-
-	h := NewHTTP(svr.URL, WithDigestAuth("user", "pass"))
-	req, _ := http.NewRequestWithContext(context.Background(), "GET", svr.URL+"/rpc", http.NoBody)
-
-	err := h.applyDigestAuth(req)
-	if err == nil {
-		t.Error("applyDigestAuth() error = nil, want 'invalid digest challenge' error")
-	}
-	if !strings.Contains(err.Error(), "invalid digest challenge") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestHTTP_applyDigestAuth_No401(t *testing.T) {
-	// Server responds 200: no auth required — applyDigestAuth returns nil.
-	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer svr.Close()
-
-	h := NewHTTP(svr.URL, WithDigestAuth("user", "pass"))
-	req, _ := http.NewRequestWithContext(context.Background(), "GET", svr.URL+"/rpc", http.NoBody)
-
-	if err := h.applyDigestAuth(req); err != nil {
-		t.Errorf("applyDigestAuth() error = %v, want nil (server said 200)", err)
-	}
-}
-
-func TestCalculateDigestResponse_NoQoP(t *testing.T) {
-	// Exercises the else branch: response = HASH(HA1:nonce:HA2)
-	response := calculateDigestResponse(
-		"user", "pass", "myrealm", "mynonce",
-		"", "", "", // nc, cnonce, qop empty → no-qop path
-		"GET", "/rpc", "MD5",
-	)
-	if response == "" {
-		t.Error("calculateDigestResponse() returned empty string")
-	}
-	// Verify length: MD5 hex is 32 chars.
-	if len(response) != 32 {
-		t.Errorf("response length = %d, want 32 (MD5 hex)", len(response))
 	}
 }
 

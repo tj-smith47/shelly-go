@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+
+	"github.com/tj-smith47/shelly-go/internal/authtest"
 )
 
 func TestNewShelly(t *testing.T) {
@@ -453,8 +455,8 @@ func TestShelly_SetAuth(t *testing.T) {
 
 	params := &SetAuthParams{
 		User:  "admin",
-		Realm: "shellypro1pm-1234567890ab",
-		HA1:   "5f4dcc3b5aa765d61d8327deb882cf99",
+		Realm: authtest.Realm,
+		HA1:   authtest.HA1(authtest.Realm, "password"),
 	}
 
 	err := shelly.SetAuth(context.Background(), params)
@@ -464,6 +466,34 @@ func TestShelly_SetAuth(t *testing.T) {
 
 	if mt.lastCall.method != "Shelly.SetAuth" {
 		t.Errorf("Called method = %v, want Shelly.SetAuth", mt.lastCall.method)
+	}
+}
+
+// TestSetAuthParams_Wire checks the documented Shelly.SetAuth params: ha1 is
+// the hex SHA-256, and null turns authentication off.
+func TestSetAuthParams_Wire(t *testing.T) {
+	ha1 := authtest.HA1(authtest.Realm, "password")
+	tests := []struct {
+		params SetAuthParams
+		want   string
+	}{
+		{
+			params: SetAuthParams{User: "admin", Realm: authtest.Realm, HA1: ha1},
+			want:   `{"ha1":"` + ha1 + `","user":"admin","realm":"` + authtest.Realm + `"}`,
+		},
+		{
+			params: SetAuthParams{User: "admin", Realm: authtest.Realm},
+			want:   `{"ha1":null,"user":"admin","realm":"` + authtest.Realm + `"}`,
+		},
+	}
+	for _, tt := range tests {
+		data, err := json.Marshal(&tt.params)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(data) != tt.want {
+			t.Errorf("Marshal = %s, want %s", data, tt.want)
+		}
 	}
 }
 

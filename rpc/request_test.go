@@ -385,45 +385,6 @@ func TestNewBatchRequest(t *testing.T) {
 	}
 }
 
-func TestAuthData_Fields(t *testing.T) {
-	auth := &AuthData{
-		Username:  "admin",
-		Password:  "password",
-		Realm:     "shelly",
-		Nonce:     "abc123",
-		CNonce:    "def456",
-		NC:        1,
-		Algorithm: "SHA-256",
-		Response:  "hash123",
-	}
-
-	// Test that all fields are set correctly
-	if auth.Username != "admin" {
-		t.Errorf("Username = %v, want admin", auth.Username)
-	}
-	if auth.Password != "password" {
-		t.Errorf("Password = %v, want password", auth.Password)
-	}
-	if auth.Realm != "shelly" {
-		t.Errorf("Realm = %v, want shelly", auth.Realm)
-	}
-	if auth.Nonce != "abc123" {
-		t.Errorf("Nonce = %v, want abc123", auth.Nonce)
-	}
-	if auth.CNonce != "def456" {
-		t.Errorf("CNonce = %v, want def456", auth.CNonce)
-	}
-	if auth.NC != 1 {
-		t.Errorf("NC = %v, want 1", auth.NC)
-	}
-	if auth.Algorithm != "SHA-256" {
-		t.Errorf("Algorithm = %v, want SHA-256", auth.Algorithm)
-	}
-	if auth.Response != "hash123" {
-		t.Errorf("Response = %v, want hash123", auth.Response)
-	}
-}
-
 func TestRequestBuilder_ConcurrentAccess(t *testing.T) {
 	rb := NewRequestBuilder()
 	done := make(chan bool)

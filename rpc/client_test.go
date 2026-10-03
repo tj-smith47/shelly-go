@@ -804,6 +804,15 @@ func TestWithBasicAuth(t *testing.T) {
 	}
 }
 
+func TestWithDigestAuth(t *testing.T) {
+	options := defaultClientOptions()
+	WithDigestAuth("admin", "secret")(options)
+
+	if options.username != "admin" || options.password != "secret" || !options.digest {
+		t.Errorf("options = %+v, want admin/secret with digest", options)
+	}
+}
+
 func TestDefaultClientOptions(t *testing.T) {
 	options := defaultClientOptions()
 

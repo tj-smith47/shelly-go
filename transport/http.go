@@ -3,10 +3,6 @@ package transport
 import (
 	"bytes"
 	"context"
-	"crypto/md5" //nolint:gosec // MD5 required by RFC 2617 HTTP Digest Authentication
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tj-smith47/shelly-go/internal/digest"
 	"github.com/tj-smith47/shelly-go/types"
 )
 
@@ -27,6 +24,7 @@ import (
 type HTTP struct {
 	client  *http.Client
 	opts    *options
+	digest  *digest.Session
 	baseURL string
 	mu      sync.RWMutex
 }
@@ -70,6 +68,7 @@ func NewHTTP(baseURL string, opts ...Option) *HTTP {
 		baseURL: normalizedURL,
 		client:  client,
 		opts:    options,
+		digest:  options.digestSession(),
 	}
 }
 
@@ -115,50 +114,30 @@ func (h *HTTP) Call(ctx context.Context, req RPCRequest) (json.RawMessage, error
 	return nil, fmt.Errorf("max retries exceeded: %w", lastErr)
 }
 
-// doCall performs a single HTTP call attempt.
+// doCall performs a single HTTP call attempt. With digest credentials, a 401
+// carrying a challenge (the first request, or a nonce the device no longer
+// accepts) is answered and the request sent once more; later requests reuse
+// the nonce with a rising nonce count.
 func (h *HTTP) doCall(ctx context.Context, rpcReq RPCRequest) (json.RawMessage, error) {
-	var req *http.Request
-	var err error
-
-	// Determine if this is a REST (Gen1) or RPC (Gen2+) call
-	if rpcReq.IsREST() {
-		req, err = h.buildRESTRequest(ctx, rpcReq.GetMethod())
-	} else {
-		req, err = h.buildRPCRequest(ctx, rpcReq)
-	}
-
+	body, status, challenge, err := h.send(ctx, rpcReq)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build request: %w", err)
+		return nil, err
 	}
 
-	// Apply authentication
-	if authErr := h.applyAuth(req); authErr != nil {
-		return nil, fmt.Errorf("failed to apply auth: %w", authErr)
+	if status == http.StatusUnauthorized && h.digest != nil && challenge != "" {
+		ch, chErr := digest.ParseHeader(challenge)
+		if chErr != nil {
+			return nil, fmt.Errorf("%w: %w", types.ErrAuth, chErr)
+		}
+		h.digest.Accept(ch)
+		body, status, _, err = h.send(ctx, rpcReq)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	// Add custom headers
-	h.mu.RLock()
-	for k, v := range h.opts.headers {
-		req.Header.Set(k, v)
-	}
-	h.mu.RUnlock()
-
-	// Execute request
-	resp, err := h.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("HTTP request failed: %w", RedactURLError(err))
-	}
-	defer resp.Body.Close()
-
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	// Check HTTP status
-	if resp.StatusCode >= 400 {
-		return nil, h.parseHTTPError(resp.StatusCode, body)
+	if status >= 400 {
+		return nil, h.parseHTTPError(status, body)
 	}
 
 	// Record the verbatim device response for any caller that installed a
@@ -170,6 +149,45 @@ func (h *HTTP) doCall(ctx context.Context, rpcReq RPCRequest) (json.RawMessage, 
 	// Return raw body for both RPC and REST
 	// The RPC client will handle parsing RPC responses
 	return body, nil
+}
+
+// send makes one request and returns the response body, status and
+// WWW-Authenticate header.
+func (h *HTTP) send(ctx context.Context, rpcReq RPCRequest) (body []byte, status int, challenge string, err error) {
+	var req *http.Request
+
+	// Determine if this is a REST (Gen1) or RPC (Gen2+) call
+	if rpcReq.IsREST() {
+		req, err = h.buildRESTRequest(ctx, rpcReq.GetMethod())
+	} else {
+		req, err = h.buildRPCRequest(ctx, rpcReq)
+	}
+	if err != nil {
+		return nil, 0, "", fmt.Errorf("failed to build request: %w", err)
+	}
+
+	if authErr := h.applyAuth(req); authErr != nil {
+		return nil, 0, "", fmt.Errorf("failed to apply auth: %w", authErr)
+	}
+
+	// Add custom headers
+	h.mu.RLock()
+	for k, v := range h.opts.headers {
+		req.Header.Set(k, v)
+	}
+	h.mu.RUnlock()
+
+	resp, err := h.client.Do(req)
+	if err != nil {
+		return nil, 0, "", fmt.Errorf("HTTP request failed: %w", RedactURLError(err))
+	}
+	defer resp.Body.Close()
+
+	body, err = io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, 0, "", fmt.Errorf("failed to read response: %w", err)
+	}
+	return body, resp.StatusCode, resp.Header.Get("WWW-Authenticate"), nil
 }
 
 // RedactURLError hides the query values of the URL quoted in a failed request's
@@ -262,184 +280,29 @@ func (h *HTTP) parseHTTPError(statusCode int, body []byte) error {
 	}
 }
 
-// applyAuth applies authentication to the request.
+// applyAuth applies authentication to the request. Digest auth adds a header
+// only once the device has issued a nonce; until then the request goes
+// without one and the device's 401 supplies the challenge.
 func (h *HTTP) applyAuth(req *http.Request) error {
 	h.mu.RLock()
-	defer h.mu.RUnlock()
+	authType := h.opts.authType
+	h.mu.RUnlock()
 
-	switch h.opts.authType {
+	switch authType {
 	case authTypeBasic:
 		req.SetBasicAuth(h.opts.username, h.opts.password)
 	case authTypeDigest:
-		// Digest auth requires a challenge-response
-		// For simplicity, we'll do a pre-emptive request to get the challenge
-		// In production, this should cache the challenge
-		return h.applyDigestAuth(req)
+		if h.digest == nil || !h.digest.Ready() {
+			return nil
+		}
+		header, err := h.digest.Header(req.Method, req.URL.RequestURI())
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Authorization", header)
 	}
 
 	return nil
-}
-
-// applyDigestAuth applies digest authentication.
-// This requires a two-step process:
-// 1. Make initial request to get WWW-Authenticate challenge
-// 2. Parse challenge and calculate response hash
-// 3. Retry request with Authorization header
-func (h *HTTP) applyDigestAuth(req *http.Request) error {
-	// Make initial request to get the challenge
-	challengeReq, err := http.NewRequestWithContext(req.Context(), req.Method, req.URL.String(), http.NoBody)
-	if err != nil {
-		return fmt.Errorf("create challenge request: %w", err)
-	}
-
-	resp, err := h.client.Do(challengeReq)
-	if err != nil {
-		return fmt.Errorf("challenge request: %w", RedactURLError(err))
-	}
-	resp.Body.Close()
-
-	if resp.StatusCode != http.StatusUnauthorized {
-		// No auth required or different error
-		return nil
-	}
-
-	// Parse WWW-Authenticate header
-	authHeader := resp.Header.Get("WWW-Authenticate")
-	if authHeader == "" || !strings.HasPrefix(strings.ToLower(authHeader), "digest ") {
-		return fmt.Errorf("no digest challenge in response")
-	}
-
-	// Parse challenge parameters
-	challenge := parseDigestChallenge(authHeader[7:]) // Skip "Digest "
-
-	realm := challenge["realm"]
-	nonce := challenge["nonce"]
-	qop := challenge["qop"]
-	algorithm := challenge["algorithm"]
-
-	// Normalize algorithm - default to MD5 if not specified
-	if algorithm == "" {
-		algorithm = "MD5"
-	}
-
-	if realm == "" || nonce == "" {
-		return fmt.Errorf("invalid digest challenge: missing realm or nonce")
-	}
-
-	// Generate client nonce
-	cnonce := generateCNonce()
-	nc := "00000001" // nonce count
-
-	// Calculate response
-	uri := req.URL.RequestURI()
-	response := calculateDigestResponse(
-		h.opts.username, h.opts.password,
-		realm, nonce, nc, cnonce, qop,
-		req.Method, uri, algorithm,
-	)
-
-	// Build Authorization header
-	authValue := fmt.Sprintf(
-		`Digest username=%q, realm=%q, nonce=%q, uri=%q, response=%q`,
-		h.opts.username, realm, nonce, uri, response,
-	)
-	if qop != "" {
-		authValue += fmt.Sprintf(`, qop=%s, nc=%s, cnonce=%q`, qop, nc, cnonce)
-	}
-	// Include algorithm in response if not MD5 (some servers require this)
-	if algorithm != "" && algorithm != "MD5" {
-		authValue += fmt.Sprintf(`, algorithm=%s`, algorithm)
-	}
-
-	req.Header.Set("Authorization", authValue)
-	return nil
-}
-
-// parseDigestChallenge parses a digest authentication challenge string.
-func parseDigestChallenge(challenge string) map[string]string {
-	result := make(map[string]string)
-
-	// Split by comma, handling quoted values
-	parts := strings.Split(challenge, ",")
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		idx := strings.Index(part, "=")
-		if idx == -1 {
-			continue
-		}
-
-		key := strings.TrimSpace(part[:idx])
-		value := strings.TrimSpace(part[idx+1:])
-
-		// Remove quotes if present
-		if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
-			value = value[1 : len(value)-1]
-		}
-
-		result[key] = value
-	}
-
-	return result
-}
-
-// generateCNonce generates a client nonce for digest auth.
-func generateCNonce() string {
-	b := make([]byte, 8)
-	if _, err := rand.Read(b); err != nil {
-		// Fallback to time-based if crypto/rand fails
-		return fmt.Sprintf("%016x", time.Now().UnixNano())
-	}
-	return hex.EncodeToString(b)
-}
-
-// calculateDigestResponse calculates the digest authentication response hash.
-// Supports MD5 (RFC 2617) and SHA-256 (RFC 7616) algorithms.
-//
-//nolint:gosec // MD5 is required by HTTP Digest Auth spec (RFC 2617)
-func calculateDigestResponse(
-	username, password, realm, nonce, nc, cnonce, qop, method, uri, algorithm string,
-) string {
-	// Select hash function based on algorithm
-	hashFunc := md5Hash
-	if algorithm == "SHA-256" || algorithm == "SHA-256-sess" {
-		hashFunc = sha256Hash
-	}
-
-	// HA1 = HASH(username:realm:password)
-	ha1Input := fmt.Sprintf("%s:%s:%s", username, realm, password)
-	ha1 := hashFunc(ha1Input)
-
-	// HA2 = HASH(method:uri)
-	ha2Input := fmt.Sprintf("%s:%s", method, uri)
-	ha2 := hashFunc(ha2Input)
-
-	// Response calculation depends on qop
-	var response string
-	if qop == "auth" || qop == "auth-int" {
-		// response = HASH(HA1:nonce:nc:cnonce:qop:HA2)
-		responseInput := fmt.Sprintf("%s:%s:%s:%s:%s:%s", ha1, nonce, nc, cnonce, qop, ha2)
-		response = hashFunc(responseInput)
-	} else {
-		// response = HASH(HA1:nonce:HA2)
-		responseInput := fmt.Sprintf("%s:%s:%s", ha1, nonce, ha2)
-		response = hashFunc(responseInput)
-	}
-
-	return response
-}
-
-// md5Hash returns the hex-encoded MD5 hash of the input string.
-//
-//nolint:gosec // MD5 is required by HTTP Digest Auth spec (RFC 2617)
-func md5Hash(input string) string {
-	hash := md5.Sum([]byte(input))
-	return hex.EncodeToString(hash[:])
-}
-
-// sha256Hash returns the hex-encoded SHA-256 hash of the input string.
-func sha256Hash(input string) string {
-	hash := sha256.Sum256([]byte(input))
-	return hex.EncodeToString(hash[:])
 }
 
 // shouldRetry determines if an error should be retried.

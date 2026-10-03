@@ -8,7 +8,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tj-smith47/shelly-go/internal/digest"
 	"github.com/tj-smith47/shelly-go/rpc"
+	"github.com/tj-smith47/shelly-go/types"
 )
 
 // DefaultAPAddress is the default IP address of Shelly devices in AP mode.
@@ -149,24 +151,39 @@ func (p *Provisioner) ConfigureAP(ctx context.Context, config *APConfig) error {
 	return err
 }
 
-// SetAuth configures HTTP authentication on the device.
+// SetAuth turns device authentication on or off through Shelly.SetAuth. The
+// device stores only ha1 = SHA256("user:realm:password"), where realm is its
+// device id (read here through Shelly.GetDeviceInfo) and user is "admin"
+// when config.User is empty. Enabling requires config.Password; Enable false
+// disables authentication.
 func (p *Provisioner) SetAuth(ctx context.Context, config *AuthConfig) error {
-	params := map[string]any{}
-
-	if config.Enable != nil && !*config.Enable {
-		// Disable auth
-		params["user"] = nil
-		params["realm"] = nil
-		params["ha1"] = nil
-	} else {
-		// Enable auth with credentials
-		params["user"] = config.User
-		if config.Password != "" {
-			params["pass"] = config.Password
-		}
+	info, err := p.GetDeviceInfo(ctx)
+	if err != nil {
+		return fmt.Errorf("read device id for the auth realm: %w", err)
+	}
+	if info.ID == "" {
+		return fmt.Errorf("%w: device reported no id to use as the auth realm", types.ErrInvalidResponse)
 	}
 
-	_, err := p.client.Call(ctx, "Shelly.SetAuth", params)
+	user := config.User
+	if user == "" {
+		user = digest.User
+	}
+	// A nil HA1 is sent as null, which turns authentication off.
+	params := struct {
+		HA1   *string `json:"ha1"`
+		User  string  `json:"user"`
+		Realm string  `json:"realm"`
+	}{User: user, Realm: info.ID}
+	if config.Enable == nil || *config.Enable {
+		if config.Password == "" {
+			return fmt.Errorf("%w: a password is required to enable authentication", types.ErrInvalidParam)
+		}
+		ha1 := digest.HA1(user, info.ID, config.Password)
+		params.HA1 = &ha1
+	}
+
+	_, err = p.client.Call(ctx, "Shelly.SetAuth", params)
 	return err
 }
 

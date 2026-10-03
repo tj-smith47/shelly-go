@@ -1,18 +1,16 @@
 package rpc
 
 import (
-	"crypto/md5" //nolint:gosec // G501: MD5 is required by HTTP Digest Authentication (RFC 2617)
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
+	"encoding/json"
 	"fmt"
+
+	"github.com/tj-smith47/shelly-go/internal/digest"
+	"github.com/tj-smith47/shelly-go/types"
 )
 
-// Hash algorithm constants for digest authentication.
-const (
-	AlgorithmMD5    = "MD5"
-	AlgorithmSHA256 = "SHA-256"
-)
+// AlgorithmSHA256 is the digest algorithm Gen2+ devices use, and the only
+// one this package computes.
+const AlgorithmSHA256 = digest.Algorithm
 
 // AuthMethod represents the authentication method to use for RPC requests.
 type AuthMethod int
@@ -49,10 +47,12 @@ func (am AuthMethod) String() string {
 	}
 }
 
-// BasicAuth creates AuthData for basic authentication.
+// BasicAuth creates AuthData holding a username and password.
 //
-// Basic authentication sends the username and password in plain text
-// (base64 encoded). This should only be used over HTTPS.
+// Deprecated: a Shelly device takes no password in a request frame, and the
+// password is never sent. Use transport.WithAuth for HTTP Basic auth, or
+// transport.WithDigestAuth to have the HTTP and WebSocket transports answer
+// the device's digest challenge.
 func BasicAuth(username, password string) *AuthData {
 	return &AuthData{
 		Username: username,
@@ -60,134 +60,60 @@ func BasicAuth(username, password string) *AuthData {
 	}
 }
 
-// DigestAuth creates AuthData for digest authentication.
+// DigestAuth builds the auth object of one RPC request frame answering a
+// device's digest challenge, as described in Shelly's Gen2 Authentication
+// documentation:
 //
-// Digest authentication uses cryptographic hashing to avoid sending
-// passwords in plain text. This is more secure than basic auth over
-// unencrypted connections.
+//	response = SHA256(HA1:nonce:nc:cnonce:auth:HA2)
+//	HA1      = SHA256(username:realm:password)
+//	HA2      = SHA256("dummy_method:dummy_uri")
 //
-// Parameters:
-//   - username: The username
-//   - password: The password
-//   - realm: The authentication realm (from server challenge)
-//   - nonce: The server nonce (from server challenge)
-//   - method: The HTTP method (e.g., "POST")
-//   - uri: The request URI (e.g., "/rpc")
-//   - algorithm: The hash algorithm ("MD5" or "SHA-256")
-func DigestAuth(
-	username, password, realm, nonce, method, uri, algorithm string,
-) (*AuthData, error) {
-	// Generate client nonce
-	cnonce, err := generateNonce()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate cnonce: %w", err)
+// username is "admin" when empty. realm is the device id, as the challenge
+// names it. nonce is the challenge's nonce and is echoed with its JSON type:
+// pass a string (firmware 2.0.0 and later), a number (earlier firmware) or the
+// challenge's json.RawMessage. The nonce count is 1 and cnonce is random.
+//
+// transport.WithDigestAuth does all of this per frame, reusing the nonce; use
+// DigestAuth only when building frames by hand.
+func DigestAuth(username, password, realm string, nonce any) (*AuthData, error) {
+	if username == "" {
+		username = digest.User
 	}
+	return DigestAuthFromHA1(username, digest.HA1(username, realm, password), realm, nonce)
+}
 
-	// Calculate response hash
-	response := calculateDigestResponse(
-		username, password, realm, nonce, cnonce, method, uri, algorithm,
-	)
-
+// DigestAuthFromHA1 is DigestAuth for a caller holding the HA1 (see
+// CalculateHA1) instead of the password.
+func DigestAuthFromHA1(username, ha1, realm string, nonce any) (*AuthData, error) {
+	if username == "" {
+		username = digest.User
+	}
+	if realm == "" {
+		return nil, fmt.Errorf("%w: realm (the device id) is required", types.ErrInvalidParam)
+	}
+	raw, err := json.Marshal(nonce)
+	if err != nil {
+		return nil, fmt.Errorf("%w: nonce: %w", types.ErrInvalidParam, err)
+	}
+	frame, err := digest.NewFrame(username, ha1, realm, raw, 1)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", types.ErrInvalidParam, err)
+	}
 	return &AuthData{
-		Username:  username,
-		Realm:     realm,
-		Nonce:     nonce,
-		CNonce:    cnonce,
-		NC:        1,
-		Algorithm: algorithm,
-		Response:  response,
+		Username:  frame.Username,
+		Realm:     frame.Realm,
+		Nonce:     frame.Nonce,
+		CNonce:    frame.CNonce,
+		NC:        frame.NC,
+		Algorithm: frame.Algorithm,
+		Response:  frame.Response,
 	}, nil
 }
 
-// calculateDigestResponse calculates the digest authentication response hash.
-func calculateDigestResponse(
-	username, password, realm, nonce, cnonce, method, uri, algorithm string,
-) string {
-	// Calculate HA1 = hash(username:realm:password)
-	ha1 := calculateHash(fmt.Sprintf("%s:%s:%s", username, realm, password), algorithm)
-
-	// Calculate HA2 = hash(method:uri)
-	ha2 := calculateHash(fmt.Sprintf("%s:%s", method, uri), algorithm)
-
-	// Calculate response = hash(HA1:nonce:nc:cnonce:qop:HA2)
-	// Note: qop is assumed to be "auth" for Shelly devices, nc is always 1
-	const nc = 1
-	response := calculateHash(
-		fmt.Sprintf("%s:%s:%08x:%s:auth:%s", ha1, nonce, nc, cnonce, ha2),
-		algorithm,
-	)
-
-	return response
-}
-
-// calculateHash calculates a hash using the specified algorithm.
-func calculateHash(data, algorithm string) string {
-	switch algorithm {
-	case AlgorithmSHA256:
-		hash := sha256.Sum256([]byte(data))
-		return hex.EncodeToString(hash[:])
-	case AlgorithmMD5, "":
-		// MD5 is the default if no algorithm is specified
-		hash := md5.Sum([]byte(data)) //nolint:gosec // G401: MD5 required by HTTP Digest Auth
-		return hex.EncodeToString(hash[:])
-	default:
-		// Fallback to MD5 for unknown algorithms
-		hash := md5.Sum([]byte(data)) //nolint:gosec // G401: MD5 required by HTTP Digest Auth
-		return hex.EncodeToString(hash[:])
-	}
-}
-
-// generateNonce generates a random nonce for digest authentication.
-func generateNonce() (string, error) {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(b), nil
-}
-
-// CalculateHA1 calculates the HA1 hash for digest authentication.
-//
-// HA1 = hash(username:realm:password)
-//
-// This can be pre-calculated and stored instead of storing the plaintext
-// password for improved security.
-func CalculateHA1(username, password, realm, algorithm string) string {
-	return calculateHash(fmt.Sprintf("%s:%s:%s", username, realm, password), algorithm)
-}
-
-// DigestAuthFromHA1 creates AuthData for digest authentication using a
-// pre-calculated HA1 hash instead of a plaintext password.
-//
-// This is more secure as it avoids storing plaintext passwords.
-func DigestAuthFromHA1(
-	username, ha1, realm, nonce, method, uri, algorithm string,
-) (*AuthData, error) {
-	// Generate client nonce
-	cnonce, err := generateNonce()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate cnonce: %w", err)
-	}
-
-	// Calculate HA2 = hash(method:uri)
-	ha2 := calculateHash(fmt.Sprintf("%s:%s", method, uri), algorithm)
-
-	// Calculate response = hash(HA1:nonce:nc:cnonce:qop:HA2)
-	nc := 1
-	response := calculateHash(
-		fmt.Sprintf("%s:%s:%08x:%s:auth:%s", ha1, nonce, nc, cnonce, ha2),
-		algorithm,
-	)
-
-	return &AuthData{
-		Username:  username,
-		Realm:     realm,
-		Nonce:     nonce,
-		CNonce:    cnonce,
-		NC:        nc,
-		Algorithm: algorithm,
-		Response:  response,
-	}, nil
+// CalculateHA1 returns SHA256("username:realm:password"), the ha1 parameter
+// of Shelly.SetAuth, where username is "admin" and realm is the device id.
+func CalculateHA1(username, password, realm string) string {
+	return digest.HA1(username, realm, password)
 }
 
 // ValidateAuthData validates that the AuthData contains the required fields
@@ -201,26 +127,24 @@ func ValidateAuthData(auth *AuthData) error {
 		return fmt.Errorf("username is required")
 	}
 
-	// Check if this is digest auth or basic auth
-	//nolint:nestif // Digest auth validation requires checking multiple required fields
-	if auth.Response != "" {
-		// Digest auth requires additional fields
-		if auth.Realm == "" {
-			return fmt.Errorf("realm is required for digest auth")
+	if auth.Response == "" {
+		if auth.Password == "" {
+			return fmt.Errorf("password is required for basic auth")
 		}
-		if auth.Nonce == "" {
-			return fmt.Errorf("nonce is required for digest auth")
-		}
-		if auth.CNonce == "" {
-			return fmt.Errorf("cnonce is required for digest auth")
-		}
-		if auth.NC <= 0 {
-			return fmt.Errorf("nc must be positive for digest auth")
-		}
-	} else if auth.Password == "" {
-		// Basic auth requires password
-		return fmt.Errorf("password is required for basic auth")
+		return nil
 	}
 
+	switch {
+	case auth.Realm == "":
+		return fmt.Errorf("realm is required for digest auth")
+	case len(auth.Nonce) == 0:
+		return fmt.Errorf("nonce is required for digest auth")
+	case auth.CNonce == 0:
+		return fmt.Errorf("cnonce is required for digest auth")
+	case auth.NC == "":
+		return fmt.Errorf("nc is required for digest auth")
+	case auth.Algorithm != AlgorithmSHA256:
+		return fmt.Errorf("algorithm must be %s for digest auth", AlgorithmSHA256)
+	}
 	return nil
 }

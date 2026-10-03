@@ -36,7 +36,7 @@
 //	// Create HTTP transport
 //	httpTransport := transport.NewHTTP("http://192.168.1.100",
 //	    transport.WithTimeout(30*time.Second),
-//	    transport.WithAuth("admin", "password"))
+//	    transport.WithDigestAuth("admin", "password"))
 //
 //	// Create RPC client
 //	client := rpc.NewClient(httpTransport)
