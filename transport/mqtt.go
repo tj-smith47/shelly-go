@@ -344,7 +344,9 @@ func waitForPublish(ctx context.Context, token mqtt.Token) error {
 
 // Call executes an RPC method call via MQTT.
 //
-// If not connected, this will attempt to connect first.
+// If not connected, this will attempt to connect first. A device error reply
+// is returned as a *RPCError. Shelly devices do not authenticate RPC over
+// MQTT; the WithAuth/WithDigestAuth credentials are the broker's.
 // The request is published to the device's RPC topic.
 // The response is received on the client's response topic.
 func (m *MQTT) Call(ctx context.Context, rpcReq RPCRequest) (json.RawMessage, error) {
@@ -420,7 +422,7 @@ func (m *MQTT) Call(ctx context.Context, rpcReq RPCRequest) (json.RawMessage, er
 			return nil, fmt.Errorf("connection lost while waiting for response")
 		}
 		if resp.Error != nil {
-			return nil, fmt.Errorf("rpc error %d: %s", resp.Error.Code, resp.Error.Message)
+			return nil, resp.Error
 		}
 		return resp.Result, nil
 	}

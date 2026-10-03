@@ -42,7 +42,10 @@
 //
 // # Authentication
 //
-// Transports support both digest and basic authentication:
+// Gen1 devices use HTTP Basic authentication (WithAuth). Gen2+ devices use
+// SHA-256 digest authentication (WithDigestAuth): the HTTP transport answers
+// the WWW-Authenticate challenge and the WebSocket transport the 401 error a
+// request frame gets, both reusing the device's nonce for later requests:
 //
 //	http := transport.NewHTTP("http://192.168.1.100",
 //	    transport.WithDigestAuth("admin", "password"))

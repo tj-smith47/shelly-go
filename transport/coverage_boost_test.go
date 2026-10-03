@@ -37,6 +37,8 @@ import (
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/gorilla/websocket"
+
+	"github.com/tj-smith47/shelly-go/types"
 )
 
 // ── transport.go ────────────────────────────────────────────────────────────
@@ -639,8 +641,9 @@ func TestMQTT_Call_RPCError(t *testing.T) {
 		if err == nil {
 			t.Fatal("Call() error = nil, want rpc error")
 		}
-		if !strings.Contains(err.Error(), "rpc error") {
-			t.Errorf("unexpected error: %v", err)
+		var rpcErr *RPCError
+		if !errors.As(err, &rpcErr) || rpcErr.Code != -32601 || !errors.Is(err, types.ErrNotSupported) {
+			t.Errorf("Call() error = %v, want *RPCError -32601 matching types.ErrNotSupported", err)
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("timed out waiting for Call() to return")

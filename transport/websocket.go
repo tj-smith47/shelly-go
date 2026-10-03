@@ -14,7 +14,9 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"github.com/tj-smith47/shelly-go/internal/digest"
 	"github.com/tj-smith47/shelly-go/internal/serial"
+	"github.com/tj-smith47/shelly-go/types"
 )
 
 // WebSocket is a WebSocket transport for Shelly devices.
@@ -29,6 +31,7 @@ import (
 type WebSocket struct {
 	done          chan struct{}
 	opts          *options
+	digest        *digest.Session
 	session       *wsSession
 	notifyHandler NotificationHandler
 	pending       map[int64]chan *rpcResponse
@@ -66,17 +69,31 @@ func (s *wsSession) stop() {
 
 // rpcResponse represents a JSON-RPC response.
 type rpcResponse struct {
-	Error  *rpcError       `json:"error,omitempty"`
+	Error  *RPCError       `json:"error,omitempty"`
 	Src    string          `json:"src,omitempty"`
 	Dst    string          `json:"dst,omitempty"`
 	Result json.RawMessage `json:"result,omitempty"`
 	ID     int64           `json:"id"`
 }
 
-// rpcError represents a JSON-RPC error.
-type rpcError struct {
+// RPCError is an error reply from a device to an RPC frame sent over the
+// WebSocket or MQTT transport. errors.Is matches the types error its code
+// maps to (types.MapErrorCode): a 401 is types.ErrAuth.
+type RPCError struct {
+	// Message is the device's error message. For a 401 it is the JSON digest
+	// challenge.
 	Message string `json:"message"`
 	Code    int    `json:"code"`
+}
+
+// Error implements the error interface.
+func (e *RPCError) Error() string {
+	return fmt.Sprintf("rpc error %d: %s", e.Code, e.Message)
+}
+
+// Unwrap returns the types error the code maps to.
+func (e *RPCError) Unwrap() error {
+	return types.MapErrorCode(e.Code)
 }
 
 // rpcNotification represents a JSON-RPC notification.
@@ -124,6 +141,7 @@ func NewWebSocket(url string, opts ...Option) *WebSocket {
 		url:     url,
 		src:     fmt.Sprintf("shelly-go-%d", time.Now().UnixNano()),
 		opts:    options,
+		digest:  options.digestSession(),
 		pending: make(map[int64]chan *rpcResponse),
 		done:    make(chan struct{}),
 	}
@@ -195,46 +213,101 @@ func (w *WebSocket) connect(ctx context.Context) (*wsSession, error) {
 //
 // If not connected, this will attempt to connect first.
 // The request is correlated with the response using a unique ID.
+//
+// A device error reply is returned as a *RPCError. With WithDigestAuth, a 401
+// carrying a digest challenge is answered and the frame sent once more; later
+// frames, including those after a reconnect, reuse the device's nonce until
+// it is refused. A request that carries its own auth object is sent as is.
 func (w *WebSocket) Call(ctx context.Context, rpcReq RPCRequest) (json.RawMessage, error) {
 	if w.isClosed() {
 		return nil, fmt.Errorf("websocket is closed")
 	}
 
-	// Auto-connect if not connected
-	session, err := w.connect(ctx)
+	reqBody, requestID, err := w.buildFrame(rpcReq)
 	if err != nil {
 		return nil, err
 	}
 
-	// Build request body from RPCRequest interface
-	reqBody := map[string]any{
+	answerChallenge := w.digest != nil
+	if auth := rpcReq.GetAuth(); auth != nil {
+		reqBody["auth"] = auth
+		answerChallenge = false
+	} else if answerChallenge && w.digest.Ready() {
+		frame, frameErr := w.digest.Frame()
+		if frameErr != nil {
+			return nil, frameErr
+		}
+		reqBody["auth"] = frame
+	}
+
+	resp, err := w.roundTrip(ctx, reqBody, requestID)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.Error != nil && resp.Error.Code == http.StatusUnauthorized && answerChallenge {
+		if resp, err = w.answerChallenge(ctx, resp.Error, reqBody, requestID); err != nil {
+			return nil, err
+		}
+	}
+
+	if resp.Error != nil {
+		return nil, resp.Error
+	}
+	return resp.Result, nil
+}
+
+// buildFrame builds the request frame for rpcReq without its auth object and
+// returns the id its response will carry.
+func (w *WebSocket) buildFrame(rpcReq RPCRequest) (reqBody map[string]any, requestID int64, err error) {
+	reqBody = map[string]any{
 		"id":           rpcReq.GetID(),
 		rpcFieldSrc:    w.src,
 		rpcFieldMethod: rpcReq.GetMethod(),
 	}
 
-	// Unmarshal params from json.RawMessage and add to request
 	if params := rpcReq.GetParams(); len(params) > 0 {
 		var p any
-		if unmarshalErr := json.Unmarshal(params, &p); unmarshalErr != nil {
-			return nil, fmt.Errorf("failed to unmarshal params: %w", unmarshalErr)
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, 0, fmt.Errorf("failed to unmarshal params: %w", err)
 		}
 		reqBody["params"] = p
 	}
 
-	// Add auth if present
-	if auth := rpcReq.GetAuth(); auth != nil {
-		reqBody["auth"] = auth
-	}
-
-	// Get request ID for response correlation
-	requestID := toInt64ID(rpcReq.GetID())
+	requestID = toInt64ID(rpcReq.GetID())
 	if requestID < 0 {
 		requestID = w.requestID.Add(1)
 		reqBody["id"] = requestID
 	}
+	return reqBody, requestID, nil
+}
 
-	// Create response channel
+// answerChallenge answers the digest challenge in a 401 reply and sends the
+// frame once more.
+func (w *WebSocket) answerChallenge(
+	ctx context.Context, unauthorized *RPCError, reqBody map[string]any, requestID int64,
+) (*rpcResponse, error) {
+	ch, err := digest.ParseFrameChallenge(unauthorized.Message)
+	if err != nil {
+		return nil, fmt.Errorf("%w (%w)", unauthorized, err)
+	}
+	w.digest.Accept(ch)
+	frame, err := w.digest.Frame()
+	if err != nil {
+		return nil, err
+	}
+	reqBody["auth"] = frame
+	return w.roundTrip(ctx, reqBody, requestID)
+}
+
+// roundTrip sends one frame, connecting first when there is no session, and
+// waits for the response with requestID.
+func (w *WebSocket) roundTrip(ctx context.Context, reqBody map[string]any, requestID int64) (*rpcResponse, error) {
+	session, err := w.connect(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	respChan := make(chan *rpcResponse, 1)
 	w.pendingMu.Lock()
 	w.pending[requestID] = respChan
@@ -246,7 +319,6 @@ func (w *WebSocket) Call(ctx context.Context, rpcReq RPCRequest) (json.RawMessag
 		w.pendingMu.Unlock()
 	}()
 
-	// Marshal and send request
 	data, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("marshal request: %w", err)
@@ -262,7 +334,6 @@ func (w *WebSocket) Call(ctx context.Context, rpcReq RPCRequest) (json.RawMessag
 		return nil, fmt.Errorf("write message: %w", err)
 	}
 
-	// Wait for response
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -272,10 +343,7 @@ func (w *WebSocket) Call(ctx context.Context, rpcReq RPCRequest) (json.RawMessag
 		if resp == nil {
 			return nil, errors.New("connection lost while waiting for response")
 		}
-		if resp.Error != nil {
-			return nil, fmt.Errorf("rpc error %d: %s", resp.Error.Code, resp.Error.Message)
-		}
-		return resp.Result, nil
+		return resp, nil
 	}
 }
 
