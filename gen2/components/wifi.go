@@ -3,6 +3,8 @@ package components
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strconv"
 
 	"github.com/tj-smith47/shelly-go/rpc"
 	"github.com/tj-smith47/shelly-go/types"
@@ -168,6 +170,8 @@ type WiFiRoamConfig struct {
 type WiFiStatus struct {
 	StaIP           *string  `json:"sta_ip,omitempty"`
 	SSID            *string  `json:"ssid,omitempty"`
+	BSSID           *string  `json:"bssid,omitempty"`
+	Channel         *int     `json:"channel,omitempty"`
 	RSSI            *float64 `json:"rssi,omitempty"`
 	APClientCount   *int     `json:"ap_client_count,omitempty"`
 	types.RawFields `json:"-"`
@@ -182,15 +186,72 @@ type WiFiScanResult struct {
 	// BSSID is the MAC address of the access point.
 	BSSID *string `json:"bssid,omitempty"`
 
-	// Auth is the authentication type.
-	// Values: "open", "wep", "wpa_psk", "wpa2_psk", "wpa_wpa2_psk", "wpa2_enterprise", "wpa3_psk"
-	Auth *string `json:"auth,omitempty"`
+	// Auth is the network's authentication mode. Devices send it as a
+	// number; String names it ("open", "wpa2_psk", ...).
+	Auth *WiFiAuthMode `json:"auth,omitempty"`
 
 	// Channel is the WiFi channel number.
 	Channel *int `json:"channel,omitempty"`
 
 	// RSSI is the signal strength in dBm.
 	RSSI *float64 `json:"rssi,omitempty"`
+}
+
+// WiFiAuthMode is the authentication mode of a network found by Wifi.Scan,
+// as the number the device reports.
+type WiFiAuthMode int
+
+// Authentication modes reported by Wifi.Scan.
+const (
+	WiFiAuthOpen WiFiAuthMode = iota
+	WiFiAuthWEP
+	WiFiAuthWPAPSK
+	WiFiAuthWPA2PSK
+	WiFiAuthWPAWPA2PSK
+	WiFiAuthWPA2Enterprise
+	WiFiAuthWPA3PSK
+	WiFiAuthWPA2WPA3PSK
+)
+
+// wifiAuthModeNames is indexed by WiFiAuthMode. Modes 6 and 7 are not in
+// Shelly's table but are the ESP-IDF codes the firmware passes through.
+var wifiAuthModeNames = [...]string{
+	"open", "wep", "wpa_psk", "wpa2_psk", "wpa_wpa2_psk", "wpa2_enterprise", "wpa3_psk", "wpa2_wpa3_psk",
+}
+
+// String returns the mode's name ("open", "wep", "wpa_psk", "wpa2_psk",
+// "wpa_wpa2_psk", "wpa2_enterprise", "wpa3_psk", "wpa2_wpa3_psk"), or the
+// number for a mode without a name.
+func (m WiFiAuthMode) String() string {
+	if m >= 0 && int(m) < len(wifiAuthModeNames) {
+		return wifiAuthModeNames[m]
+	}
+	return strconv.Itoa(int(m))
+}
+
+// UnmarshalJSON accepts the number a device sends, or one of the names
+// String returns.
+func (m *WiFiAuthMode) UnmarshalJSON(data []byte) error {
+	var name string
+	if err := json.Unmarshal(data, &name); err == nil {
+		for i, n := range wifiAuthModeNames {
+			if n == name {
+				*m = WiFiAuthMode(i)
+				return nil
+			}
+		}
+		if n, convErr := strconv.Atoi(name); convErr == nil {
+			*m = WiFiAuthMode(n)
+			return nil
+		}
+		return fmt.Errorf("%w: unknown wifi auth mode %q", types.ErrInvalidResponse, name)
+	}
+	var n int
+	if err := json.Unmarshal(data, &n); err != nil {
+		return fmt.Errorf("%w: wifi auth mode %s", types.ErrInvalidResponse, data)
+	}
+	*m = WiFiAuthMode(n)
+	return nil
 }
 
 // WiFiScanResponse represents the response from Wifi.Scan.
@@ -201,9 +262,11 @@ type WiFiScanResponse struct {
 
 // WiFiAPClient represents a client connected to the device's access point.
 type WiFiAPClient struct {
-	IP    *string `json:"ip,omitempty"`
-	Since *int64  `json:"since,omitempty"`
-	MAC   string  `json:"mac"`
+	IP       *string `json:"ip,omitempty"`
+	IPStatic *bool   `json:"ip_static,omitempty"`
+	MPort    *int    `json:"mport,omitempty"`
+	Since    *int64  `json:"since,omitempty"`
+	MAC      string  `json:"mac"`
 }
 
 // WiFiListAPClientsResponse represents the response from Wifi.ListAPClients.

@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"testing"
 
 	"github.com/tj-smith47/shelly-go/rpc"
 	"github.com/tj-smith47/shelly-go/transport"
+	"github.com/tj-smith47/shelly-go/types"
 )
 
 func TestNewWiFi(t *testing.T) {
@@ -409,11 +411,11 @@ func TestWiFi_Scan(t *testing.T) {
 			name: "multiple networks",
 			result: `{
 				"results": [
-					{"ssid": "Network1", "bssid": "AA:BB:CC:DD:EE:01", "auth": "wpa2_psk",
+					{"ssid": "Network1", "bssid": "aa:bb:cc:dd:ee:01", "auth": 3,
 						"channel": 6, "rssi": -45},
-					{"ssid": "Network2", "bssid": "AA:BB:CC:DD:EE:02", "auth": "wpa_wpa2_psk",
+					{"ssid": "Network2", "bssid": "aa:bb:cc:dd:ee:02", "auth": 4,
 						"channel": 11, "rssi": -70},
-					{"ssid": "OpenNetwork", "bssid": "AA:BB:CC:DD:EE:03", "auth": "open",
+					{"ssid": null, "bssid": "aa:bb:cc:dd:ee:03", "auth": 0,
 						"channel": 1, "rssi": -80}
 				]
 			}`,
@@ -422,7 +424,7 @@ func TestWiFi_Scan(t *testing.T) {
 				if r.SSID == nil || *r.SSID != "Network1" {
 					t.Errorf("first result SSID = %v, want Network1", r.SSID)
 				}
-				if r.Auth == nil || *r.Auth != "wpa2_psk" {
+				if r.Auth == nil || *r.Auth != WiFiAuthWPA2PSK {
 					t.Errorf("first result Auth = %v, want wpa2_psk", r.Auth)
 				}
 				if r.RSSI == nil || *r.RSSI != -45 {
@@ -439,7 +441,7 @@ func TestWiFi_Scan(t *testing.T) {
 			name: "single network",
 			result: `{
 				"results": [
-					{"ssid": "SingleNetwork", "auth": "wpa3_psk", "channel": 36, "rssi": -50}
+					{"ssid": "ShellyPro4PM-F008D1D89064", "bssid": "f0:08:d1:d8:90:65", "auth": 0, "channel": 11, "rssi": -70}
 				]
 			}`,
 			wantCount: 1,
@@ -715,22 +717,81 @@ func TestWiFiStationConfig_StaticIP(t *testing.T) {
 }
 
 func TestWiFiScanResult_AllAuthTypes(t *testing.T) {
-	authTypes := []string{
+	names := []string{
 		"open", "wep", "wpa_psk", "wpa2_psk",
-		"wpa_wpa2_psk", "wpa2_enterprise", "wpa3_psk",
+		"wpa_wpa2_psk", "wpa2_enterprise", "wpa3_psk", "wpa2_wpa3_psk",
 	}
 
-	for _, auth := range authTypes {
-		t.Run(auth, func(t *testing.T) {
-			jsonStr := `{"ssid": "TestNetwork", "auth": "` + auth + `"}`
-			var result WiFiScanResult
-			if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
-				t.Fatalf("Unmarshal error: %v", err)
-			}
-			if result.Auth == nil || *result.Auth != auth {
-				t.Errorf("Auth = %v, want %v", result.Auth, auth)
+	for code, name := range names {
+		t.Run(name, func(t *testing.T) {
+			for _, wire := range []string{strconv.Itoa(code), `"` + name + `"`} {
+				var result WiFiScanResult
+				if err := json.Unmarshal([]byte(`{"ssid": "TestNetwork", "auth": `+wire+`}`), &result); err != nil {
+					t.Fatalf("Unmarshal(auth %s) error: %v", wire, err)
+				}
+				if result.Auth == nil || int(*result.Auth) != code || result.Auth.String() != name {
+					t.Errorf("auth %s decoded as %v, want %d (%s)", wire, result.Auth, code, name)
+				}
 			}
 		})
+	}
+}
+
+func TestWiFiAuthMode_Unnamed(t *testing.T) {
+	for _, wire := range []string{"9", `"9"`} {
+		var mode WiFiAuthMode
+		if err := json.Unmarshal([]byte(wire), &mode); err != nil {
+			t.Fatalf("Unmarshal(%s) error: %v", wire, err)
+		}
+		if mode != 9 || mode.String() != "9" {
+			t.Errorf("Unmarshal(%s) = %d (%s), want 9", wire, mode, mode)
+		}
+	}
+	if got := WiFiAuthMode(-1).String(); got != "-1" {
+		t.Errorf("String() = %q, want -1", got)
+	}
+}
+
+func TestWiFiAuthMode_Invalid(t *testing.T) {
+	for _, wire := range []string{`"wpa9"`, `true`, `{}`} {
+		var mode WiFiAuthMode
+		err := json.Unmarshal([]byte(wire), &mode)
+		if !errors.Is(err, types.ErrInvalidResponse) {
+			t.Errorf("Unmarshal(%s) error = %v, want ErrInvalidResponse", wire, err)
+		}
+	}
+}
+
+func TestWiFiAuthMode_MarshalsAsNumber(t *testing.T) {
+	data, err := json.Marshal(WiFiScanResult{Auth: ptr(WiFiAuthWPA2PSK)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != `{"auth":3}` {
+		t.Errorf("Marshal = %s, want {\"auth\":3}", data)
+	}
+}
+
+// TestWiFi_DocumentedFields decodes the Wifi.GetStatus and Wifi.ListAPClients
+// examples from Shelly's WiFi component documentation.
+func TestWiFi_DocumentedFields(t *testing.T) {
+	var status WiFiStatus
+	if err := json.Unmarshal([]byte(`{"sta_ip": "192.168.206.97", "status": "got ip", "ssid": "Allterco WiFi",
+		"bssid": "f0:08:d1:d8:90:65", "channel": 11, "rssi": -56, "ap_client_count": 0}`), &status); err != nil {
+		t.Fatal(err)
+	}
+	if status.Channel == nil || *status.Channel != 11 || status.BSSID == nil || *status.BSSID != "f0:08:d1:d8:90:65" {
+		t.Errorf("status channel/bssid = %v/%v", status.Channel, status.BSSID)
+	}
+
+	var clients WiFiListAPClientsResponse
+	if err := json.Unmarshal([]byte(`{"ts": 1655723139, "ap_clients": [{"mac": "a4:97:b1:d0:59:65",
+		"ip": "192.168.33.64", "ip_static": false, "mport": 0, "since": 1655723070}]}`), &clients); err != nil {
+		t.Fatal(err)
+	}
+	c := clients.APClients[0]
+	if c.IPStatic == nil || *c.IPStatic || c.MPort == nil || *c.MPort != 0 {
+		t.Errorf("ap client ip_static/mport = %v/%v", c.IPStatic, c.MPort)
 	}
 }
 
