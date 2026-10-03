@@ -78,20 +78,20 @@ const (
 
 // FloodConfig represents the configuration of a Flood component.
 type FloodConfig struct {
-	Name          *string         `json:"name,omitempty"`
-	AlarmMode     *FloodAlarmMode `json:"alarm_mode,omitempty"`
-	ReportHoldoff *int            `json:"report_holdoff,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	Name            *string         `json:"name,omitempty"`
+	AlarmMode       *FloodAlarmMode `json:"alarm_mode,omitempty"`
+	ReportHoldoff   *int            `json:"report_holdoff,omitempty"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // FloodStatus represents the status of a Flood component.
 type FloodStatus struct {
-	types.RawFields
-	Errors []string `json:"errors,omitempty"`
-	ID     int      `json:"id"`
-	Alarm  bool     `json:"alarm"`
-	Mute   bool     `json:"mute"`
+	types.RawFields `json:"-"`
+	Errors          []string `json:"errors,omitempty"`
+	ID              int      `json:"id"`
+	Alarm           bool     `json:"alarm"`
+	Mute            bool     `json:"mute"`
 }
 
 // GetConfig retrieves the Flood configuration.

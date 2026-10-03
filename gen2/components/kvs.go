@@ -58,23 +58,23 @@ func (k *KVS) Client() *rpc.Client {
 
 // KVSItem represents a key-value pair.
 type KVSItem struct {
-	Value any     `json:"value"`
-	Etag  *string `json:"etag,omitempty"`
-	types.RawFields
-	Key string `json:"key"`
+	Value           any     `json:"value"`
+	Etag            *string `json:"etag,omitempty"`
+	types.RawFields `json:"-"`
+	Key             string `json:"key"`
 }
 
 // KVSGetResponse represents the response from KVS.Get.
 type KVSGetResponse struct {
-	Value any `json:"value"`
-	types.RawFields
-	Etag string `json:"etag"`
+	Value           any `json:"value"`
+	types.RawFields `json:"-"`
+	Etag            string `json:"etag"`
 }
 
 // KVSGetManyResponse represents the response from KVS.GetMany.
 type KVSGetManyResponse struct {
-	types.RawFields
-	Items []KVSItem `json:"items"`
+	types.RawFields `json:"-"`
+	Items           []KVSItem `json:"items"`
 }
 
 // KVSKeyInfo represents metadata for a key in the KVS list response.
@@ -85,22 +85,22 @@ type KVSKeyInfo struct {
 // KVSListResponse represents the response from KVS.List.
 // The keys field is a map where keys are the stored key names and values contain etag info.
 type KVSListResponse struct {
-	types.RawFields
-	Keys map[string]KVSKeyInfo `json:"keys"`
-	Rev  int                   `json:"rev"`
+	types.RawFields `json:"-"`
+	Keys            map[string]KVSKeyInfo `json:"keys"`
+	Rev             int                   `json:"rev"`
 }
 
 // KVSSetResponse represents the response from KVS.Set.
 type KVSSetResponse struct {
-	types.RawFields
-	Etag string `json:"etag"`
-	Rev  int    `json:"rev"`
+	types.RawFields `json:"-"`
+	Etag            string `json:"etag"`
+	Rev             int    `json:"rev"`
 }
 
 // KVSDeleteResponse represents the response from KVS.Delete.
 type KVSDeleteResponse struct {
-	types.RawFields
-	Rev int `json:"rev"`
+	types.RawFields `json:"-"`
+	Rev             int `json:"rev"`
 }
 
 // Set stores a value for a key.

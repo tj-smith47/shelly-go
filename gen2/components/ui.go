@@ -71,14 +71,14 @@ type UIConfig struct {
 	Brightness *int `json:"brightness,omitempty"`
 
 	// RawFields captures any additional fields for future compatibility.
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // UIStatus represents the status of a UI component.
 // Note: The UI component typically does not have status properties.
 type UIStatus struct {
 	// RawFields captures any additional fields for future compatibility.
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // GetConfig retrieves the UI configuration.
@@ -244,7 +244,7 @@ type PlugsUIConfig struct {
 	LEDs *PlugsUILEDConfig `json:"leds,omitempty"`
 
 	// RawFields captures any additional fields for future compatibility.
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // PlugsUILEDConfig represents the LED settings.
@@ -266,7 +266,7 @@ type PlugsUIColor struct {
 // PlugsUIStatus represents the status of a PLUGS_UI component.
 type PlugsUIStatus struct {
 	// RawFields captures any additional fields for future compatibility.
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // GetConfig retrieves the PLUGS_UI configuration.

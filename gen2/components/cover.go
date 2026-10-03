@@ -51,30 +51,30 @@ type CoverConfig struct {
 	VoltageLimit              *float64 `json:"voltage_limit,omitempty"`
 	UndervoltageLimit         *float64 `json:"undervoltage_limit,omitempty"`
 	CurrentLimit              *float64 `json:"current_limit,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	types.RawFields           `json:"-"`
+	ID                        int `json:"id"`
 }
 
 // CoverStatus represents the current status of a Cover component.
 type CoverStatus struct {
-	AEnergy   *EnergyCounters `json:"aenergy,omitempty"`
-	TargetPos *int            `json:"target_pos,omitempty"`
-	types.RawFields
-	APower        *float64           `json:"apower,omitempty"`
-	Voltage       *float64           `json:"voltage,omitempty"`
-	Current       *float64           `json:"current,omitempty"`
-	PF            *float64           `json:"pf,omitempty"`
-	Freq          *float64           `json:"freq,omitempty"`
-	LastDirection *string            `json:"last_direction,omitempty"`
-	Temperature   *TemperatureSensor `json:"temperature,omitempty"`
-	CurrentPos    *int               `json:"current_pos,omitempty"`
-	MoveTimeout   *bool              `json:"move_timeout,omitempty"`
-	MoveStartedAt *float64           `json:"move_started_at,omitempty"`
-	PosDelta      *int               `json:"pos_delta,omitempty"`
-	Source        string             `json:"source"`
-	State         string             `json:"state"`
-	Errors        []string           `json:"errors,omitempty"`
-	ID            int                `json:"id"`
+	AEnergy         *EnergyCounters `json:"aenergy,omitempty"`
+	TargetPos       *int            `json:"target_pos,omitempty"`
+	types.RawFields `json:"-"`
+	APower          *float64           `json:"apower,omitempty"`
+	Voltage         *float64           `json:"voltage,omitempty"`
+	Current         *float64           `json:"current,omitempty"`
+	PF              *float64           `json:"pf,omitempty"`
+	Freq            *float64           `json:"freq,omitempty"`
+	LastDirection   *string            `json:"last_direction,omitempty"`
+	Temperature     *TemperatureSensor `json:"temperature,omitempty"`
+	CurrentPos      *int               `json:"current_pos,omitempty"`
+	MoveTimeout     *bool              `json:"move_timeout,omitempty"`
+	MoveStartedAt   *float64           `json:"move_started_at,omitempty"`
+	PosDelta        *int               `json:"pos_delta,omitempty"`
+	Source          string             `json:"source"`
+	State           string             `json:"state"`
+	Errors          []string           `json:"errors,omitempty"`
+	ID              int                `json:"id"`
 }
 
 // CoverOpenParams contains parameters for the Cover.Open method.

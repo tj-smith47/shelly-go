@@ -54,21 +54,21 @@ func NewInput(client *rpc.Client, id int) *Input {
 
 // InputConfig represents the configuration of an Input component.
 type InputConfig struct {
-	ReportThr  *float64 `json:"report_thr,omitempty"`
-	FreqWindow *float64 `json:"freq_window,omitempty"`
-	types.RawFields
-	Enable       *bool                `json:"enable,omitempty"`
-	Invert       *bool                `json:"invert,omitempty"`
-	FactoryReset *bool                `json:"factory_reset,omitempty"`
-	Name         *string              `json:"name,omitempty"`
-	XPercent     *InputXPercentConfig `json:"xpercent,omitempty"`
-	XFreq        *InputXFreqConfig    `json:"xfreq,omitempty"`
-	CountRepThr  *int                 `json:"count_rep_thr,omitempty"`
-	XCounts      *InputXCountsConfig  `json:"xcounts,omitempty"`
-	FreqRepThr   *float64             `json:"freq_rep_thr,omitempty"`
-	Type         string               `json:"type"`
-	RangeMap     []float64            `json:"range_map,omitempty"`
-	ID           int                  `json:"id"`
+	ReportThr       *float64 `json:"report_thr,omitempty"`
+	FreqWindow      *float64 `json:"freq_window,omitempty"`
+	types.RawFields `json:"-"`
+	Enable          *bool                `json:"enable,omitempty"`
+	Invert          *bool                `json:"invert,omitempty"`
+	FactoryReset    *bool                `json:"factory_reset,omitempty"`
+	Name            *string              `json:"name,omitempty"`
+	XPercent        *InputXPercentConfig `json:"xpercent,omitempty"`
+	XFreq           *InputXFreqConfig    `json:"xfreq,omitempty"`
+	CountRepThr     *int                 `json:"count_rep_thr,omitempty"`
+	XCounts         *InputXCountsConfig  `json:"xcounts,omitempty"`
+	FreqRepThr      *float64             `json:"freq_rep_thr,omitempty"`
+	Type            string               `json:"type"`
+	RangeMap        []float64            `json:"range_map,omitempty"`
+	ID              int                  `json:"id"`
 }
 
 // InputXPercentConfig represents transformation configuration for analog percent values.
@@ -104,15 +104,15 @@ type InputXFreqConfig struct {
 
 // InputStatus represents the current status of an Input component.
 type InputStatus struct {
-	State    *bool        `json:"state"`
-	Percent  *float64     `json:"percent"`
-	XPercent *float64     `json:"xpercent"`
-	Counts   *InputCounts `json:"counts,omitempty"`
-	Freq     *float64     `json:"freq"`
-	XFreq    *float64     `json:"xfreq"`
-	types.RawFields
-	Errors []string `json:"errors,omitempty"`
-	ID     int      `json:"id"`
+	State           *bool        `json:"state"`
+	Percent         *float64     `json:"percent"`
+	XPercent        *float64     `json:"xpercent"`
+	Counts          *InputCounts `json:"counts,omitempty"`
+	Freq            *float64     `json:"freq"`
+	XFreq           *float64     `json:"xfreq"`
+	types.RawFields `json:"-"`
+	Errors          []string `json:"errors,omitempty"`
+	ID              int      `json:"id"`
 }
 
 // InputCounts represents counter values for count-type inputs.
@@ -161,8 +161,8 @@ func (i *Input) CheckExpression(ctx context.Context, expr string, inputs []any) 
 
 // InputCheckExpressionResult represents the result of CheckExpression.
 type InputCheckExpressionResult struct {
-	types.RawFields
-	Results [][]any `json:"results"`
+	types.RawFields `json:"-"`
+	Results         [][]any `json:"results"`
 }
 
 // ResetCounters resets the input's counters (for count type inputs).
@@ -204,7 +204,7 @@ type InputResetCountersResult struct {
 	Counts *InputResetCounts `json:"counts,omitempty"`
 
 	// RawFields captures any additional fields
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // InputResetCounts represents counter values before reset.

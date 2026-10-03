@@ -91,22 +91,22 @@ type ProvisionResult struct {
 
 // DeviceInfo contains basic device information.
 type DeviceInfo struct {
-	types.RawFields
-	ID         string `json:"id,omitempty"`
-	Model      string `json:"model,omitempty"`
-	App        string `json:"app,omitempty"`
-	Version    string `json:"ver,omitempty"`
-	MAC        string `json:"mac,omitempty"`
-	Generation int    `json:"gen,omitempty"`
+	types.RawFields `json:"-"`
+	ID              string `json:"id,omitempty"`
+	Model           string `json:"model,omitempty"`
+	App             string `json:"app,omitempty"`
+	Version         string `json:"ver,omitempty"`
+	MAC             string `json:"mac,omitempty"`
+	Generation      int    `json:"gen,omitempty"`
 }
 
 // WiFiStatus represents current WiFi status.
 type WiFiStatus struct {
-	types.RawFields
-	StaIP  string `json:"sta_ip,omitempty"`
-	Status string `json:"status,omitempty"`
-	SSID   string `json:"ssid,omitempty"`
-	RSSI   int    `json:"rssi,omitempty"`
+	types.RawFields `json:"-"`
+	StaIP           string `json:"sta_ip,omitempty"`
+	Status          string `json:"status,omitempty"`
+	SSID            string `json:"ssid,omitempty"`
+	RSSI            int    `json:"rssi,omitempty"`
 }
 
 // ProvisionOptions represents options for the provisioning process.

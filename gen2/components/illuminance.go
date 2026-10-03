@@ -77,20 +77,20 @@ const (
 
 // IlluminanceConfig represents the configuration of an Illuminance component.
 type IlluminanceConfig struct {
-	Name      *string `json:"name,omitempty"`
-	DarkThr   *int    `json:"dark_thr,omitempty"`
-	BrightThr *int    `json:"bright_thr,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	Name            *string `json:"name,omitempty"`
+	DarkThr         *int    `json:"dark_thr,omitempty"`
+	BrightThr       *int    `json:"bright_thr,omitempty"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // IlluminanceStatus represents the status of an Illuminance component.
 type IlluminanceStatus struct {
-	Lux          *int               `json:"lux"`
-	Illumination *IlluminationLevel `json:"illumination"`
-	types.RawFields
-	Errors []string `json:"errors,omitempty"`
-	ID     int      `json:"id"`
+	Lux             *int               `json:"lux"`
+	Illumination    *IlluminationLevel `json:"illumination"`
+	types.RawFields `json:"-"`
+	Errors          []string `json:"errors,omitempty"`
+	ID              int      `json:"id"`
 }
 
 // GetConfig retrieves the Illuminance configuration.

@@ -60,25 +60,25 @@ func (s *Schedule) Client() *rpc.Client {
 
 // ScheduleCall represents an RPC call to execute.
 type ScheduleCall struct {
-	Params any `json:"params,omitempty"`
-	types.RawFields
-	Method string `json:"method"`
+	Params          any `json:"params,omitempty"`
+	types.RawFields `json:"-"`
+	Method          string `json:"method"`
 }
 
 // ScheduleJob represents a scheduled job.
 type ScheduleJob struct {
-	types.RawFields
-	Timespec string         `json:"timespec"`
-	Calls    []ScheduleCall `json:"calls"`
-	ID       int            `json:"id"`
-	Enable   bool           `json:"enable"`
+	types.RawFields `json:"-"`
+	Timespec        string         `json:"timespec"`
+	Calls           []ScheduleCall `json:"calls"`
+	ID              int            `json:"id"`
+	Enable          bool           `json:"enable"`
 }
 
 // ScheduleListResponse represents the response from Schedule.List.
 type ScheduleListResponse struct {
-	types.RawFields
-	Jobs []ScheduleJob `json:"jobs"`
-	Rev  int           `json:"rev,omitempty"`
+	types.RawFields `json:"-"`
+	Jobs            []ScheduleJob `json:"jobs"`
+	Rev             int           `json:"rev,omitempty"`
 }
 
 // ScheduleCreateRequest represents the parameters for creating a schedule.
@@ -90,9 +90,9 @@ type ScheduleCreateRequest struct {
 
 // ScheduleCreateResponse represents the response from Schedule.Create.
 type ScheduleCreateResponse struct {
-	types.RawFields
-	ID  int `json:"id"`
-	Rev int `json:"rev"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
+	Rev             int `json:"rev"`
 }
 
 // ScheduleUpdateRequest represents the parameters for updating a schedule.
@@ -105,14 +105,14 @@ type ScheduleUpdateRequest struct {
 
 // ScheduleUpdateResponse represents the response from Schedule.Update.
 type ScheduleUpdateResponse struct {
-	types.RawFields
-	Rev int `json:"rev"`
+	types.RawFields `json:"-"`
+	Rev             int `json:"rev"`
 }
 
 // ScheduleDeleteResponse represents the response from Schedule.Delete.
 type ScheduleDeleteResponse struct {
-	types.RawFields
-	Rev int `json:"rev"`
+	types.RawFields `json:"-"`
+	Rev             int `json:"rev"`
 }
 
 // List retrieves all scheduled jobs.

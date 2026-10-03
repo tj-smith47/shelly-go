@@ -98,7 +98,7 @@ type PeripheralInfo struct {
 	Addr *string `json:"addr,omitempty"`
 
 	// RawFields captures any additional fields for future compatibility
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // GetPeripheralsResponse represents the response from GetPeripherals.

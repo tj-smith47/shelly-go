@@ -66,7 +66,7 @@ type BLEConfig struct {
 	Observer *BLEObserverConfig `json:"observer,omitempty"`
 
 	// RawFields captures any additional fields for future compatibility
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // BLERPCConfig represents BLE RPC service configuration.
@@ -92,7 +92,7 @@ type BLEObserverConfig struct {
 // is reflected in the configuration.
 type BLEStatus struct {
 	// RawFields captures any additional fields for future compatibility
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // GetConfig retrieves the BLE configuration.

@@ -72,8 +72,8 @@ type EM1DataConfig struct {
 	Name            *string `json:"name,omitempty"`
 	DataPeriod      *int    `json:"data_period,omitempty"`
 	DataStorageDays *int    `json:"data_storage_days,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // EM1DataStatus represents the current status of an EM1Data component.
@@ -83,31 +83,31 @@ type EM1DataConfig struct {
 type EM1DataStatus struct {
 	LastRecordID     *int `json:"last_record_id,omitempty"`
 	AvailableRecords *int `json:"available_records,omitempty"`
-	types.RawFields
-	Errors []string `json:"errors,omitempty"`
-	ID     int      `json:"id"`
+	types.RawFields  `json:"-"`
+	Errors           []string `json:"errors,omitempty"`
+	ID               int      `json:"id"`
 }
 
 // EM1DataRecordsResult contains the list of available time intervals with stored data.
 type EM1DataRecordsResult struct {
-	types.RawFields
-	Records []EM1DataRecord `json:"records"`
+	types.RawFields `json:"-"`
+	Records         []EM1DataRecord `json:"records"`
 }
 
 // EM1DataRecord represents a time interval containing stored measurements.
 type EM1DataRecord struct {
-	types.RawFields
-	ID     int   `json:"id"`
-	TS     int64 `json:"ts"`
-	Period int   `json:"period"`
-	Count  int   `json:"count"`
+	types.RawFields `json:"-"`
+	ID              int   `json:"id"`
+	TS              int64 `json:"ts"`
+	Period          int   `json:"period"`
+	Count           int   `json:"count"`
 }
 
 // EM1DataGetDataResult contains historical measurement data.
 type EM1DataGetDataResult struct {
-	types.RawFields
-	Data []EM1DataBlock `json:"data"`
-	Keys []string       `json:"keys,omitempty"`
+	types.RawFields `json:"-"`
+	Data            []EM1DataBlock `json:"data"`
+	Keys            []string       `json:"keys,omitempty"`
 }
 
 // EM1DataBlock represents a block of measurements for a specific time period.
@@ -115,23 +115,23 @@ type EM1DataGetDataResult struct {
 // Note: The data array may contain multiple blocks if power loss or device
 // restarts interrupted the recording sequence.
 type EM1DataBlock struct {
-	types.RawFields
-	Values []EM1DataValues `json:"values"`
-	TS     int64           `json:"ts"`
-	Period int             `json:"period"`
+	types.RawFields `json:"-"`
+	Values          []EM1DataValues `json:"values"`
+	TS              int64           `json:"ts"`
+	Period          int             `json:"period"`
 }
 
 // EM1DataValues represents single-phase measurements at a single point in time.
 type EM1DataValues struct {
-	PowerFactor  *float64 `json:"pf,omitempty"`
-	Freq         *float64 `json:"freq,omitempty"`
-	ActEnergy    *float64 `json:"act_energy,omitempty"`
-	ActRetEnergy *float64 `json:"act_ret_energy,omitempty"`
-	types.RawFields
-	Voltage       float64 `json:"voltage"`
-	Current       float64 `json:"current"`
-	ActivePower   float64 `json:"act_power"`
-	ApparentPower float64 `json:"aprt_power"`
+	PowerFactor     *float64 `json:"pf,omitempty"`
+	Freq            *float64 `json:"freq,omitempty"`
+	ActEnergy       *float64 `json:"act_energy,omitempty"`
+	ActRetEnergy    *float64 `json:"act_ret_energy,omitempty"`
+	types.RawFields `json:"-"`
+	Voltage         float64 `json:"voltage"`
+	Current         float64 `json:"current"`
+	ActivePower     float64 `json:"act_power"`
+	ApparentPower   float64 `json:"aprt_power"`
 }
 
 // EM1DataGetDataParams contains parameters for the GetData method.

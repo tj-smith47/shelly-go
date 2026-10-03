@@ -74,13 +74,13 @@ type APIUsageTracker struct {
 
 // APICall represents a single API call.
 type APICall struct {
-	Timestamp time.Time `json:"timestamp"`
-	types.RawFields
-	Endpoint   string        `json:"endpoint"`
-	Method     string        `json:"method"`
-	DeviceID   string        `json:"device_id,omitempty"`
-	StatusCode int           `json:"status_code"`
-	Latency    time.Duration `json:"latency"`
+	Timestamp       time.Time `json:"timestamp"`
+	types.RawFields `json:"-"`
+	Endpoint        string        `json:"endpoint"`
+	Method          string        `json:"method"`
+	DeviceID        string        `json:"device_id,omitempty"`
+	StatusCode      int           `json:"status_code"`
+	Latency         time.Duration `json:"latency"`
 }
 
 // NewAPIUsageTracker creates a new API usage tracker.
@@ -180,21 +180,21 @@ type DevicePatternTracker struct {
 
 // DeviceActivityStats contains activity statistics for a device.
 type DeviceActivityStats struct {
-	FirstActivity time.Time     `json:"first_activity"`
-	LastActivity  time.Time     `json:"last_activity"`
-	ActiveHours   map[int]int64 `json:"active_hours"`
-	types.RawFields
-	DeviceID      string `json:"device_id"`
-	TotalEvents   int64  `json:"total_events"`
-	StatusChanges int64  `json:"status_changes"`
-	OnlineEvents  int64  `json:"online_events"`
-	OfflineEvents int64  `json:"offline_events"`
-	CommandsSent  int64  `json:"commands_sent"`
+	FirstActivity   time.Time     `json:"first_activity"`
+	LastActivity    time.Time     `json:"last_activity"`
+	ActiveHours     map[int]int64 `json:"active_hours"`
+	types.RawFields `json:"-"`
+	DeviceID        string `json:"device_id"`
+	TotalEvents     int64  `json:"total_events"`
+	StatusChanges   int64  `json:"status_changes"`
+	OnlineEvents    int64  `json:"online_events"`
+	OfflineEvents   int64  `json:"offline_events"`
+	CommandsSent    int64  `json:"commands_sent"`
 }
 
 // TypeActivityStats contains activity statistics for a device type.
 type TypeActivityStats struct {
-	types.RawFields
+	types.RawFields        `json:"-"`
 	DeviceType             string  `json:"device_type"`
 	DeviceCount            int64   `json:"device_count"`
 	TotalEvents            int64   `json:"total_events"`
@@ -364,9 +364,9 @@ type ConnectionMetricsTracker struct {
 
 // HostConnectionStats contains connection statistics for a host.
 type HostConnectionStats struct {
-	ConnectedAt   *time.Time `json:"connected_at,omitempty"`
-	LastMessageAt *time.Time `json:"last_message_at,omitempty"`
-	types.RawFields
+	ConnectedAt               *time.Time `json:"connected_at,omitempty"`
+	LastMessageAt             *time.Time `json:"last_message_at,omitempty"`
+	types.RawFields           `json:"-"`
 	Host                      string          `json:"host"`
 	CurrentState              string          `json:"current_state"`
 	ConnectionDurations       []time.Duration `json:"-"`
@@ -513,12 +513,12 @@ type ErrorTracker struct {
 
 // ErrorRecord represents a recorded error.
 type ErrorRecord struct {
-	Timestamp time.Time `json:"timestamp"`
-	types.RawFields
-	ErrorType string `json:"error_type"`
-	Message   string `json:"message"`
-	DeviceID  string `json:"device_id,omitempty"`
-	Host      string `json:"host,omitempty"`
+	Timestamp       time.Time `json:"timestamp"`
+	types.RawFields `json:"-"`
+	ErrorType       string `json:"error_type"`
+	Message         string `json:"message"`
+	DeviceID        string `json:"device_id,omitempty"`
+	Host            string `json:"host,omitempty"`
 }
 
 // NewErrorTracker creates a new error tracker.
@@ -631,21 +631,21 @@ type AnalyticsSummary struct {
 	Errors *ErrorSummary `json:"errors"`
 
 	// RawFields captures any unknown fields.
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // APIUsageSummary summarizes API usage.
 type APIUsageSummary struct {
-	TopEndpoints map[string]int64 `json:"top_endpoints"`
-	types.RawFields
-	TotalCalls     int64         `json:"total_calls"`
-	CallsLastHour  int64         `json:"calls_last_hour"`
-	AverageLatency time.Duration `json:"average_latency"`
+	TopEndpoints    map[string]int64 `json:"top_endpoints"`
+	types.RawFields `json:"-"`
+	TotalCalls      int64         `json:"total_calls"`
+	CallsLastHour   int64         `json:"calls_last_hour"`
+	AverageLatency  time.Duration `json:"average_latency"`
 }
 
 // DevicePatternSummary summarizes device patterns.
 type DevicePatternSummary struct {
-	types.RawFields
+	types.RawFields     `json:"-"`
 	MostActiveDevices   []string `json:"most_active_devices"`
 	PeakHours           []int    `json:"peak_hours"`
 	TotalDevicesTracked int      `json:"total_devices_tracked"`
@@ -653,7 +653,7 @@ type DevicePatternSummary struct {
 
 // ConnectionMetricsSummary summarizes connection metrics.
 type ConnectionMetricsSummary struct {
-	types.RawFields
+	types.RawFields       `json:"-"`
 	TotalConnections      int64 `json:"total_connections"`
 	TotalDisconnections   int64 `json:"total_disconnections"`
 	TotalMessagesReceived int64 `json:"total_messages_received"`
@@ -663,9 +663,9 @@ type ConnectionMetricsSummary struct {
 
 // ErrorSummary summarizes errors.
 type ErrorSummary struct {
-	ErrorsByType map[string]int64 `json:"errors_by_type"`
-	types.RawFields
-	TotalErrors int64 `json:"total_errors"`
+	ErrorsByType    map[string]int64 `json:"errors_by_type"`
+	types.RawFields `json:"-"`
+	TotalErrors     int64 `json:"total_errors"`
 }
 
 // GetSummary returns a summary of all analytics.

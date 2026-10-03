@@ -6,13 +6,13 @@ import (
 
 // Config represents the Zigbee component configuration.
 type Config struct {
-	types.RawFields
-	Enable bool `json:"enable"`
+	types.RawFields `json:"-"`
+	Enable          bool `json:"enable"`
 }
 
 // Status represents the Zigbee component status.
 type Status struct {
-	types.RawFields
+	types.RawFields  `json:"-"`
 	NetworkState     string `json:"network_state,omitempty"`
 	EUI64            string `json:"eui64,omitempty"`
 	CoordinatorEUI64 string `json:"coordinator_eui64,omitempty"`

@@ -51,7 +51,7 @@ func (h *HTUI) Client() *rpc.Client {
 
 // HTUIConfig represents the configuration of a HT_UI component.
 type HTUIConfig struct {
-	types.RawFields
+	types.RawFields `json:"-"`
 	TemperatureUnit string `json:"temperature_unit"`
 }
 
@@ -59,7 +59,7 @@ type HTUIConfig struct {
 // Note: The HT_UI component does not own any status properties.
 type HTUIStatus struct {
 	// RawFields captures any additional fields for future compatibility
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // GetConfig retrieves the HT_UI configuration.

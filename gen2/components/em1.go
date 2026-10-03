@@ -54,30 +54,30 @@ func NewEM1(client *rpc.Client, id int) *EM1 {
 
 // EM1Config represents the configuration of an EM1 component.
 type EM1Config struct {
-	Name    *string `json:"name,omitempty"`
-	CTType  *string `json:"ct_type,omitempty"`
-	Reverse *bool   `json:"reverse,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	Name            *string `json:"name,omitempty"`
+	CTType          *string `json:"ct_type,omitempty"`
+	Reverse         *bool   `json:"reverse,omitempty"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // EM1Status represents the current status of an EM1 component.
 type EM1Status struct {
-	PF   *float64 `json:"pf,omitempty"`
-	Freq *float64 `json:"freq,omitempty"`
-	types.RawFields
-	Errors    []string `json:"errors,omitempty"`
-	ID        int      `json:"id"`
-	Voltage   float64  `json:"voltage"`
-	Current   float64  `json:"current"`
-	ActPower  float64  `json:"act_power"`
-	AprtPower float64  `json:"aprt_power"`
+	PF              *float64 `json:"pf,omitempty"`
+	Freq            *float64 `json:"freq,omitempty"`
+	types.RawFields `json:"-"`
+	Errors          []string `json:"errors,omitempty"`
+	ID              int      `json:"id"`
+	Voltage         float64  `json:"voltage"`
+	Current         float64  `json:"current"`
+	ActPower        float64  `json:"act_power"`
+	AprtPower       float64  `json:"aprt_power"`
 }
 
 // EM1GetCTTypesResult contains the list of supported CT types.
 type EM1GetCTTypesResult struct {
-	types.RawFields
-	Types []string `json:"types"`
+	types.RawFields `json:"-"`
+	Types           []string `json:"types"`
 }
 
 // GetConfig retrieves the EM1 configuration.

@@ -59,23 +59,23 @@ func (d *BTHomeDevice) ID() int {
 
 // BTHomeDeviceConfig represents the configuration of a BTHomeDevice component.
 type BTHomeDeviceConfig struct {
-	Name *string        `json:"name,omitempty"`
-	Key  *string        `json:"key,omitempty"`
-	Meta map[string]any `json:"meta,omitempty"`
-	types.RawFields
-	Addr string `json:"addr"`
-	ID   int    `json:"id"`
+	Name            *string        `json:"name,omitempty"`
+	Key             *string        `json:"key,omitempty"`
+	Meta            map[string]any `json:"meta,omitempty"`
+	types.RawFields `json:"-"`
+	Addr            string `json:"addr"`
+	ID              int    `json:"id"`
 }
 
 // BTHomeDeviceStatus represents the status of a BTHomeDevice component.
 type BTHomeDeviceStatus struct {
-	RSSI     *int `json:"rssi,omitempty"`
-	Battery  *int `json:"battery,omitempty"`
-	PacketID *int `json:"packet_id,omitempty"`
-	types.RawFields
-	Errors       []string `json:"errors,omitempty"`
-	ID           int      `json:"id"`
-	LastUpdateTS float64  `json:"last_updated_ts"`
+	RSSI            *int `json:"rssi,omitempty"`
+	Battery         *int `json:"battery,omitempty"`
+	PacketID        *int `json:"packet_id,omitempty"`
+	types.RawFields `json:"-"`
+	Errors          []string `json:"errors,omitempty"`
+	ID              int      `json:"id"`
+	LastUpdateTS    float64  `json:"last_updated_ts"`
 }
 
 // BTHomeDeviceKnownObject represents a known object from a BTHomeDevice.

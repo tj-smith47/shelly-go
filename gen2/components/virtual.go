@@ -179,19 +179,19 @@ func (vb *VirtualBoolean) ID() int {
 
 // VirtualBooleanConfig represents the configuration of a virtual Boolean component.
 type VirtualBooleanConfig struct {
-	Name         *string      `json:"name,omitempty"`
-	DefaultValue *bool        `json:"default_value,omitempty"`
-	Persisted    *bool        `json:"persisted,omitempty"`
-	Meta         *VirtualMeta `json:"meta,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	Name            *string      `json:"name,omitempty"`
+	DefaultValue    *bool        `json:"default_value,omitempty"`
+	Persisted       *bool        `json:"persisted,omitempty"`
+	Meta            *VirtualMeta `json:"meta,omitempty"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // VirtualBooleanStatus represents the status of a virtual Boolean component.
 type VirtualBooleanStatus struct {
-	Value *bool `json:"value,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	Value           *bool `json:"value,omitempty"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // VirtualMeta contains user-defined metadata for virtual components.
@@ -342,23 +342,23 @@ func (vn *VirtualNumber) ID() int {
 
 // VirtualNumberConfig represents the configuration of a virtual Number component.
 type VirtualNumberConfig struct {
-	Name         *string      `json:"name,omitempty"`
-	Min          *float64     `json:"min,omitempty"`
-	Max          *float64     `json:"max,omitempty"`
-	Step         *float64     `json:"step,omitempty"`
-	DefaultValue *float64     `json:"default_value,omitempty"`
-	Persisted    *bool        `json:"persisted,omitempty"`
-	Unit         *string      `json:"unit,omitempty"`
-	Meta         *VirtualMeta `json:"meta,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	Name            *string      `json:"name,omitempty"`
+	Min             *float64     `json:"min,omitempty"`
+	Max             *float64     `json:"max,omitempty"`
+	Step            *float64     `json:"step,omitempty"`
+	DefaultValue    *float64     `json:"default_value,omitempty"`
+	Persisted       *bool        `json:"persisted,omitempty"`
+	Unit            *string      `json:"unit,omitempty"`
+	Meta            *VirtualMeta `json:"meta,omitempty"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // VirtualNumberStatus represents the status of a virtual Number component.
 type VirtualNumberStatus struct {
-	Value *float64 `json:"value,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	Value           *float64 `json:"value,omitempty"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // GetConfig retrieves the virtual Number configuration.
@@ -487,20 +487,20 @@ func (vt *VirtualText) ID() int {
 
 // VirtualTextConfig represents the configuration of a virtual Text component.
 type VirtualTextConfig struct {
-	Name         *string      `json:"name,omitempty"`
-	MaxLen       *int         `json:"max_len,omitempty"`
-	DefaultValue *string      `json:"default_value,omitempty"`
-	Persisted    *bool        `json:"persisted,omitempty"`
-	Meta         *VirtualMeta `json:"meta,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	Name            *string      `json:"name,omitempty"`
+	MaxLen          *int         `json:"max_len,omitempty"`
+	DefaultValue    *string      `json:"default_value,omitempty"`
+	Persisted       *bool        `json:"persisted,omitempty"`
+	Meta            *VirtualMeta `json:"meta,omitempty"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // VirtualTextStatus represents the status of a virtual Text component.
 type VirtualTextStatus struct {
-	Value *string `json:"value,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	Value           *string `json:"value,omitempty"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // GetConfig retrieves the virtual Text configuration.
@@ -620,20 +620,20 @@ func (ve *VirtualEnum) ID() int {
 
 // VirtualEnumConfig represents the configuration of a virtual Enum component.
 type VirtualEnumConfig struct {
-	Name         *string      `json:"name,omitempty"`
-	DefaultValue *string      `json:"default_value,omitempty"`
-	Persisted    *bool        `json:"persisted,omitempty"`
-	Meta         *VirtualMeta `json:"meta,omitempty"`
-	types.RawFields
-	Options []string `json:"options,omitempty"`
-	ID      int      `json:"id"`
+	Name            *string      `json:"name,omitempty"`
+	DefaultValue    *string      `json:"default_value,omitempty"`
+	Persisted       *bool        `json:"persisted,omitempty"`
+	Meta            *VirtualMeta `json:"meta,omitempty"`
+	types.RawFields `json:"-"`
+	Options         []string `json:"options,omitempty"`
+	ID              int      `json:"id"`
 }
 
 // VirtualEnumStatus represents the status of a virtual Enum component.
 type VirtualEnumStatus struct {
-	Value *string `json:"value,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	Value           *string `json:"value,omitempty"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // GetConfig retrieves the virtual Enum configuration.
@@ -755,17 +755,17 @@ func (vb *VirtualButton) ID() int {
 
 // VirtualButtonConfig represents the configuration of a virtual Button component.
 type VirtualButtonConfig struct {
-	Name *string      `json:"name,omitempty"`
-	Meta *VirtualMeta `json:"meta,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	Name            *string      `json:"name,omitempty"`
+	Meta            *VirtualMeta `json:"meta,omitempty"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // VirtualButtonStatus represents the status of a virtual Button component.
 type VirtualButtonStatus struct {
-	LastPressed *int64 `json:"last_pressed,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	LastPressed     *int64 `json:"last_pressed,omitempty"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // GetConfig retrieves the virtual Button configuration.
@@ -875,17 +875,17 @@ func (vg *VirtualGroup) ID() int {
 
 // VirtualGroupConfig represents the configuration of a virtual Group component.
 type VirtualGroupConfig struct {
-	Name *string      `json:"name,omitempty"`
-	Meta *VirtualMeta `json:"meta,omitempty"`
-	types.RawFields
-	Members []string `json:"members,omitempty"`
-	ID      int      `json:"id"`
+	Name            *string      `json:"name,omitempty"`
+	Meta            *VirtualMeta `json:"meta,omitempty"`
+	types.RawFields `json:"-"`
+	Members         []string `json:"members,omitempty"`
+	ID              int      `json:"id"`
 }
 
 // VirtualGroupStatus represents the status of a virtual Group component.
 type VirtualGroupStatus struct {
-	types.RawFields
-	ID int `json:"id"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // GetConfig retrieves the virtual Group configuration.

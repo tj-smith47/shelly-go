@@ -31,7 +31,7 @@ func NewShelly(client *rpc.Client) *Shelly {
 
 // DeviceInfo contains information about the device.
 type DeviceInfo struct {
-	types.RawFields
+	types.RawFields `json:"-"`
 	App             string `json:"app"`
 	Profile         string `json:"profile,omitempty"`
 	ID              string `json:"id"`
@@ -175,17 +175,17 @@ func (s *Shelly) ResetWiFiConfig(ctx context.Context) error {
 
 // UpdateInfo contains information about available firmware updates.
 type UpdateInfo struct {
-	Stable *FirmwareVersion `json:"stable,omitempty"`
-	Beta   *FirmwareVersion `json:"beta,omitempty"`
-	types.RawFields
-	OldVersion string `json:"old_version,omitempty"`
+	Stable          *FirmwareVersion `json:"stable,omitempty"`
+	Beta            *FirmwareVersion `json:"beta,omitempty"`
+	types.RawFields `json:"-"`
+	OldVersion      string `json:"old_version,omitempty"`
 }
 
 // FirmwareVersion contains firmware version information.
 type FirmwareVersion struct {
-	types.RawFields
-	Version string `json:"version"`
-	BuildID string `json:"build_id,omitempty"`
+	types.RawFields `json:"-"`
+	Version         string `json:"version"`
+	BuildID         string `json:"build_id,omitempty"`
 }
 
 // CheckForUpdate checks if a firmware update is available.
@@ -287,10 +287,10 @@ func (s *Shelly) GetComponents(ctx context.Context, includeStatus, includeConfig
 
 // DetectLocationResult contains the result of location detection.
 type DetectLocationResult struct {
-	types.RawFields
-	TZ  string  `json:"tz,omitempty"`
-	Lat float64 `json:"lat,omitempty"`
-	Lon float64 `json:"lon,omitempty"`
+	types.RawFields `json:"-"`
+	TZ              string  `json:"tz,omitempty"`
+	Lat             float64 `json:"lat,omitempty"`
+	Lon             float64 `json:"lon,omitempty"`
 }
 
 // DetectLocation attempts to detect the device's geographic location.

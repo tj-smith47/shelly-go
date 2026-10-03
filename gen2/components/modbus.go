@@ -60,14 +60,14 @@ func (m *Modbus) Client() *rpc.Client {
 
 // ModbusConfig represents the configuration of a Modbus component.
 type ModbusConfig struct {
-	types.RawFields
-	Enable bool `json:"enable"`
+	types.RawFields `json:"-"`
+	Enable          bool `json:"enable"`
 }
 
 // ModbusStatus represents the status of a Modbus component.
 type ModbusStatus struct {
-	types.RawFields
-	Enabled bool `json:"enabled"`
+	types.RawFields `json:"-"`
+	Enabled         bool `json:"enabled"`
 }
 
 // GetConfig retrieves the Modbus configuration.

@@ -67,31 +67,31 @@ func NewEMData(client *rpc.Client, id int) *EMData {
 type EMDataStatus struct {
 	LastRecordID     *int `json:"last_record_id,omitempty"`
 	AvailableRecords *int `json:"available_records,omitempty"`
-	types.RawFields
-	Errors []string `json:"errors,omitempty"`
-	ID     int      `json:"id"`
+	types.RawFields  `json:"-"`
+	Errors           []string `json:"errors,omitempty"`
+	ID               int      `json:"id"`
 }
 
 // EMDataRecordsResult contains the list of available time intervals with stored data.
 type EMDataRecordsResult struct {
-	types.RawFields
-	Records []EMDataRecord `json:"records"`
+	types.RawFields `json:"-"`
+	Records         []EMDataRecord `json:"records"`
 }
 
 // EMDataRecord represents a time interval containing stored measurements.
 type EMDataRecord struct {
-	types.RawFields
-	ID     int   `json:"id"`
-	TS     int64 `json:"ts"`
-	Period int   `json:"period"`
-	Count  int   `json:"count"`
+	types.RawFields `json:"-"`
+	ID              int   `json:"id"`
+	TS              int64 `json:"ts"`
+	Period          int   `json:"period"`
+	Count           int   `json:"count"`
 }
 
 // EMDataGetDataResult contains historical measurement data.
 type EMDataGetDataResult struct {
-	types.RawFields
-	Data []EMDataBlock `json:"data"`
-	Keys []string      `json:"keys,omitempty"`
+	types.RawFields `json:"-"`
+	Data            []EMDataBlock `json:"data"`
+	Keys            []string      `json:"keys,omitempty"`
 }
 
 // EMDataBlock represents a block of measurements for a specific time period.
@@ -99,16 +99,16 @@ type EMDataGetDataResult struct {
 // Note: The data array may contain multiple blocks if power loss or device
 // restarts interrupted the recording sequence.
 type EMDataBlock struct {
-	types.RawFields
-	Values []EMDataValues `json:"values"`
-	TS     int64          `json:"ts"`
-	Period int            `json:"period"`
+	types.RawFields `json:"-"`
+	Values          []EMDataValues `json:"values"`
+	TS              int64          `json:"ts"`
+	Period          int            `json:"period"`
 }
 
 // EMDataValues represents measurements for all three phases at a single point in time.
 type EMDataValues struct {
-	BPowerFactor *float64 `json:"b_pf,omitempty"`
-	types.RawFields
+	BPowerFactor      *float64 `json:"b_pf,omitempty"`
+	types.RawFields   `json:"-"`
 	TotalActRetEnergy *float64 `json:"total_act_ret_energy,omitempty"`
 	TotalActEnergy    *float64 `json:"total_act_energy,omitempty"`
 	APowerFactor      *float64 `json:"a_pf,omitempty"`

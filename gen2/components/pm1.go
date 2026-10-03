@@ -55,31 +55,31 @@ func NewPM1(client *rpc.Client, id int) *PM1 {
 
 // PM1Config represents the configuration of a PM1 component.
 type PM1Config struct {
-	Name    *string `json:"name,omitempty"`
-	Reverse *bool   `json:"reverse,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	Name            *string `json:"name,omitempty"`
+	Reverse         *bool   `json:"reverse,omitempty"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // PM1Status represents the current status of a PM1 component.
 type PM1Status struct {
-	Freq       *float64           `json:"freq,omitempty"`
-	AEnergy    *PM1EnergyCounters `json:"aenergy,omitempty"`
-	RetAEnergy *PM1EnergyCounters `json:"ret_aenergy,omitempty"`
-	types.RawFields
-	Errors  []string `json:"errors,omitempty"`
-	ID      int      `json:"id"`
-	Voltage float64  `json:"voltage"`
-	Current float64  `json:"current"`
-	APower  float64  `json:"apower"`
+	Freq            *float64           `json:"freq,omitempty"`
+	AEnergy         *PM1EnergyCounters `json:"aenergy,omitempty"`
+	RetAEnergy      *PM1EnergyCounters `json:"ret_aenergy,omitempty"`
+	types.RawFields `json:"-"`
+	Errors          []string `json:"errors,omitempty"`
+	ID              int      `json:"id"`
+	Voltage         float64  `json:"voltage"`
+	Current         float64  `json:"current"`
+	APower          float64  `json:"apower"`
 }
 
 // PM1EnergyCounters represents accumulated energy measurements for PM1.
 type PM1EnergyCounters struct {
-	MinuteTs *int64 `json:"minute_ts,omitempty"`
-	types.RawFields
-	ByMinute []float64 `json:"by_minute,omitempty"`
-	Total    float64   `json:"total"`
+	MinuteTs        *int64 `json:"minute_ts,omitempty"`
+	types.RawFields `json:"-"`
+	ByMinute        []float64 `json:"by_minute,omitempty"`
+	Total           float64   `json:"total"`
 }
 
 // PM1ResetCountersParams contains parameters for the PM1.ResetCounters method.

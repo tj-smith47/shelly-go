@@ -51,16 +51,16 @@ type LightConfig struct {
 	MinBrightnessOnToggle *int             `json:"min_brightness_on_toggle,omitempty"`
 	NightMode             *NightModeConfig `json:"night_mode,omitempty"`
 	DefaultBrightness     *int             `json:"default_brightness,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	types.RawFields       `json:"-"`
+	ID                    int `json:"id"`
 }
 
 // NightModeConfig represents night mode configuration.
 type NightModeConfig struct {
-	Enable     *bool `json:"enable,omitempty"`
-	Brightness *int  `json:"brightness,omitempty"`
-	types.RawFields
-	ActiveBetween []string `json:"active_between,omitempty"`
+	Enable          *bool `json:"enable,omitempty"`
+	Brightness      *int  `json:"brightness,omitempty"`
+	types.RawFields `json:"-"`
+	ActiveBetween   []string `json:"active_between,omitempty"`
 }
 
 // LightStatus represents the current status of a Light component.
@@ -73,11 +73,11 @@ type LightStatus struct {
 	APower             *float64           `json:"apower,omitempty"`
 	Voltage            *float64           `json:"voltage,omitempty"`
 	Current            *float64           `json:"current,omitempty"`
-	types.RawFields
-	Source string   `json:"source"`
-	Errors []string `json:"errors,omitempty"`
-	ID     int      `json:"id"`
-	Output bool     `json:"output"`
+	types.RawFields    `json:"-"`
+	Source             string   `json:"source"`
+	Errors             []string `json:"errors,omitempty"`
+	ID                 int      `json:"id"`
+	Output             bool     `json:"output"`
 }
 
 // LightSetParams contains parameters for the Light.Set method.
@@ -96,7 +96,7 @@ type LightSetResult struct {
 	WasOn *bool `json:"was_on,omitempty"`
 
 	// RawFields captures any additional fields for future compatibility
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // LightToggleParams contains parameters for the Light.Toggle method.
@@ -111,7 +111,7 @@ type LightToggleResult struct {
 	WasOn *bool `json:"was_on,omitempty"`
 
 	// RawFields captures any additional fields for future compatibility
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // Set controls the light state and parameters.

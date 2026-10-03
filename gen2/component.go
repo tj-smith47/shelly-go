@@ -285,10 +285,10 @@ type ComponentList struct {
 
 // ComponentInfo contains information about a component.
 type ComponentInfo struct {
-	types.RawFields
-	Key    string          `json:"key"`
-	Status json.RawMessage `json:"status,omitempty"`
-	Config json.RawMessage `json:"config,omitempty"`
+	types.RawFields `json:"-"`
+	Key             string          `json:"key"`
+	Status          json.RawMessage `json:"status,omitempty"`
+	Config          json.RawMessage `json:"config,omitempty"`
 }
 
 // ParseComponentKey parses a component key into type and ID.

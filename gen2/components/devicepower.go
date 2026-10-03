@@ -52,29 +52,29 @@ func NewDevicePower(client *rpc.Client, id int) *DevicePower {
 // according to the official Shelly API documentation. This struct is provided
 // for API consistency and future compatibility.
 type DevicePowerConfig struct {
-	types.RawFields
-	ID int `json:"id"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // DevicePowerStatus represents the current status of a DevicePower component.
 type DevicePowerStatus struct {
-	types.RawFields
-	External ExternalPowerStatus `json:"external"`
-	Battery  BatteryStatus       `json:"battery"`
-	ID       int                 `json:"id"`
+	types.RawFields `json:"-"`
+	External        ExternalPowerStatus `json:"external"`
+	Battery         BatteryStatus       `json:"battery"`
+	ID              int                 `json:"id"`
 }
 
 // BatteryStatus represents battery status information.
 type BatteryStatus struct {
-	types.RawFields
-	V       float64 `json:"V"`
-	Percent int     `json:"percent"`
+	types.RawFields `json:"-"`
+	V               float64 `json:"V"`
+	Percent         int     `json:"percent"`
 }
 
 // ExternalPowerStatus represents external power source status.
 type ExternalPowerStatus struct {
-	types.RawFields
-	Present bool `json:"present"`
+	types.RawFields `json:"-"`
+	Present         bool `json:"present"`
 }
 
 // GetConfig retrieves the devicepower configuration.

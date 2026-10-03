@@ -68,13 +68,13 @@ type ThermostatConfig struct {
 	MinValvePosition        *int             `json:"min_valve_position,omitempty"`
 	DefaultBoostDuration    *int             `json:"default_boost_duration,omitempty"`
 	TempOffset              *float64         `json:"temp_offset,omitempty"`
-	types.RawFields
-	Enable                 *bool    `json:"enable,omitempty"`
-	HumidityOffset         *float64 `json:"humidity_offset,omitempty"`
-	TempUnit               *string  `json:"temp_unit,omitempty"`
-	ThermostatMode         *string  `json:"thermostat_mode,omitempty"`
-	DefaultOverrideTargetC *float64 `json:"default_override_target_C,omitempty"`
-	ID                     int      `json:"id"`
+	types.RawFields         `json:"-"`
+	Enable                  *bool    `json:"enable,omitempty"`
+	HumidityOffset          *float64 `json:"humidity_offset,omitempty"`
+	TempUnit                *string  `json:"temp_unit,omitempty"`
+	ThermostatMode          *string  `json:"thermostat_mode,omitempty"`
+	DefaultOverrideTargetC  *float64 `json:"default_override_target_C,omitempty"`
+	ID                      int      `json:"id"`
 }
 
 // ThermostatFlags contains optional configuration flags for the thermostat.
@@ -94,15 +94,15 @@ type ThermostatFlags struct {
 
 // ThermostatStatus represents the status of a Thermostat component.
 type ThermostatStatus struct {
-	TargetHumidity *float64 `json:"target_humidity,omitempty"`
-	ScheduleRev    *int     `json:"schedule_rev,omitempty"`
-	Steps          *int     `json:"steps,omitempty"`
-	CurrentC       *float64 `json:"current_C,omitempty"`
-	CurrentF       *float64 `json:"current_F,omitempty"`
-	TargetC        *float64 `json:"target_C,omitempty"`
-	Pos            *int     `json:"pos,omitempty"`
-	TargetF        *float64 `json:"target_F,omitempty"`
-	types.RawFields
+	TargetHumidity  *float64 `json:"target_humidity,omitempty"`
+	ScheduleRev     *int     `json:"schedule_rev,omitempty"`
+	Steps           *int     `json:"steps,omitempty"`
+	CurrentC        *float64 `json:"current_C,omitempty"`
+	CurrentF        *float64 `json:"current_F,omitempty"`
+	TargetC         *float64 `json:"target_C,omitempty"`
+	Pos             *int     `json:"pos,omitempty"`
+	TargetF         *float64 `json:"target_F,omitempty"`
+	types.RawFields `json:"-"`
 	CurrentHumidity *float64            `json:"current_humidity,omitempty"`
 	Output          *bool               `json:"output,omitempty"`
 	Boost           *ThermostatModeInfo `json:"boost,omitempty"`

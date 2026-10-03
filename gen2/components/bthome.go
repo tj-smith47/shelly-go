@@ -54,9 +54,9 @@ func (b *BTHome) Client() *rpc.Client {
 
 // BTHomeStatus represents the status of the BTHome component.
 type BTHomeStatus struct {
-	Discovery *BTHomeDiscoveryStatus `json:"discovery,omitempty"`
-	types.RawFields
-	Errors []string `json:"errors,omitempty"`
+	Discovery       *BTHomeDiscoveryStatus `json:"discovery,omitempty"`
+	types.RawFields `json:"-"`
+	Errors          []string `json:"errors,omitempty"`
 }
 
 // BTHomeDiscoveryStatus represents the status of an ongoing BTHome device discovery.
@@ -99,11 +99,11 @@ type BTHomeAddSensorResponse struct {
 
 // BTHomeObjectInfo represents information about a BTHome object type.
 type BTHomeObjectInfo struct {
-	types.RawFields
-	Name  string `json:"name"`
-	Type  string `json:"type"`
-	Unit  string `json:"unit,omitempty"`
-	ObjID int    `json:"obj_id"`
+	types.RawFields `json:"-"`
+	Name            string `json:"name"`
+	Type            string `json:"type"`
+	Unit            string `json:"unit,omitempty"`
+	ObjID           int    `json:"obj_id"`
 }
 
 // BTHomeGetObjectInfosResponse represents the response from GetObjectInfos.

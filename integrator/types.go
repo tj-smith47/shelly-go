@@ -18,17 +18,17 @@ type AuthRequest struct {
 
 // AuthResponse contains the JWT token response.
 type AuthResponse struct {
-	Data *AuthData `json:"data,omitempty"`
-	types.RawFields
-	Errors json.RawMessage `json:"errors,omitempty"`
-	IsOK   bool            `json:"isok"`
+	Data            *AuthData `json:"data,omitempty"`
+	types.RawFields `json:"-"`
+	Errors          json.RawMessage `json:"errors,omitempty"`
+	IsOK            bool            `json:"isok"`
 }
 
 // AuthData contains the JWT token and expiration info.
 type AuthData struct {
-	types.RawFields
-	Token     string `json:"token"`
-	ExpiresAt int64  `json:"expires_at,omitempty"`
+	types.RawFields `json:"-"`
+	Token           string `json:"token"`
+	ExpiresAt       int64  `json:"expires_at,omitempty"`
 }
 
 // ExpiresTime returns the expiration time as time.Time.
@@ -43,15 +43,15 @@ func (a *AuthData) IsExpired() bool {
 
 // WSMessage represents a WebSocket message from the Shelly cloud.
 type WSMessage struct {
-	Online *int `json:"online,omitempty"`
-	types.RawFields
-	Event        string          `json:"event"`
-	DeviceID     string          `json:"device_id,omitempty"`
-	Device       string          `json:"device,omitempty"`
-	AccessGroups string          `json:"accessGroups,omitempty"`
-	Status       json.RawMessage `json:"status,omitempty"`
-	Settings     json.RawMessage `json:"settings,omitempty"`
-	Timestamp    int64           `json:"ts,omitempty"`
+	Online          *int `json:"online,omitempty"`
+	types.RawFields `json:"-"`
+	Event           string          `json:"event"`
+	DeviceID        string          `json:"device_id,omitempty"`
+	Device          string          `json:"device,omitempty"`
+	AccessGroups    string          `json:"accessGroups,omitempty"`
+	Status          json.RawMessage `json:"status,omitempty"`
+	Settings        json.RawMessage `json:"settings,omitempty"`
+	Timestamp       int64           `json:"ts,omitempty"`
 }
 
 // GetDeviceID returns the device ID from either DeviceID or Device field.

@@ -55,55 +55,55 @@ func (w *Webhook) Client() *rpc.Client {
 
 // WebhookConfig represents a webhook configuration.
 type WebhookConfig struct {
-	ID           *int    `json:"id,omitempty"`
-	Name         *string `json:"name,omitempty"`
-	SSLCA        *string `json:"ssl_ca,omitempty"`
-	Condition    *string `json:"condition,omitempty"`
-	RepeatPeriod *int    `json:"repeat_period,omitempty"`
-	types.RawFields
-	Event         string   `json:"event"`
-	URLs          []string `json:"urls"`
-	ActiveBetween []string `json:"active_between,omitempty"`
-	Cid           int      `json:"cid"`
-	Enable        bool     `json:"enable"`
+	ID              *int    `json:"id,omitempty"`
+	Name            *string `json:"name,omitempty"`
+	SSLCA           *string `json:"ssl_ca,omitempty"`
+	Condition       *string `json:"condition,omitempty"`
+	RepeatPeriod    *int    `json:"repeat_period,omitempty"`
+	types.RawFields `json:"-"`
+	Event           string   `json:"event"`
+	URLs            []string `json:"urls"`
+	ActiveBetween   []string `json:"active_between,omitempty"`
+	Cid             int      `json:"cid"`
+	Enable          bool     `json:"enable"`
 }
 
 // WebhookListResponse represents the response from Webhook.List.
 type WebhookListResponse struct {
-	types.RawFields
-	Hooks []WebhookConfig `json:"hooks"`
-	Rev   int             `json:"rev"`
+	types.RawFields `json:"-"`
+	Hooks           []WebhookConfig `json:"hooks"`
+	Rev             int             `json:"rev"`
 }
 
 // WebhookCreateResponse represents the response from Webhook.Create.
 type WebhookCreateResponse struct {
-	types.RawFields
-	ID  int `json:"id"`
-	Rev int `json:"rev"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
+	Rev             int `json:"rev"`
 }
 
 // WebhookUpdateResponse represents the response from Webhook.Update.
 type WebhookUpdateResponse struct {
-	types.RawFields
-	Rev int `json:"rev"`
+	types.RawFields `json:"-"`
+	Rev             int `json:"rev"`
 }
 
 // WebhookDeleteResponse represents the response from Webhook.Delete.
 type WebhookDeleteResponse struct {
-	types.RawFields
-	Rev int `json:"rev"`
+	types.RawFields `json:"-"`
+	Rev             int `json:"rev"`
 }
 
 // WebhookSupportedEvent represents a supported webhook event.
 type WebhookSupportedEvent struct {
-	types.RawFields
-	Event string `json:"event"`
+	types.RawFields `json:"-"`
+	Event           string `json:"event"`
 }
 
 // WebhookListSupportedResponse represents the response from Webhook.ListSupported.
 type WebhookListSupportedResponse struct {
-	types.RawFields
-	HookTypes []string `json:"hook_types"`
+	types.RawFields `json:"-"`
+	HookTypes       []string `json:"hook_types"`
 }
 
 // List retrieves all configured webhooks.

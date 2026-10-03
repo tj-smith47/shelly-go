@@ -23,26 +23,26 @@ const (
 
 // Account represents a user account that has granted access to the integrator.
 type Account struct {
-	GrantedAt      time.Time  `json:"granted_at"`
-	LastActivityAt *time.Time `json:"last_activity_at,omitempty"`
-	types.RawFields
-	UserID  string          `json:"user_id"`
-	Email   string          `json:"email,omitempty"`
-	Name    string          `json:"name,omitempty"`
-	Devices []AccountDevice `json:"devices"`
+	GrantedAt       time.Time  `json:"granted_at"`
+	LastActivityAt  *time.Time `json:"last_activity_at,omitempty"`
+	types.RawFields `json:"-"`
+	UserID          string          `json:"user_id"`
+	Email           string          `json:"email,omitempty"`
+	Name            string          `json:"name,omitempty"`
+	Devices         []AccountDevice `json:"devices"`
 }
 
 // AccountDevice represents a device within a user account.
 type AccountDevice struct {
-	GrantedAt time.Time `json:"granted_at"`
-	types.RawFields
-	DeviceID     string `json:"device_id"`
-	DeviceType   string `json:"device_type"`
-	DeviceCode   string `json:"device_code,omitempty"`
-	Name         string `json:"name"`
-	AccessGroups string `json:"access_groups"`
-	Host         string `json:"host"`
-	Online       bool   `json:"online"`
+	GrantedAt       time.Time `json:"granted_at"`
+	types.RawFields `json:"-"`
+	DeviceID        string `json:"device_id"`
+	DeviceType      string `json:"device_type"`
+	DeviceCode      string `json:"device_code,omitempty"`
+	Name            string `json:"name"`
+	AccessGroups    string `json:"access_groups"`
+	Host            string `json:"host"`
+	Online          bool   `json:"online"`
 }
 
 // CanControl returns true if the integrator has control access to this device.
@@ -449,16 +449,16 @@ func (am *AccountManager) FromJSON(data []byte) error {
 // DeviceCallback represents a callback notification from Shelly
 // when a user grants or revokes device access.
 type DeviceCallback struct {
-	types.RawFields
-	UserID       string `json:"userId"`
-	DeviceID     string `json:"deviceId"`
-	DeviceType   string `json:"deviceType"`
-	DeviceCode   string `json:"deviceCode"`
-	AccessGroups string `json:"accessGroups"`
-	Action       string `json:"action"`
-	Host         string `json:"host"`
-	Name         string `json:"name"`
-	Token        string `json:"token,omitempty"`
+	types.RawFields `json:"-"`
+	UserID          string `json:"userId"`
+	DeviceID        string `json:"deviceId"`
+	DeviceType      string `json:"deviceType"`
+	DeviceCode      string `json:"deviceCode"`
+	AccessGroups    string `json:"accessGroups"`
+	Action          string `json:"action"`
+	Host            string `json:"host"`
+	Name            string `json:"name"`
+	Token           string `json:"token,omitempty"`
 }
 
 // IsAddAction returns true if this is an add/grant action.
@@ -544,9 +544,9 @@ func GetConsentURL(integratorTag, callbackURL string) string {
 
 // AccountStats contains statistics about managed accounts.
 type AccountStats struct {
-	DevicesByType map[string]int `json:"devices_by_type"`
-	DevicesByHost map[string]int `json:"devices_by_host"`
-	types.RawFields
+	DevicesByType       map[string]int `json:"devices_by_type"`
+	DevicesByHost       map[string]int `json:"devices_by_host"`
+	types.RawFields     `json:"-"`
 	TotalAccounts       int `json:"total_accounts"`
 	TotalDevices        int `json:"total_devices"`
 	OnlineDevices       int `json:"online_devices"`

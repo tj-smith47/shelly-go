@@ -26,12 +26,12 @@ type Device interface {
 
 // UpdateInfo contains information about available firmware updates.
 type UpdateInfo struct {
-	types.RawFields
-	Current       string `json:"current,omitempty"`
-	Available     string `json:"available,omitempty"`
-	Beta          string `json:"beta,omitempty"`
-	URL           string `json:"url,omitempty"`
-	HasUpdateFlag bool   `json:"has_update,omitempty"`
+	types.RawFields `json:"-"`
+	Current         string `json:"current,omitempty"`
+	Available       string `json:"available,omitempty"`
+	Beta            string `json:"beta,omitempty"`
+	URL             string `json:"url,omitempty"`
+	HasUpdateFlag   bool   `json:"has_update,omitempty"`
 }
 
 // HasUpdate returns true if a firmware update is available.
@@ -60,18 +60,18 @@ type UpdateOptions struct {
 
 // RollbackStatus contains information about firmware rollback availability.
 type RollbackStatus struct {
-	types.RawFields
+	types.RawFields `json:"-"`
 	PreviousVersion string `json:"previous_version,omitempty"`
 	CanRollback     bool   `json:"can_rollback"`
 }
 
 // UpdateStatus contains the current status of a firmware update.
 type UpdateStatus struct {
-	types.RawFields
-	Status     string `json:"status,omitempty"`
-	NewVersion string `json:"new_version,omitempty"`
-	Progress   int    `json:"progress,omitempty"`
-	HasUpdate  bool   `json:"has_update,omitempty"`
+	types.RawFields `json:"-"`
+	Status          string `json:"status,omitempty"`
+	NewVersion      string `json:"new_version,omitempty"`
+	Progress        int    `json:"progress,omitempty"`
+	HasUpdate       bool   `json:"has_update,omitempty"`
 }
 
 // CheckResult contains the result of checking for updates on a device.
@@ -92,7 +92,7 @@ type UpdateResult struct {
 
 // DeviceVersion contains version information for a device.
 type DeviceVersion struct {
-	types.RawFields
+	types.RawFields `json:"-"`
 	FirmwareVersion string `json:"ver,omitempty"`
 	App             string `json:"app,omitempty"`
 	Model           string `json:"model,omitempty"`

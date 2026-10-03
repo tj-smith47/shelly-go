@@ -102,13 +102,13 @@ type MQTTConfig struct {
 	EnableControl *bool `json:"enable_control,omitempty"`
 
 	// RawFields captures any additional fields for future compatibility
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // MQTTStatus represents the current status of the MQTT component.
 type MQTTStatus struct {
-	types.RawFields
-	Connected bool `json:"connected"`
+	types.RawFields `json:"-"`
+	Connected       bool `json:"connected"`
 }
 
 // GetConfig retrieves the MQTT configuration.

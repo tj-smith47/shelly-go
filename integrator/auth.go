@@ -186,11 +186,11 @@ type MultiRegionAuth struct {
 
 // RegionAuth holds authentication data for a specific region.
 type RegionAuth struct {
-	AuthData *AuthData
-	types.RawFields
-	Region string
-	APIURL string
-	Hosts  []string
+	AuthData        *AuthData
+	types.RawFields `json:"-"`
+	Region          string
+	APIURL          string
+	Hosts           []string
 }
 
 // NewMultiRegionAuth creates a new multi-region authentication manager.
@@ -317,19 +317,19 @@ func (ma *MultiRegionAuth) SetupDefaultRegions() {
 
 // ServiceAccount represents an integrator service account for API access.
 type ServiceAccount struct {
-	CreatedAt  time.Time  `json:"created_at"`
-	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
-	types.RawFields
-	Name          string                    `json:"name"`
-	IntegratorTag string                    `json:"integrator_tag"`
-	Token         string                    `json:"token"`
-	Description   string                    `json:"description,omitempty"`
-	Permissions   ServiceAccountPermissions `json:"permissions"`
+	CreatedAt       time.Time  `json:"created_at"`
+	LastUsedAt      *time.Time `json:"last_used_at,omitempty"`
+	types.RawFields `json:"-"`
+	Name            string                    `json:"name"`
+	IntegratorTag   string                    `json:"integrator_tag"`
+	Token           string                    `json:"token"`
+	Description     string                    `json:"description,omitempty"`
+	Permissions     ServiceAccountPermissions `json:"permissions"`
 }
 
 // ServiceAccountPermissions defines what a service account can access.
 type ServiceAccountPermissions struct {
-	types.RawFields
+	types.RawFields   `json:"-"`
 	AllowedRegions    []string `json:"allowed_regions,omitempty"`
 	AllowedDevices    []string `json:"allowed_devices,omitempty"`
 	CanControl        bool     `json:"can_control"`
@@ -339,20 +339,20 @@ type ServiceAccountPermissions struct {
 
 // APIKey represents an API key for programmatic access.
 type APIKey struct {
-	CreatedAt  time.Time  `json:"created_at"`
-	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
-	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
-	types.RawFields
-	ID          string            `json:"id"`
-	Name        string            `json:"name"`
-	KeyHash     string            `json:"key_hash"`
-	Prefix      string            `json:"prefix"`
-	Permissions APIKeyPermissions `json:"permissions"`
+	CreatedAt       time.Time  `json:"created_at"`
+	ExpiresAt       *time.Time `json:"expires_at,omitempty"`
+	LastUsedAt      *time.Time `json:"last_used_at,omitempty"`
+	types.RawFields `json:"-"`
+	ID              string            `json:"id"`
+	Name            string            `json:"name"`
+	KeyHash         string            `json:"key_hash"`
+	Prefix          string            `json:"prefix"`
+	Permissions     APIKeyPermissions `json:"permissions"`
 }
 
 // APIKeyPermissions defines what an API key can access.
 type APIKeyPermissions struct {
-	types.RawFields
+	types.RawFields    `json:"-"`
 	Scopes             []string `json:"scopes"`
 	RateLimitPerMinute int      `json:"rate_limit_per_minute,omitempty"`
 }
@@ -431,12 +431,12 @@ func (k *APIKey) IsExpired() bool {
 
 // JWTClaims represents the claims extracted from a Shelly JWT token.
 type JWTClaims struct {
-	types.RawFields
-	UserID        string `json:"user_id,omitempty"`
-	IntegratorTag string `json:"itg,omitempty"`
-	UserAPIURL    string `json:"user_api_url,omitempty"`
-	IssuedAt      int64  `json:"iat,omitempty"`
-	ExpiresAt     int64  `json:"exp,omitempty"`
+	types.RawFields `json:"-"`
+	UserID          string `json:"user_id,omitempty"`
+	IntegratorTag   string `json:"itg,omitempty"`
+	UserAPIURL      string `json:"user_api_url,omitempty"`
+	IssuedAt        int64  `json:"iat,omitempty"`
+	ExpiresAt       int64  `json:"exp,omitempty"`
 }
 
 // ParseJWTClaims extracts claims from a JWT token without verifying the signature.
@@ -499,13 +499,13 @@ type CallbackTokenVerifier struct {
 
 // CallbackToken represents a token received in user consent callbacks.
 type CallbackToken struct {
-	ExpiresAt time.Time `json:"expires_at"`
-	types.RawFields
-	Token        string `json:"token"`
-	UserID       string `json:"user_id"`
-	DeviceID     string `json:"device_id"`
-	Action       string `json:"action"`
-	AccessGroups string `json:"access_groups"`
+	ExpiresAt       time.Time `json:"expires_at"`
+	types.RawFields `json:"-"`
+	Token           string `json:"token"`
+	UserID          string `json:"user_id"`
+	DeviceID        string `json:"device_id"`
+	Action          string `json:"action"`
+	AccessGroups    string `json:"access_groups"`
 }
 
 // VerifyCallbackToken verifies the authenticity of a callback token.

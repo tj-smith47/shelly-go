@@ -30,14 +30,14 @@ type Backup struct {
 
 // DeviceInfo contains information about the device.
 type DeviceInfo struct {
-	types.RawFields
-	ID         string `json:"id,omitempty"`
-	Name       string `json:"name,omitempty"`
-	Model      string `json:"model,omitempty"`
-	App        string `json:"app,omitempty"`
-	Version    string `json:"ver,omitempty"`
-	MAC        string `json:"mac,omitempty"`
-	Generation int    `json:"gen,omitempty"`
+	types.RawFields `json:"-"`
+	ID              string `json:"id,omitempty"`
+	Name            string `json:"name,omitempty"`
+	Model           string `json:"model,omitempty"`
+	App             string `json:"app,omitempty"`
+	Version         string `json:"ver,omitempty"`
+	MAC             string `json:"mac,omitempty"`
+	Generation      int    `json:"gen,omitempty"`
 }
 
 // Script represents a script configuration.

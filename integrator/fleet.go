@@ -50,13 +50,13 @@ func (fm *FleetManager) AccountManager() *AccountManager {
 
 // DeviceStatus represents the cached status of a device.
 type DeviceStatus struct {
-	LastSeen time.Time `json:"last_seen"`
-	types.RawFields
-	DeviceID     string          `json:"device_id"`
-	Host         string          `json:"host"`
-	LastStatus   json.RawMessage `json:"last_status,omitempty"`
-	LastSettings json.RawMessage `json:"last_settings,omitempty"`
-	Online       bool            `json:"online"`
+	LastSeen        time.Time `json:"last_seen"`
+	types.RawFields `json:"-"`
+	DeviceID        string          `json:"device_id"`
+	Host            string          `json:"host"`
+	LastStatus      json.RawMessage `json:"last_status,omitempty"`
+	LastSettings    json.RawMessage `json:"last_settings,omitempty"`
+	Online          bool            `json:"online"`
 }
 
 // Connect connects to a specific Shelly cloud host.
@@ -377,12 +377,12 @@ func isRelayDevice(deviceType string) bool {
 
 // DeviceGroup represents a group of devices for batch operations.
 type DeviceGroup struct {
-	CreatedAt time.Time `json:"created_at"`
-	types.RawFields
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Description string   `json:"description,omitempty"`
-	DeviceIDs   []string `json:"device_ids"`
+	CreatedAt       time.Time `json:"created_at"`
+	types.RawFields `json:"-"`
+	ID              string   `json:"id"`
+	Name            string   `json:"name"`
+	Description     string   `json:"description,omitempty"`
+	DeviceIDs       []string `json:"device_ids"`
 }
 
 // CreateGroup creates a new device group.
@@ -534,14 +534,14 @@ type HealthMonitor struct {
 
 // DeviceHealth contains health metrics for a device.
 type DeviceHealth struct {
-	LastSeen  time.Time `json:"last_seen"`
-	FirstSeen time.Time `json:"first_seen"`
-	types.RawFields
-	DeviceID      string `json:"device_id"`
-	OnlineCount   int    `json:"online_count"`
-	OfflineCount  int    `json:"offline_count"`
-	ActivityCount int    `json:"activity_count"`
-	Online        bool   `json:"online"`
+	LastSeen        time.Time `json:"last_seen"`
+	FirstSeen       time.Time `json:"first_seen"`
+	types.RawFields `json:"-"`
+	DeviceID        string `json:"device_id"`
+	OnlineCount     int    `json:"online_count"`
+	OfflineCount    int    `json:"offline_count"`
+	ActivityCount   int    `json:"activity_count"`
+	Online          bool   `json:"online"`
 }
 
 // NewHealthMonitor creates a new health monitor.
@@ -674,8 +674,8 @@ func (hm *HealthMonitor) GetOnlineDevices() []*DeviceHealth {
 
 // FleetStats contains aggregate statistics for the fleet.
 type FleetStats struct {
-	AccountStats *AccountStats `json:"account_stats,omitempty"`
-	types.RawFields
+	AccountStats     *AccountStats `json:"account_stats,omitempty"`
+	types.RawFields  `json:"-"`
 	TotalDevices     int `json:"total_devices"`
 	OnlineDevices    int `json:"online_devices"`
 	OfflineDevices   int `json:"offline_devices"`

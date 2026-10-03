@@ -56,12 +56,12 @@ func NewVoltmeter(client *rpc.Client, id int) *Voltmeter {
 // Use SetConfig to update voltmeter parameters like reporting threshold,
 // range selection, and custom transformations.
 type VoltmeterConfig struct {
-	Name      *string                  `json:"name,omitempty"`
-	ReportThr *float64                 `json:"report_thr,omitempty"`
-	Range     *int                     `json:"range,omitempty"`
-	XVoltage  *VoltmeterXVoltageConfig `json:"xvoltage,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	Name            *string                  `json:"name,omitempty"`
+	ReportThr       *float64                 `json:"report_thr,omitempty"`
+	Range           *int                     `json:"range,omitempty"`
+	XVoltage        *VoltmeterXVoltageConfig `json:"xvoltage,omitempty"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // VoltmeterXVoltageConfig represents transformation configuration for voltage values.
@@ -91,11 +91,11 @@ type VoltmeterXVoltageConfig struct {
 
 // VoltmeterStatus represents the current status of a Voltmeter component.
 type VoltmeterStatus struct {
-	XVoltage *float64 `json:"xvoltage,omitempty"`
-	types.RawFields
-	Errors  []string `json:"errors,omitempty"`
-	ID      int      `json:"id"`
-	Voltage float64  `json:"voltage"`
+	XVoltage        *float64 `json:"xvoltage,omitempty"`
+	types.RawFields `json:"-"`
+	Errors          []string `json:"errors,omitempty"`
+	ID              int      `json:"id"`
+	Voltage         float64  `json:"voltage"`
 }
 
 // GetConfig retrieves the Voltmeter configuration.

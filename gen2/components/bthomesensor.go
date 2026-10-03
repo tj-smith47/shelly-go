@@ -59,21 +59,21 @@ func (s *BTHomeSensor) ID() int {
 
 // BTHomeSensorConfig represents the configuration of a BTHomeSensor component.
 type BTHomeSensorConfig struct {
-	Name *string        `json:"name,omitempty"`
-	Meta map[string]any `json:"meta,omitempty"`
-	types.RawFields
-	Addr  string `json:"addr"`
-	ID    int    `json:"id"`
-	ObjID int    `json:"obj_id"`
-	Idx   int    `json:"idx"`
+	Name            *string        `json:"name,omitempty"`
+	Meta            map[string]any `json:"meta,omitempty"`
+	types.RawFields `json:"-"`
+	Addr            string `json:"addr"`
+	ID              int    `json:"id"`
+	ObjID           int    `json:"obj_id"`
+	Idx             int    `json:"idx"`
 }
 
 // BTHomeSensorStatus represents the status of a BTHomeSensor component.
 type BTHomeSensorStatus struct {
-	Value any `json:"value"`
-	types.RawFields
-	ID           int     `json:"id"`
-	LastUpdateTS float64 `json:"last_updated_ts"`
+	Value           any `json:"value"`
+	types.RawFields `json:"-"`
+	ID              int     `json:"id"`
+	LastUpdateTS    float64 `json:"last_updated_ts"`
 }
 
 // GetConfig retrieves the BTHomeSensor configuration.

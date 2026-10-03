@@ -67,13 +67,13 @@ type WsConfig struct {
 	SSLCA *string `json:"ssl_ca,omitempty"`
 
 	// RawFields captures any additional fields for future compatibility
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // WsStatus represents the current status of the Ws component.
 type WsStatus struct {
-	types.RawFields
-	Connected bool `json:"connected"`
+	types.RawFields `json:"-"`
+	Connected       bool `json:"connected"`
 }
 
 // GetConfig retrieves the Ws configuration.

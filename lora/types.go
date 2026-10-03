@@ -6,21 +6,21 @@ import (
 
 // Config represents the LoRa component configuration.
 type Config struct {
-	types.RawFields
-	ID   int   `json:"id"`
-	Freq int64 `json:"freq,omitempty"`
-	BW   int   `json:"bw,omitempty"`
-	DR   int   `json:"dr,omitempty"`
-	Plen int   `json:"plen,omitempty"`
-	TxP  int   `json:"txp,omitempty"`
+	types.RawFields `json:"-"`
+	ID              int   `json:"id"`
+	Freq            int64 `json:"freq,omitempty"`
+	BW              int   `json:"bw,omitempty"`
+	DR              int   `json:"dr,omitempty"`
+	Plen            int   `json:"plen,omitempty"`
+	TxP             int   `json:"txp,omitempty"`
 }
 
 // Status represents the LoRa component status.
 type Status struct {
-	types.RawFields
-	ID   int     `json:"id"`
-	RSSI int     `json:"rssi,omitempty"`
-	SNR  float64 `json:"snr,omitempty"`
+	types.RawFields `json:"-"`
+	ID              int     `json:"id"`
+	RSSI            int     `json:"rssi,omitempty"`
+	SNR             float64 `json:"snr,omitempty"`
 }
 
 // SetConfigParams represents parameters for setting LoRa configuration.
@@ -49,9 +49,9 @@ type SendBytesParams struct {
 
 // AddOnInfo represents information about the LoRa add-on.
 type AddOnInfo struct {
-	types.RawFields
-	Type    string `json:"type,omitempty"`
-	Version string `json:"version,omitempty"`
+	types.RawFields `json:"-"`
+	Type            string `json:"type,omitempty"`
+	Version         string `json:"version,omitempty"`
 }
 
 // ReceivedData represents data received over LoRa RF.

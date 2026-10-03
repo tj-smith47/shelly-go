@@ -48,38 +48,38 @@ type RGBWConfig struct {
 	AutoOff               *bool              `json:"auto_off,omitempty"`
 	Name                  *string            `json:"name,omitempty"`
 	MinBrightnessOnToggle *int               `json:"min_brightness_on_toggle,omitempty"`
-	types.RawFields
-	NightMode          *RGBWNightModeConfig `json:"night_mode,omitempty"`
-	TransitionDuration *float64             `json:"transition_duration,omitempty"`
-	DefaultBrightness  *int                 `json:"default_brightness,omitempty"`
-	DefaultWhite       *int                 `json:"default_white,omitempty"`
-	DefaultRGB         []int                `json:"default_rgb,omitempty"`
-	ID                 int                  `json:"id"`
+	types.RawFields       `json:"-"`
+	NightMode             *RGBWNightModeConfig `json:"night_mode,omitempty"`
+	TransitionDuration    *float64             `json:"transition_duration,omitempty"`
+	DefaultBrightness     *int                 `json:"default_brightness,omitempty"`
+	DefaultWhite          *int                 `json:"default_white,omitempty"`
+	DefaultRGB            []int                `json:"default_rgb,omitempty"`
+	ID                    int                  `json:"id"`
 }
 
 // RGBWNightModeConfig represents night mode configuration for RGBW.
 type RGBWNightModeConfig struct {
-	Enable     *bool `json:"enable,omitempty"`
-	Brightness *int  `json:"brightness,omitempty"`
-	White      *int  `json:"white,omitempty"`
-	types.RawFields
-	RGB           []int    `json:"rgb,omitempty"`
-	ActiveBetween []string `json:"active_between,omitempty"`
+	Enable          *bool `json:"enable,omitempty"`
+	Brightness      *int  `json:"brightness,omitempty"`
+	White           *int  `json:"white,omitempty"`
+	types.RawFields `json:"-"`
+	RGB             []int    `json:"rgb,omitempty"`
+	ActiveBetween   []string `json:"active_between,omitempty"`
 }
 
 // RGBWButtonPresets represents button preset configuration for RGBW.
 type RGBWButtonPresets struct {
-	Brightness *int `json:"brightness,omitempty"`
-	White      *int `json:"white,omitempty"`
-	types.RawFields
-	RGB []int `json:"rgb,omitempty"`
+	Brightness      *int `json:"brightness,omitempty"`
+	White           *int `json:"white,omitempty"`
+	types.RawFields `json:"-"`
+	RGB             []int `json:"rgb,omitempty"`
 }
 
 // RGBWStatus represents the current status of an RGBW component.
 type RGBWStatus struct {
-	Current *float64 `json:"current,omitempty"`
-	APower  *float64 `json:"apower,omitempty"`
-	types.RawFields
+	Current            *float64 `json:"current,omitempty"`
+	APower             *float64 `json:"apower,omitempty"`
+	types.RawFields    `json:"-"`
 	Brightness         *int               `json:"brightness,omitempty"`
 	Voltage            *float64           `json:"voltage,omitempty"`
 	White              *int               `json:"white,omitempty"`
@@ -109,8 +109,8 @@ type RGBWSetParams struct {
 
 // RGBWSetResult contains the result of an RGBW.Set call.
 type RGBWSetResult struct {
-	types.RawFields
-	WasOn bool `json:"was_on"`
+	types.RawFields `json:"-"`
+	WasOn           bool `json:"was_on"`
 }
 
 // RGBWToggleParams contains parameters for the RGBW.Toggle method.
@@ -121,8 +121,8 @@ type RGBWToggleParams struct {
 
 // RGBWToggleResult contains the result of an RGBW.Toggle call.
 type RGBWToggleResult struct {
-	types.RawFields
-	WasOn bool `json:"was_on"`
+	types.RawFields `json:"-"`
+	WasOn           bool `json:"was_on"`
 }
 
 // Set sets the RGBW output, color, white channel, and brightness.

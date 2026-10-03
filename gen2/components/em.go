@@ -57,15 +57,15 @@ type EMConfig struct {
 	PhaseSelector        *string `json:"phase_selector,omitempty"`
 	MonitorPhaseSequence *bool   `json:"monitor_phase_sequence,omitempty"`
 	CTType               *string `json:"ct_type,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	types.RawFields      `json:"-"`
+	ID                   int `json:"id"`
 }
 
 // EMStatus represents the current status of an EM component.
 type EMStatus struct {
-	BFreq        *float64 `json:"b_freq,omitempty"`
-	BPowerFactor *float64 `json:"b_pf,omitempty"`
-	types.RawFields
+	BFreq               *float64 `json:"b_freq,omitempty"`
+	BPowerFactor        *float64 `json:"b_pf,omitempty"`
+	types.RawFields     `json:"-"`
 	UserCalibratedPhase *string  `json:"user_calibrated_phase,omitempty"`
 	APowerFactor        *float64 `json:"a_pf,omitempty"`
 	AFreq               *float64 `json:"a_freq,omitempty"`
@@ -93,8 +93,8 @@ type EMStatus struct {
 
 // EMGetCTTypesResult contains the list of supported CT types.
 type EMGetCTTypesResult struct {
-	types.RawFields
-	Types []string `json:"types"`
+	types.RawFields `json:"-"`
+	Types           []string `json:"types"`
 }
 
 // EMResetCountersParams contains parameters for the EM.ResetCounters method.

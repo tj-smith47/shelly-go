@@ -47,48 +47,48 @@ type RGBConfig struct {
 	AutoOnDelay           *float64          `json:"auto_on_delay,omitempty"`
 	AutoOff               *bool             `json:"auto_off,omitempty"`
 	MinBrightnessOnToggle *int              `json:"min_brightness_on_toggle,omitempty"`
-	types.RawFields
-	Name               *string             `json:"name,omitempty"`
-	NightMode          *RGBNightModeConfig `json:"night_mode,omitempty"`
-	TransitionDuration *float64            `json:"transition_duration,omitempty"`
-	DefaultBrightness  *int                `json:"default_brightness,omitempty"`
-	DefaultRGB         []int               `json:"default_rgb,omitempty"`
-	ID                 int                 `json:"id"`
+	types.RawFields       `json:"-"`
+	Name                  *string             `json:"name,omitempty"`
+	NightMode             *RGBNightModeConfig `json:"night_mode,omitempty"`
+	TransitionDuration    *float64            `json:"transition_duration,omitempty"`
+	DefaultBrightness     *int                `json:"default_brightness,omitempty"`
+	DefaultRGB            []int               `json:"default_rgb,omitempty"`
+	ID                    int                 `json:"id"`
 }
 
 // RGBNightModeConfig represents night mode configuration for RGB.
 type RGBNightModeConfig struct {
-	Enable     *bool `json:"enable,omitempty"`
-	Brightness *int  `json:"brightness,omitempty"`
-	types.RawFields
-	RGB           []int    `json:"rgb,omitempty"`
-	ActiveBetween []string `json:"active_between,omitempty"`
+	Enable          *bool `json:"enable,omitempty"`
+	Brightness      *int  `json:"brightness,omitempty"`
+	types.RawFields `json:"-"`
+	RGB             []int    `json:"rgb,omitempty"`
+	ActiveBetween   []string `json:"active_between,omitempty"`
 }
 
 // RGBButtonPresets represents button preset configuration for RGB.
 type RGBButtonPresets struct {
-	Brightness *int `json:"brightness,omitempty"`
-	types.RawFields
-	RGB []int `json:"rgb,omitempty"`
+	Brightness      *int `json:"brightness,omitempty"`
+	types.RawFields `json:"-"`
+	RGB             []int `json:"rgb,omitempty"`
 }
 
 // RGBStatus represents the current status of an RGB component.
 type RGBStatus struct {
 	TimerDuration      *float64 `json:"timer_duration,omitempty"`
 	TransitionDuration *float64 `json:"transition_duration,omitempty"`
-	types.RawFields
-	Brightness     *int               `json:"brightness,omitempty"`
-	Current        *float64           `json:"current,omitempty"`
-	TimerStartedAt *float64           `json:"timer_started_at,omitempty"`
-	Temperature    *TemperatureSensor `json:"temperature,omitempty"`
-	Voltage        *float64           `json:"voltage,omitempty"`
-	APower         *float64           `json:"apower,omitempty"`
-	Source         string             `json:"source"`
-	RGB            []int              `json:"rgb,omitempty"`
-	Flags          []string           `json:"flags,omitempty"`
-	Errors         []string           `json:"errors,omitempty"`
-	ID             int                `json:"id"`
-	Output         bool               `json:"output"`
+	types.RawFields    `json:"-"`
+	Brightness         *int               `json:"brightness,omitempty"`
+	Current            *float64           `json:"current,omitempty"`
+	TimerStartedAt     *float64           `json:"timer_started_at,omitempty"`
+	Temperature        *TemperatureSensor `json:"temperature,omitempty"`
+	Voltage            *float64           `json:"voltage,omitempty"`
+	APower             *float64           `json:"apower,omitempty"`
+	Source             string             `json:"source"`
+	RGB                []int              `json:"rgb,omitempty"`
+	Flags              []string           `json:"flags,omitempty"`
+	Errors             []string           `json:"errors,omitempty"`
+	ID                 int                `json:"id"`
+	Output             bool               `json:"output"`
 }
 
 // RGBSetParams contains parameters for the RGB.Set method.
@@ -104,8 +104,8 @@ type RGBSetParams struct {
 
 // RGBSetResult contains the result of an RGB.Set call.
 type RGBSetResult struct {
-	types.RawFields
-	WasOn bool `json:"was_on"`
+	types.RawFields `json:"-"`
+	WasOn           bool `json:"was_on"`
 }
 
 // RGBToggleParams contains parameters for the RGB.Toggle method.
@@ -116,8 +116,8 @@ type RGBToggleParams struct {
 
 // RGBToggleResult contains the result of an RGB.Toggle call.
 type RGBToggleResult struct {
-	types.RawFields
-	WasOn bool `json:"was_on"`
+	types.RawFields `json:"-"`
+	WasOn           bool `json:"was_on"`
 }
 
 // Set sets the RGB output, color, and brightness.

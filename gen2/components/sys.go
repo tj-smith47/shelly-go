@@ -79,7 +79,7 @@ type SysDeviceConfig struct {
 	Addon *string `json:"addon,omitempty"`
 
 	// RawFields captures any additional fields for future compatibility
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // SysLocationConfig represents location/timezone configuration.
@@ -94,7 +94,7 @@ type SysLocationConfig struct {
 	Lng *float64 `json:"lng,omitempty"`
 
 	// RawFields captures any additional fields for future compatibility
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // SysDebugConfig represents debug logging configuration.
@@ -109,7 +109,7 @@ type SysDebugConfig struct {
 	UDP *SysDebugUDPConfig `json:"udp,omitempty"`
 
 	// RawFields captures any additional fields for future compatibility
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // SysDebugTargetConfig represents debug target (MQTT/WebSocket) configuration.
@@ -118,7 +118,7 @@ type SysDebugTargetConfig struct {
 	Enable *bool `json:"enable,omitempty"`
 
 	// RawFields captures any additional fields for future compatibility
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // SysDebugUDPConfig represents UDP debug logging configuration.
@@ -127,7 +127,7 @@ type SysDebugUDPConfig struct {
 	Addr *string `json:"addr,omitempty"`
 
 	// RawFields captures any additional fields for future compatibility
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // SysRPCUDPConfig represents UDP RPC configuration.
@@ -139,7 +139,7 @@ type SysRPCUDPConfig struct {
 	ListenPort *int `json:"listen_port,omitempty"`
 
 	// RawFields captures any additional fields for future compatibility
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // SysSNTPConfig represents SNTP (time synchronization) configuration.
@@ -148,7 +148,7 @@ type SysSNTPConfig struct {
 	Server *string `json:"server,omitempty"`
 
 	// RawFields captures any additional fields for future compatibility
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // SysConfig represents the configuration of the Sys component.
@@ -175,7 +175,7 @@ type SysConfig struct {
 	CfgRev *int `json:"cfg_rev,omitempty"`
 
 	// RawFields captures any additional fields for future compatibility
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // SysAvailableUpdates represents available firmware updates.
@@ -187,27 +187,27 @@ type SysAvailableUpdates struct {
 	Beta *SysFirmwareVersion `json:"beta,omitempty"`
 
 	// RawFields captures any additional fields for future compatibility
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // SysFirmwareVersion represents a firmware version.
 type SysFirmwareVersion struct {
-	types.RawFields
-	Version string `json:"version"`
-	BuildID string `json:"build_id,omitempty"`
+	types.RawFields `json:"-"`
+	Version         string `json:"version"`
+	BuildID         string `json:"build_id,omitempty"`
 }
 
 // SysWakeupReason represents the reason a battery device woke up.
 type SysWakeupReason struct {
-	types.RawFields
-	Boot  string `json:"boot"`
-	Cause string `json:"cause"`
+	types.RawFields `json:"-"`
+	Boot            string `json:"boot"`
+	Cause           string `json:"cause"`
 }
 
 // SysStatus represents the current status of the Sys component.
 type SysStatus struct {
-	ScheduleRev *int `json:"schedule_rev,omitempty"`
-	types.RawFields
+	ScheduleRev      *int `json:"schedule_rev,omitempty"`
+	types.RawFields  `json:"-"`
 	Time             *string              `json:"time,omitempty"`
 	Unixtime         *int64               `json:"unixtime,omitempty"`
 	ResetReason      *int                 `json:"reset_reason,omitempty"`

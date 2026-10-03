@@ -74,7 +74,7 @@ type WiFiConfig struct {
 	Roam *WiFiRoamConfig `json:"roam,omitempty"`
 
 	// RawFields captures any additional fields for future compatibility
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // WiFiAPConfig represents access point configuration.
@@ -166,12 +166,12 @@ type WiFiRoamConfig struct {
 
 // WiFiStatus represents the current status of the WiFi component.
 type WiFiStatus struct {
-	StaIP         *string  `json:"sta_ip,omitempty"`
-	SSID          *string  `json:"ssid,omitempty"`
-	RSSI          *float64 `json:"rssi,omitempty"`
-	APClientCount *int     `json:"ap_client_count,omitempty"`
-	types.RawFields
-	Status string `json:"status,omitempty"`
+	StaIP           *string  `json:"sta_ip,omitempty"`
+	SSID            *string  `json:"ssid,omitempty"`
+	RSSI            *float64 `json:"rssi,omitempty"`
+	APClientCount   *int     `json:"ap_client_count,omitempty"`
+	types.RawFields `json:"-"`
+	Status          string `json:"status,omitempty"`
 }
 
 // WiFiScanResult represents a single network found during WiFi scanning.
@@ -195,8 +195,8 @@ type WiFiScanResult struct {
 
 // WiFiScanResponse represents the response from Wifi.Scan.
 type WiFiScanResponse struct {
-	types.RawFields
-	Results []WiFiScanResult `json:"results,omitempty"`
+	types.RawFields `json:"-"`
+	Results         []WiFiScanResult `json:"results,omitempty"`
 }
 
 // WiFiAPClient represents a client connected to the device's access point.
@@ -208,9 +208,9 @@ type WiFiAPClient struct {
 
 // WiFiListAPClientsResponse represents the response from Wifi.ListAPClients.
 type WiFiListAPClientsResponse struct {
-	TS *int64 `json:"ts,omitempty"`
-	types.RawFields
-	APClients []WiFiAPClient `json:"ap_clients,omitempty"`
+	TS              *int64 `json:"ts,omitempty"`
+	types.RawFields `json:"-"`
+	APClients       []WiFiAPClient `json:"ap_clients,omitempty"`
 }
 
 // GetConfig retrieves the WiFi configuration.

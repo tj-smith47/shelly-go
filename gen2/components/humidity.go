@@ -60,19 +60,19 @@ func (h *Humidity) ID() int {
 
 // HumidityConfig represents the configuration of a Humidity component.
 type HumidityConfig struct {
-	Name      *string  `json:"name,omitempty"`
-	ReportThr *float64 `json:"report_thr,omitempty"`
-	Offset    *float64 `json:"offset,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	Name            *string  `json:"name,omitempty"`
+	ReportThr       *float64 `json:"report_thr,omitempty"`
+	Offset          *float64 `json:"offset,omitempty"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // HumidityStatus represents the status of a Humidity component.
 type HumidityStatus struct {
-	RH *float64 `json:"rh"`
-	types.RawFields
-	Errors []string `json:"errors,omitempty"`
-	ID     int      `json:"id"`
+	RH              *float64 `json:"rh"`
+	types.RawFields `json:"-"`
+	Errors          []string `json:"errors,omitempty"`
+	ID              int      `json:"id"`
 }
 
 // GetConfig retrieves the Humidity configuration.

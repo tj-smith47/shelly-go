@@ -66,17 +66,17 @@ func (s *Smoke) ID() int {
 
 // SmokeConfig represents the configuration of a Smoke component.
 type SmokeConfig struct {
-	Name *string `json:"name,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	Name            *string `json:"name,omitempty"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // SmokeStatus represents the status of a Smoke component.
 type SmokeStatus struct {
-	types.RawFields
-	ID    int  `json:"id"`
-	Alarm bool `json:"alarm"`
-	Mute  bool `json:"mute"`
+	types.RawFields `json:"-"`
+	ID              int  `json:"id"`
+	Alarm           bool `json:"alarm"`
+	Mute            bool `json:"mute"`
 }
 
 // GetConfig retrieves the Smoke configuration.

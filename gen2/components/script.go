@@ -60,48 +60,48 @@ func (s *Script) Client() *rpc.Client {
 
 // ScriptConfig represents the configuration of a script.
 type ScriptConfig struct {
-	Name   *string `json:"name,omitempty"`
-	Enable *bool   `json:"enable,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	Name            *string `json:"name,omitempty"`
+	Enable          *bool   `json:"enable,omitempty"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // ScriptStatus represents the status of a script.
 type ScriptStatus struct {
-	MemUsage *int `json:"mem_usage,omitempty"`
-	MemPeak  *int `json:"mem_peak,omitempty"`
-	MemFree  *int `json:"mem_free,omitempty"`
-	types.RawFields
-	Errors  []string `json:"errors,omitempty"`
-	ID      int      `json:"id"`
-	Running bool     `json:"running"`
+	MemUsage        *int `json:"mem_usage,omitempty"`
+	MemPeak         *int `json:"mem_peak,omitempty"`
+	MemFree         *int `json:"mem_free,omitempty"`
+	types.RawFields `json:"-"`
+	Errors          []string `json:"errors,omitempty"`
+	ID              int      `json:"id"`
+	Running         bool     `json:"running"`
 }
 
 // ScriptListItem represents a script in the list response.
 type ScriptListItem struct {
-	Name *string `json:"name,omitempty"`
-	types.RawFields
-	ID      int  `json:"id"`
-	Enable  bool `json:"enable"`
-	Running bool `json:"running"`
+	Name            *string `json:"name,omitempty"`
+	types.RawFields `json:"-"`
+	ID              int  `json:"id"`
+	Enable          bool `json:"enable"`
+	Running         bool `json:"running"`
 }
 
 // ScriptListResponse represents the response from Script.List.
 type ScriptListResponse struct {
-	types.RawFields
-	Scripts []ScriptListItem `json:"scripts"`
+	types.RawFields `json:"-"`
+	Scripts         []ScriptListItem `json:"scripts"`
 }
 
 // ScriptCreateResponse represents the response from Script.Create.
 type ScriptCreateResponse struct {
-	types.RawFields
-	ID int `json:"id"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // ScriptGetCodeResponse represents the response from Script.GetCode.
 type ScriptGetCodeResponse struct {
-	types.RawFields
-	Data string `json:"data"`
+	types.RawFields `json:"-"`
+	Data            string `json:"data"`
 }
 
 // ScriptEvalResponse represents the response from Script.Eval.
@@ -110,7 +110,7 @@ type ScriptEvalResponse struct {
 	Result any `json:"result"`
 
 	// RawFields captures any additional fields for future compatibility
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // List retrieves all scripts on the device.

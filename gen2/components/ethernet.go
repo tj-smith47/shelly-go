@@ -77,7 +77,7 @@ type EthernetConfig struct {
 	Nameserver *string `json:"nameserver,omitempty"`
 
 	// RawFields captures any additional fields for future compatibility
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // EthernetStatus represents the current status of the Ethernet component.
@@ -87,7 +87,7 @@ type EthernetStatus struct {
 	IP *string `json:"ip,omitempty"`
 
 	// RawFields captures any additional fields for future compatibility
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // GetConfig retrieves the Ethernet configuration.

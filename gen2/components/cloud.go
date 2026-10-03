@@ -60,13 +60,13 @@ type CloudConfig struct {
 	Server *string `json:"server,omitempty"`
 
 	// RawFields captures any additional fields for future compatibility
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // CloudStatus represents the current status of the Cloud component.
 type CloudStatus struct {
-	types.RawFields
-	Connected bool `json:"connected"`
+	types.RawFields `json:"-"`
+	Connected       bool `json:"connected"`
 }
 
 // GetConfig retrieves the Cloud configuration.

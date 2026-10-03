@@ -60,20 +60,20 @@ func (t *Temperature) ID() int {
 
 // TemperatureConfig represents the configuration of a Temperature component.
 type TemperatureConfig struct {
-	Name       *string  `json:"name,omitempty"`
-	ReportThrC *float64 `json:"report_thr_C,omitempty"`
-	OffsetC    *float64 `json:"offset_C,omitempty"`
-	types.RawFields
-	ID int `json:"id"`
+	Name            *string  `json:"name,omitempty"`
+	ReportThrC      *float64 `json:"report_thr_C,omitempty"`
+	OffsetC         *float64 `json:"offset_C,omitempty"`
+	types.RawFields `json:"-"`
+	ID              int `json:"id"`
 }
 
 // TemperatureStatus represents the status of a Temperature component.
 type TemperatureStatus struct {
-	TC *float64 `json:"tC"`
-	TF *float64 `json:"tF"`
-	types.RawFields
-	Errors []string `json:"errors,omitempty"`
-	ID     int      `json:"id"`
+	TC              *float64 `json:"tC"`
+	TF              *float64 `json:"tF"`
+	types.RawFields `json:"-"`
+	Errors          []string `json:"errors,omitempty"`
+	ID              int      `json:"id"`
 }
 
 // GetConfig retrieves the Temperature configuration.

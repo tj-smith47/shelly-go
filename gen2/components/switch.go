@@ -41,15 +41,15 @@ func NewSwitch(client *rpc.Client, id int) *Switch {
 
 // SwitchConfig represents the configuration of a Switch component.
 type SwitchConfig struct {
-	AutoOffDelay *float64 `json:"auto_off_delay,omitempty"`
-	PowerLimit   *float64 `json:"power_limit,omitempty"`
-	InitialState *string  `json:"initial_state,omitempty"`
-	AutoOn       *bool    `json:"auto_on,omitempty"`
-	AutoOnDelay  *float64 `json:"auto_on_delay,omitempty"`
-	AutoOff      *bool    `json:"auto_off,omitempty"`
-	Name         *string  `json:"name,omitempty"`
-	InputID      *int     `json:"input_id,omitempty"`
-	types.RawFields
+	AutoOffDelay             *float64 `json:"auto_off_delay,omitempty"`
+	PowerLimit               *float64 `json:"power_limit,omitempty"`
+	InitialState             *string  `json:"initial_state,omitempty"`
+	AutoOn                   *bool    `json:"auto_on,omitempty"`
+	AutoOnDelay              *float64 `json:"auto_on_delay,omitempty"`
+	AutoOff                  *bool    `json:"auto_off,omitempty"`
+	Name                     *string  `json:"name,omitempty"`
+	InputID                  *int     `json:"input_id,omitempty"`
+	types.RawFields          `json:"-"`
 	InputMode                *string  `json:"input_mode,omitempty"`
 	AutorecoverVoltageErrors *bool    `json:"autorecover_voltage_errors,omitempty"`
 	VoltageLimit             *float64 `json:"voltage_limit,omitempty"`
@@ -60,28 +60,28 @@ type SwitchConfig struct {
 
 // SwitchStatus represents the current status of a Switch component.
 type SwitchStatus struct {
-	Voltage *float64        `json:"voltage,omitempty"`
-	AEnergy *EnergyCounters `json:"aenergy,omitempty"`
-	types.RawFields
-	TimerStartedAt *float64           `json:"timer_started_at,omitempty"`
-	TimerDuration  *float64           `json:"timer_duration,omitempty"`
-	APower         *float64           `json:"apower,omitempty"`
-	PF             *float64           `json:"pf,omitempty"`
-	Current        *float64           `json:"current,omitempty"`
-	Temperature    *TemperatureSensor `json:"temperature,omitempty"`
-	Freq           *float64           `json:"freq,omitempty"`
-	Source         string             `json:"source"`
-	Errors         []string           `json:"errors,omitempty"`
-	ID             int                `json:"id"`
-	Output         bool               `json:"output"`
+	Voltage         *float64        `json:"voltage,omitempty"`
+	AEnergy         *EnergyCounters `json:"aenergy,omitempty"`
+	types.RawFields `json:"-"`
+	TimerStartedAt  *float64           `json:"timer_started_at,omitempty"`
+	TimerDuration   *float64           `json:"timer_duration,omitempty"`
+	APower          *float64           `json:"apower,omitempty"`
+	PF              *float64           `json:"pf,omitempty"`
+	Current         *float64           `json:"current,omitempty"`
+	Temperature     *TemperatureSensor `json:"temperature,omitempty"`
+	Freq            *float64           `json:"freq,omitempty"`
+	Source          string             `json:"source"`
+	Errors          []string           `json:"errors,omitempty"`
+	ID              int                `json:"id"`
+	Output          bool               `json:"output"`
 }
 
 // EnergyCounters represents accumulated energy measurements.
 type EnergyCounters struct {
-	MinuteTs *int64 `json:"minute_ts,omitempty"`
-	types.RawFields
-	ByMinute []float64 `json:"by_minute,omitempty"`
-	Total    float64   `json:"total"`
+	MinuteTs        *int64 `json:"minute_ts,omitempty"`
+	types.RawFields `json:"-"`
+	ByMinute        []float64 `json:"by_minute,omitempty"`
+	Total           float64   `json:"total"`
 }
 
 // TemperatureSensor represents temperature sensor data.
@@ -93,7 +93,7 @@ type TemperatureSensor struct {
 	TF *float64 `json:"tF,omitempty"`
 
 	// RawFields captures any additional fields for future compatibility
-	types.RawFields
+	types.RawFields `json:"-"`
 }
 
 // SwitchSetParams contains parameters for the Switch.Set method.
@@ -106,8 +106,8 @@ type SwitchSetParams struct {
 
 // SwitchSetResult contains the result of a Switch.Set call.
 type SwitchSetResult struct {
-	types.RawFields
-	WasOn bool `json:"was_on"`
+	types.RawFields `json:"-"`
+	WasOn           bool `json:"was_on"`
 }
 
 // SwitchToggleParams contains parameters for the Switch.Toggle method.
@@ -118,8 +118,8 @@ type SwitchToggleParams struct {
 
 // SwitchToggleResult contains the result of a Switch.Toggle call.
 type SwitchToggleResult struct {
-	types.RawFields
-	WasOn bool `json:"was_on"`
+	types.RawFields `json:"-"`
+	WasOn           bool `json:"was_on"`
 }
 
 // Set turns the switch on or off.

@@ -38,23 +38,23 @@ func NewProvisioningManager(fleet *FleetManager) *ProvisioningManager {
 
 // ConfigTemplate represents a device configuration template.
 type ConfigTemplate struct {
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	Settings  map[string]any `json:"settings"`
-	types.RawFields
-	ID          string           `json:"id"`
-	Name        string           `json:"name"`
-	Description string           `json:"description,omitempty"`
-	DeviceTypes []string         `json:"device_types,omitempty"`
-	Actions     []TemplateAction `json:"actions,omitempty"`
+	CreatedAt       time.Time      `json:"created_at"`
+	UpdatedAt       time.Time      `json:"updated_at"`
+	Settings        map[string]any `json:"settings"`
+	types.RawFields `json:"-"`
+	ID              string           `json:"id"`
+	Name            string           `json:"name"`
+	Description     string           `json:"description,omitempty"`
+	DeviceTypes     []string         `json:"device_types,omitempty"`
+	Actions         []TemplateAction `json:"actions,omitempty"`
 }
 
 // TemplateAction represents an action to execute after configuration.
 type TemplateAction struct {
-	Params map[string]any `json:"params,omitempty"`
-	types.RawFields
-	Type       string        `json:"type"`
-	DelayAfter time.Duration `json:"delay_after,omitempty"`
+	Params          map[string]any `json:"params,omitempty"`
+	types.RawFields `json:"-"`
+	Type            string        `json:"type"`
+	DelayAfter      time.Duration `json:"delay_after,omitempty"`
 }
 
 // CreateTemplate creates a new configuration template.
@@ -138,16 +138,16 @@ func (t *ConfigTemplate) IsCompatible(deviceType string) bool {
 
 // ProvisioningTask represents a bulk provisioning task.
 type ProvisioningTask struct {
-	CreatedAt   time.Time  `json:"created_at"`
-	StartedAt   *time.Time `json:"started_at,omitempty"`
-	CompletedAt *time.Time `json:"completed_at,omitempty"`
-	types.RawFields
-	ID           string     `json:"id"`
-	Name         string     `json:"name"`
-	TemplateID   string     `json:"template_id"`
-	Status       TaskStatus `json:"status"`
-	ErrorMessage string     `json:"error_message,omitempty"`
-	DeviceIDs    []string   `json:"device_ids"`
+	CreatedAt       time.Time  `json:"created_at"`
+	StartedAt       *time.Time `json:"started_at,omitempty"`
+	CompletedAt     *time.Time `json:"completed_at,omitempty"`
+	types.RawFields `json:"-"`
+	ID              string     `json:"id"`
+	Name            string     `json:"name"`
+	TemplateID      string     `json:"template_id"`
+	Status          TaskStatus `json:"status"`
+	ErrorMessage    string     `json:"error_message,omitempty"`
+	DeviceIDs       []string   `json:"device_ids"`
 }
 
 // TaskStatus represents the status of a provisioning task.
@@ -163,8 +163,8 @@ const (
 
 // ProvisioningProgress tracks the progress of a provisioning task.
 type ProvisioningProgress struct {
-	DeviceResults map[string]*DeviceProvisionResult `json:"device_results"`
-	types.RawFields
+	DeviceResults    map[string]*DeviceProvisionResult `json:"device_results"`
+	types.RawFields  `json:"-"`
 	TaskID           string `json:"task_id"`
 	TotalDevices     int    `json:"total_devices"`
 	CompletedDevices int    `json:"completed_devices"`
@@ -174,12 +174,12 @@ type ProvisioningProgress struct {
 
 // DeviceProvisionResult contains the provisioning result for a single device.
 type DeviceProvisionResult struct {
-	StartedAt   time.Time  `json:"started_at"`
-	CompletedAt *time.Time `json:"completed_at,omitempty"`
-	types.RawFields
-	DeviceID string `json:"device_id"`
-	Status   string `json:"status"`
-	Error    string `json:"error,omitempty"`
+	StartedAt       time.Time  `json:"started_at"`
+	CompletedAt     *time.Time `json:"completed_at,omitempty"`
+	types.RawFields `json:"-"`
+	DeviceID        string `json:"device_id"`
+	Status          string `json:"status"`
+	Error           string `json:"error,omitempty"`
 }
 
 // CreateTask creates a new provisioning task.
@@ -412,20 +412,20 @@ type BulkRegistration struct {
 
 // DeviceRegistration represents a single device registration.
 type DeviceRegistration struct {
-	types.RawFields
-	DeviceID     string `json:"device_id"`
-	UserID       string `json:"user_id"`
-	DeviceType   string `json:"device_type"`
-	Name         string `json:"name,omitempty"`
-	Host         string `json:"host"`
-	AccessGroups string `json:"access_groups,omitempty"`
-	TemplateID   string `json:"template_id,omitempty"`
+	types.RawFields `json:"-"`
+	DeviceID        string `json:"device_id"`
+	UserID          string `json:"user_id"`
+	DeviceType      string `json:"device_type"`
+	Name            string `json:"name,omitempty"`
+	Host            string `json:"host"`
+	AccessGroups    string `json:"access_groups,omitempty"`
+	TemplateID      string `json:"template_id,omitempty"`
 }
 
 // BulkRegistrationResult contains the result of a bulk registration.
 type BulkRegistrationResult struct {
-	Results map[string]string `json:"results"`
-	types.RawFields
+	Results           map[string]string `json:"results"`
+	types.RawFields   `json:"-"`
 	TotalDevices      int `json:"total_devices"`
 	RegisteredDevices int `json:"registered_devices"`
 	FailedDevices     int `json:"failed_devices"`
