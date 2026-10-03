@@ -312,6 +312,36 @@ func TestMDNSDiscoverer_ExtractDeviceID(t *testing.T) {
 			input:    "randomname",
 			expected: "",
 		},
+		{
+			name:     "gen1 http instance",
+			input:    "shelly1-A1B2C3._http._tcp.local",
+			expected: "shelly1-A1B2C3",
+		},
+		{
+			name:     "foreign service type",
+			input:    "_apple-mobdev2._tcp.local",
+			expected: "",
+		},
+		{
+			name:     "foreign service instance",
+			input:    "Living Room._airplay._tcp.local",
+			expected: "",
+		},
+		{
+			name:     "foreign http instance",
+			input:    "printer._http._tcp.local",
+			expected: "",
+		},
+		{
+			name:     "foreign host",
+			input:    "macbook.local",
+			expected: "",
+		},
+		{
+			name:     "shelly service type itself",
+			input:    "_shelly._tcp.local",
+			expected: "",
+		},
 	}
 
 	for _, tt := range tests {
@@ -592,5 +622,66 @@ func TestMACFromInstanceID(t *testing.T) {
 		if got := macFromInstanceID(id); got != want {
 			t.Errorf("macFromInstanceID(%q) = %q, want %q", id, got, want)
 		}
+	}
+}
+
+// buildForeignMDNSResponse builds the answer another mDNS responder on the LAN
+// sends: a PTR record for serviceType pointing at target, and an A record for
+// host.local.
+func buildForeignMDNSResponse(serviceType, target, host string, ip [4]byte) []byte {
+	encode := func(name string) []byte {
+		var b []byte
+		for _, label := range strings.Split(name, ".") {
+			b = append(b, byte(len(label)))
+			b = append(b, label...)
+		}
+		return append(b, 0)
+	}
+
+	msg := make([]byte, 0, 512)
+	msg = append(msg, 0, 0, 0x84, 0x00, 0, 0, 0, 1, 0, 0, 0, 1)
+
+	rdata := encode(target)
+	msg = append(msg, encode(serviceType)...)
+	msg = append(msg, 0, 12, 0, 1, 0, 0, 0x11, 0x94, byte(len(rdata)>>8), byte(len(rdata)))
+	msg = append(msg, rdata...)
+
+	msg = append(msg, encode(host+".local")...)
+	msg = append(msg, 0, 1, 0, 1, 0, 0, 0, 120, 0, 4, ip[0], ip[1], ip[2], ip[3])
+	return msg
+}
+
+func TestMDNSDiscoverer_ParseResponse_IgnoresForeignServices(t *testing.T) {
+	d := NewMDNSDiscoverer()
+	ip := [4]byte{10, 23, 47, 30}
+
+	tests := []struct {
+		name, serviceType, target, host string
+	}{
+		{"service enumeration", "_services._dns-sd._udp.local", "_apple-mobdev2._tcp.local", "iphone"},
+		{"service instance", "_airplay._tcp.local", "Living Room._airplay._tcp.local", "appletv"},
+		{"http instance", "_http._tcp.local", "printer._http._tcp.local", "printer"},
+		{"shelly service enumeration", "_services._dns-sd._udp.local", "_shelly._tcp.local", "nas"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data := buildForeignMDNSResponse(tt.serviceType, tt.target, tt.host, ip)
+			if device := d.parseResponse(data); device != nil {
+				t.Errorf("parseResponse returned %+v for a non-Shelly response, want nil", device)
+			}
+		})
+	}
+}
+
+func TestMDNSDiscoverer_ParseResponse_Gen1HTTPAnnouncement(t *testing.T) {
+	d := NewMDNSDiscoverer()
+
+	data := buildForeignMDNSResponse("_http._tcp.local", "shelly1-A1B2C3._http._tcp.local", "shelly1-A1B2C3", [4]byte{192, 168, 1, 50})
+	device := d.parseResponse(data)
+	if device == nil {
+		t.Fatal("a Gen1 _http._tcp announcement should be parsed")
+	}
+	if device.ID != "shelly1-A1B2C3" {
+		t.Errorf("ID = %q, want %q", device.ID, "shelly1-A1B2C3")
 	}
 }

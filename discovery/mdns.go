@@ -232,7 +232,8 @@ func (m *MDNSDiscoverer) parseResponse(data []byte) *DiscoveredDevice {
 	}
 
 	// Parse answers and additional sections
-	totalRecords := ancount + int(data[8])<<8 | int(data[9]) + arcount
+	nscount := int(data[8])<<8 | int(data[9])
+	totalRecords := ancount + nscount + arcount
 	for i := 0; i < totalRecords && offset < len(data); i++ {
 		newOffset := m.parseResourceRecord(data, offset, device)
 		if newOffset <= offset {
@@ -329,26 +330,28 @@ func (m *MDNSDiscoverer) processRecord(
 	}
 }
 
-// extractDeviceID extracts the device ID from an mDNS instance name.
+// extractDeviceID extracts the device ID from an mDNS instance or host name,
+// or returns "" when the name does not belong to a Shelly device.
 // Example: "ShellyPlus1-A8032ABCA8D8._shelly._tcp.local." -> "ShellyPlus1-A8032ABCA8D8"
 func (m *MDNSDiscoverer) extractDeviceID(name string) string {
-	// Remove trailing dot
 	name = strings.TrimSuffix(name, ".")
 
-	// Find the service part and extract everything before it
 	if idx := strings.Index(name, "._shelly._tcp"); idx > 0 {
 		return name[:idx]
 	}
-	if idx := strings.Index(name, "._http._tcp"); idx > 0 {
-		return name[:idx]
-	}
 
-	// For A records, the name might be "ShellyPlus1-A8032ABCA8D8.local"
-	if idx := strings.Index(name, ".local"); idx > 0 {
-		return name[:idx]
+	// Every mDNS responder on the LAN answers on the same multicast group, so
+	// records for other services and hosts arrive here too. Gen1 devices
+	// announce only _http._tcp, so outside the Shelly service a name counts
+	// only when it is a single-label Shelly host name ("shelly1-A1B2C3").
+	id, ok := strings.CutSuffix(name, "._http._tcp.local")
+	if !ok {
+		id, ok = strings.CutSuffix(name, ".local")
 	}
-
-	return ""
+	if !ok || strings.Contains(id, ".") || !strings.HasPrefix(strings.ToLower(id), "shelly") {
+		return ""
+	}
+	return id
 }
 
 // parseTXTRecord parses a DNS TXT record with length-prefixed strings.
