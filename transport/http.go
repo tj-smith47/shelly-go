@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tj-smith47/shelly-go/internal/digest"
@@ -22,11 +23,12 @@ import (
 // HTTP is an HTTP/HTTPS transport for Shelly devices.
 // Supports both Gen1 (REST) and Gen2+ (RPC over HTTP POST).
 type HTTP struct {
-	client  *http.Client
-	opts    *options
-	digest  *digest.Session
-	baseURL string
-	mu      sync.RWMutex
+	client    *http.Client
+	opts      *options
+	digest    *digest.Session
+	baseURL   string
+	mu        sync.RWMutex
+	requestID atomic.Int64
 }
 
 // NewHTTP creates a new HTTP transport.
@@ -221,25 +223,17 @@ func RedactURLError(err error) error {
 
 // buildRPCRequest builds an RPC request (Gen2+).
 func (h *HTTP) buildRPCRequest(ctx context.Context, rpcReq RPCRequest) (*http.Request, error) {
-	// Build the JSON-RPC 2.0 request body
-	reqBody := map[string]any{
-		"id":           rpcReq.GetID(),
-		"jsonrpc":      rpcReq.GetJSONRPC(),
-		rpcFieldMethod: rpcReq.GetMethod(),
+	reqBody, err := newFrame(rpcReq)
+	if err != nil {
+		return nil, err
 	}
-
-	// Unmarshal params from json.RawMessage and add to request
-	if params := rpcReq.GetParams(); len(params) > 0 {
-		var p any
-		if err := json.Unmarshal(params, &p); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal params: %w", err)
-		}
-		reqBody["params"] = p
+	// Shelly documents id as required; a request without one, such as a
+	// notification, gets a generated id.
+	if _, ok := reqBody["id"]; !ok {
+		reqBody["id"] = h.requestID.Add(1)
 	}
-
-	// Add RPC-level authentication if provided
-	if auth := rpcReq.GetAuth(); auth != nil {
-		reqBody["auth"] = auth
+	if v := rpcReq.GetJSONRPC(); v != "" {
+		reqBody["jsonrpc"] = v
 	}
 
 	body, err := json.Marshal(reqBody)

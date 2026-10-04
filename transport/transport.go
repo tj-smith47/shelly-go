@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"reflect"
 )
 
 // RPCRequest defines the interface for JSON-RPC 2.0 requests.
@@ -115,6 +117,44 @@ const (
 	rpcFieldSrc    = "src"
 	rpcFieldMethod = "method"
 )
+
+// absent reports whether v holds no value: nil, or a nil pointer, map, slice,
+// interface, func or channel inside the interface. Such a value marshals as
+// JSON null, and a device refuses a frame with "auth": null.
+func absent(v any) bool {
+	if v == nil {
+		return true
+	}
+	switch rv := reflect.ValueOf(v); rv.Kind() {
+	case reflect.Pointer, reflect.Map, reflect.Slice, reflect.Interface, reflect.Func, reflect.Chan:
+		return rv.IsNil()
+	default:
+		return false
+	}
+}
+
+// newFrame builds the request frame for rpcReq with its method, and with its
+// id, params and auth when they hold a value. Each transport adds what it
+// needs on top, such as src or a generated id.
+func newFrame(rpcReq RPCRequest) (map[string]any, error) {
+	frame := map[string]any{rpcFieldMethod: rpcReq.GetMethod()}
+	if id := rpcReq.GetID(); !absent(id) {
+		frame["id"] = id
+	}
+	if params := rpcReq.GetParams(); len(params) > 0 {
+		var p any
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal params: %w", err)
+		}
+		if p != nil {
+			frame["params"] = p
+		}
+	}
+	if auth := rpcReq.GetAuth(); !absent(auth) {
+		frame["auth"] = auth
+	}
+	return frame, nil
+}
 
 // String returns the string representation of the connection state.
 func (s ConnectionState) String() string {

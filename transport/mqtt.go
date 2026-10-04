@@ -360,26 +360,11 @@ func (m *MQTT) Call(ctx context.Context, rpcReq RPCRequest) (json.RawMessage, er
 		return nil, err
 	}
 
-	// Build request body from RPCRequest interface
-	reqBody := map[string]any{
-		"id":           rpcReq.GetID(),
-		rpcFieldSrc:    m.src,
-		rpcFieldMethod: rpcReq.GetMethod(),
+	reqBody, err := newFrame(rpcReq)
+	if err != nil {
+		return nil, err
 	}
-
-	// Unmarshal params from json.RawMessage and add to request
-	if params := rpcReq.GetParams(); len(params) > 0 {
-		var p any
-		if unmarshalErr := json.Unmarshal(params, &p); unmarshalErr != nil {
-			return nil, fmt.Errorf("failed to unmarshal params: %w", unmarshalErr)
-		}
-		reqBody["params"] = p
-	}
-
-	// Add auth if present
-	if auth := rpcReq.GetAuth(); auth != nil {
-		reqBody["auth"] = auth
-	}
+	reqBody[rpcFieldSrc] = m.src
 
 	// Get request ID for response correlation
 	requestID := toInt64ID(rpcReq.GetID())

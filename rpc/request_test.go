@@ -411,3 +411,14 @@ func TestRequestBuilder_ConcurrentAccess(t *testing.T) {
 		t.Errorf("CurrentID = %v, want 100", currentID)
 	}
 }
+
+// A nil *AuthData returned inside the interface is not == nil, so a transport
+// would put "auth": null in the frame.
+func TestRequest_GetAuth_NilIsUntyped(t *testing.T) {
+	if auth := (&Request{Method: "Shelly.GetStatus"}).GetAuth(); auth != nil {
+		t.Errorf("GetAuth() = %#v, want untyped nil", auth)
+	}
+	if auth := (&Request{Auth: &AuthData{Username: "admin"}}).GetAuth(); auth == nil {
+		t.Error("GetAuth() = nil for a request with auth")
+	}
+}

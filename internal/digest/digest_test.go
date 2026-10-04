@@ -28,6 +28,30 @@ func TestParseFrameChallenge(t *testing.T) {
 	}
 }
 
+// The exact challenge a Plus 2PM on firmware 1.7.5 sent: numeric nonce and a
+// numeric nc that the session ignores, since its own count starts at 1.
+func TestSession_DeviceChallenge(t *testing.T) {
+	const realm = "shellyplus2pm-c049ef86ac10"
+	ch, err := ParseFrameChallenge(`{"auth_type": "digest", "nonce": 1791087502, "nc": 1, ` +
+		`"realm": "` + realm + `", "algorithm": "SHA-256"}`)
+	if err != nil {
+		t.Fatalf("ParseFrameChallenge() error = %v", err)
+	}
+	s := NewSession(User, password)
+	s.Accept(ch)
+	frame, err := s.Frame()
+	if err != nil {
+		t.Fatalf("Frame() error = %v", err)
+	}
+	data, err := json.Marshal(frame)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := authtest.FrameAuth(data, realm, 1791087502, password); err != nil {
+		t.Errorf("device would refuse %s: %v", data, err)
+	}
+}
+
 func TestParseFrameChallenge_Invalid(t *testing.T) {
 	messages := []string{
 		`not json`,

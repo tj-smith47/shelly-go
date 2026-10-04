@@ -3,19 +3,31 @@ package transport
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+
+	"github.com/tj-smith47/shelly-go/internal/authtest"
 )
 
-// droppableClient counts Disconnect calls and answers every published request
-// through the transport's own response handler.
+// droppableClient counts Disconnect calls, records every published frame and
+// answers it through the transport's own response handler, refusing a frame
+// a device cannot parse as authtest.FrameError does.
 type droppableClient struct {
 	transport   *MQTT
+	frames      [][]byte
+	mu          sync.Mutex
 	disconnects atomic.Int32
 	mockClient
+}
+
+func (c *droppableClient) published() [][]byte {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([][]byte(nil), c.frames...)
 }
 
 func (c *droppableClient) Disconnect(uint) { c.disconnects.Add(1) }
@@ -24,8 +36,18 @@ func (c *droppableClient) Publish(_ string, _ byte, _ bool, payload interface{})
 	var req struct {
 		ID int64 `json:"id"`
 	}
-	if data, ok := payload.([]byte); ok && json.Unmarshal(data, &req) == nil && c.transport != nil {
-		resp, _ := json.Marshal(map[string]any{"id": req.ID, "result": map[string]any{"ok": true}})
+	data, ok := payload.([]byte)
+	if ok {
+		c.mu.Lock()
+		c.frames = append(c.frames, data)
+		c.mu.Unlock()
+	}
+	if ok && json.Unmarshal(data, &req) == nil && c.transport != nil {
+		reply := map[string]any{"id": req.ID, "result": map[string]any{"ok": true}}
+		if e := authtest.FrameError(data); e != nil {
+			reply = map[string]any{"id": req.ID, "error": e}
+		}
+		resp, _ := json.Marshal(reply)
 		go c.transport.handleResponse(c, &mockMessage{payload: resp})
 	}
 	return &mockToken{}

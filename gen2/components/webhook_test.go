@@ -570,3 +570,32 @@ func TestWebhook_ContextCancellation(t *testing.T) {
 		t.Error("expected error for canceled context")
 	}
 }
+
+// A nil slice must not reach the device as JSON null.
+func TestCreate_NilSlicesOmitted(t *testing.T) {
+	var params map[string]json.RawMessage
+	tr := &mockTransport{
+		callFunc: func(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+			params = nil
+			if err := json.Unmarshal(req.GetParams(), &params); err != nil {
+				t.Fatalf("params %s: %v", req.GetParams(), err)
+			}
+			return jsonrpcResponse(`{"id": 1, "rev": 1}`)
+		},
+	}
+	client := rpc.NewClient(tr)
+
+	if _, err := NewWebhook(client).Create(context.Background(), &WebhookConfig{Event: "switch.on"}); err != nil {
+		t.Fatalf("Webhook.Create() error = %v", err)
+	}
+	if v, ok := params["urls"]; ok {
+		t.Errorf(`Webhook.Create sent "urls": %s for nil URLs`, v)
+	}
+
+	if _, err := NewSchedule(client).Create(context.Background(), &ScheduleCreateRequest{Timespec: "0 0 8 * *"}); err != nil {
+		t.Fatalf("Schedule.Create() error = %v", err)
+	}
+	if v, ok := params["calls"]; ok {
+		t.Errorf(`Schedule.Create sent "calls": %s for nil Calls`, v)
+	}
+}

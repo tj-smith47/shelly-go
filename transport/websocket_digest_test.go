@@ -17,8 +17,9 @@ import (
 	"github.com/tj-smith47/shelly-go/types"
 )
 
-// digestWSDevice is a fake Gen2+ device on a websocket. It answers a frame
-// whose auth object authtest rejects with error 401 and a digest challenge,
+// digestWSDevice is a fake Gen2+ device on a websocket. It answers a frame a
+// device cannot parse with error 400, a frame whose auth object authtest
+// rejects with error 401 and a digest challenge,
 // and sends one notification after the first authenticated frame of each
 // connection, as a device only notifies a peer that authenticated.
 type digestWSDevice struct {
@@ -49,15 +50,20 @@ func (d *digestWSDevice) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	notified := false
 	for {
+		_, data, err := conn.ReadMessage()
+		if err != nil {
+			return
+		}
 		var frame struct {
 			ID   int64           `json:"id"`
 			Src  string          `json:"src"`
 			Auth json.RawMessage `json:"auth"`
 		}
-		if conn.ReadJSON(&frame) != nil {
-			return
-		}
+		_ = json.Unmarshal(data, &frame)
 		reply, notify := d.answer(frame.ID, frame.Src, frame.Auth)
+		if e := authtest.FrameError(data); e != nil {
+			reply, notify = map[string]any{"id": frame.ID, "src": authtest.Realm, "dst": frame.Src, "error": e}, false
+		}
 		if conn.WriteJSON(reply) != nil {
 			return
 		}

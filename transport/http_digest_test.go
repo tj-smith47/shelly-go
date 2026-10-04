@@ -14,8 +14,8 @@ import (
 
 const digestTestPassword = "s3cret"
 
-// digestHTTPDevice is a fake Gen2+ device that checks the Authorization
-// header with authtest, which follows Shelly's documentation.
+// digestHTTPDevice is a fake Gen2+ device that refuses a frame a device
+// cannot parse and checks the Authorization header, both with authtest.
 type digestHTTPDevice struct {
 	nonce      string
 	challenge  string
@@ -29,6 +29,9 @@ func (d *digestHTTPDevice) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.requests++
+	if _, ok := authtest.ReadHTTP(w, r); !ok {
+		return
+	}
 	nc, err := authtest.HeaderAuth(r, authtest.Realm, d.nonce, digestTestPassword)
 	if err != nil {
 		d.challenges++

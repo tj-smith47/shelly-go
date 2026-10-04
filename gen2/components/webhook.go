@@ -153,7 +153,11 @@ func (w *Webhook) Create(ctx context.Context, config *WebhookConfig) (*WebhookCr
 		"cid":       config.Cid,
 		paramEnable: config.Enable,
 		"event":     config.Event,
-		"urls":      config.URLs,
+	}
+	// A nil slice would be sent as "urls": null; without the key the device
+	// reports the missing argument itself.
+	if config.URLs != nil {
+		params["urls"] = config.URLs
 	}
 
 	if config.Name != nil {

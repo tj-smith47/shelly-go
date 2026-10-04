@@ -294,6 +294,8 @@ func CreateSchedule(ctx context.Context, dev *factory.Gen2Device, entry *Schedul
 		calls = []map[string]any{
 			{keyMethod: methodLightSet, keyParams: map[string]any{"id": 0, "brightness": entry.Action.Brightness}},
 		}
+	default:
+		return 0, fmt.Errorf("%w: schedule action type %q", types.ErrInvalidParam, entry.Action.Type)
 	}
 
 	params := map[string]any{

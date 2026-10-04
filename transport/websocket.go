@@ -228,11 +228,9 @@ func (w *WebSocket) Call(ctx context.Context, rpcReq RPCRequest) (json.RawMessag
 		return nil, err
 	}
 
-	answerChallenge := w.digest != nil
-	if auth := rpcReq.GetAuth(); auth != nil {
-		reqBody["auth"] = auth
-		answerChallenge = false
-	} else if answerChallenge && w.digest.Ready() {
+	_, callerAuth := reqBody["auth"]
+	answerChallenge := w.digest != nil && !callerAuth
+	if answerChallenge && w.digest.Ready() {
 		frame, frameErr := w.digest.Frame()
 		if frameErr != nil {
 			return nil, frameErr
@@ -257,22 +255,13 @@ func (w *WebSocket) Call(ctx context.Context, rpcReq RPCRequest) (json.RawMessag
 	return resp.Result, nil
 }
 
-// buildFrame builds the request frame for rpcReq without its auth object and
-// returns the id its response will carry.
+// buildFrame builds the request frame for rpcReq and returns the id its
+// response will carry.
 func (w *WebSocket) buildFrame(rpcReq RPCRequest) (reqBody map[string]any, requestID int64, err error) {
-	reqBody = map[string]any{
-		"id":           rpcReq.GetID(),
-		rpcFieldSrc:    w.src,
-		rpcFieldMethod: rpcReq.GetMethod(),
+	if reqBody, err = newFrame(rpcReq); err != nil {
+		return nil, 0, err
 	}
-
-	if params := rpcReq.GetParams(); len(params) > 0 {
-		var p any
-		if err := json.Unmarshal(params, &p); err != nil {
-			return nil, 0, fmt.Errorf("failed to unmarshal params: %w", err)
-		}
-		reqBody["params"] = p
-	}
+	reqBody[rpcFieldSrc] = w.src
 
 	requestID = toInt64ID(rpcReq.GetID())
 	if requestID < 0 {

@@ -169,7 +169,11 @@ func (s *Schedule) Create(ctx context.Context, req *ScheduleCreateRequest) (*Sch
 	params := map[string]any{
 		paramEnable: req.Enable,
 		"timespec":  req.Timespec,
-		"calls":     req.Calls,
+	}
+	// A nil slice would be sent as "calls": null; without the key the device
+	// reports the missing argument itself.
+	if req.Calls != nil {
+		params["calls"] = req.Calls
 	}
 
 	resultJSON, err := s.client.Call(ctx, "Schedule.Create", params)

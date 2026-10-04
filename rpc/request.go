@@ -211,6 +211,12 @@ func (r *Request) GetParams() json.RawMessage {
 
 // GetAuth implements transport.RPCRequest interface.
 func (r *Request) GetAuth() any {
+	// A nil *AuthData inside the interface is not a nil interface, and the
+	// transports would then send "auth": null, which a device with
+	// authentication enabled answers with error 400.
+	if r.Auth == nil {
+		return nil
+	}
 	return r.Auth
 }
 

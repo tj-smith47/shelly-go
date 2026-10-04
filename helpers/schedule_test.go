@@ -3,6 +3,7 @@ package helpers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -284,6 +285,17 @@ func TestGetSchedules(t *testing.T) {
 // TestCreateSchedule tests creating schedules on Gen2 devices.
 func TestCreateSchedule(t *testing.T) {
 	ctx := context.Background()
+
+	t.Run("unknown action", func(t *testing.T) {
+		dev := createMockGen2DeviceWithTransport(func(method string, params any) (json.RawMessage, error) {
+			t.Errorf("%s sent for an unknown action", method)
+			return nil, types.ErrRPCMethod
+		})
+		entry := &ScheduleEntry{Days: Weekends(), Action: Action{Type: "dance"}}
+		if _, err := CreateSchedule(ctx, dev, entry); !errors.Is(err, types.ErrInvalidParam) {
+			t.Errorf("CreateSchedule() error = %v, want ErrInvalidParam", err)
+		}
+	})
 
 	t.Run("set action", func(t *testing.T) {
 		dev := createMockGen2DeviceWithTransport(func(method string, params any) (json.RawMessage, error) {

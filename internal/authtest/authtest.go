@@ -6,12 +6,14 @@
 package authtest
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 	"strings"
@@ -39,15 +41,64 @@ func HA1(realm, password string) string {
 
 // FrameChallenge returns the message of the 401 error a device answers an
 // unauthenticated request frame with. nonce keeps its JSON type: a string on
-// firmware 2.0.0 and later, a number before.
+// firmware 2.0.0 and later, a number before. Like a device, it carries a
+// numeric "nc" of 1, e.g. a Plus 2PM on firmware 1.7.5 sends
+// {"auth_type": "digest", "nonce": 1791087502, "nc": 1, "realm": "...", "algorithm": "SHA-256"}.
 func FrameChallenge(realm string, nonce any) string {
 	data, err := json.Marshal(map[string]any{
-		"auth_type": "digest", "nonce": nonce, "realm": realm, "algorithm": algorithm,
+		"auth_type": "digest", "nonce": nonce, "nc": 1, "realm": realm, "algorithm": algorithm,
 	})
 	if err != nil {
 		return err.Error()
 	}
 	return string(data)
+}
+
+// BadRequestMessage is the message of the error 400 a device answers a frame
+// it cannot parse with.
+const BadRequestMessage = "bad request"
+
+// FrameError returns the error object a device answers frame with before it
+// looks at credentials, or nil when the frame is acceptable. A device refuses
+// with code 400 "bad request" a frame that is not a JSON object and a frame
+// whose "auth" key holds anything but an object, such as "auth": null.
+func FrameError(frame []byte) map[string]any {
+	var f map[string]json.RawMessage
+	if json.Unmarshal(frame, &f) != nil || f == nil {
+		return map[string]any{"code": http.StatusBadRequest, "message": BadRequestMessage}
+	}
+	if auth, ok := f["auth"]; ok && !bytes.HasPrefix(bytes.TrimSpace(auth), []byte("{")) {
+		return map[string]any{"code": http.StatusBadRequest, "message": BadRequestMessage}
+	}
+	return nil
+}
+
+// ReadHTTP reads the body of a POST to a device's /rpc endpoint. It returns
+// the body and true, or answers r the way a device does and returns false:
+// HTTP 400 "Bad Request" for an empty body, and an error frame (FrameError)
+// for a frame the device refuses.
+func ReadHTTP(w http.ResponseWriter, r *http.Request) (body []byte, ok bool) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil || len(body) == 0 {
+		http.Error(w, "Bad Request", http.StatusBadRequest)
+		return nil, false
+	}
+	e := FrameError(body)
+	if e == nil {
+		return body, true
+	}
+	// A frame FrameError refuses may not be an object; its id is then null.
+	var f struct {
+		ID any `json:"id"`
+	}
+	if json.Unmarshal(body, &f) != nil {
+		f.ID = nil
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(map[string]any{"id": f.ID, "src": Realm, "error": e}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	return nil, false
 }
 
 // FrameAuth checks auth, the auth object of a request frame, against the
