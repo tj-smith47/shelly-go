@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
+
+	"github.com/tj-smith47/shelly-go/transport"
 )
 
 func TestClient_NewBatch(t *testing.T) {
@@ -110,171 +113,6 @@ func TestBatch_Clear(t *testing.T) {
 
 	if batch.Len() != 0 {
 		t.Errorf("cleared batch length = %v, want 0", batch.Len())
-	}
-}
-
-func TestBatch_Execute_Empty(t *testing.T) {
-	mt := &mockTransport{}
-	client := NewClient(mt)
-	batch := client.NewBatch()
-
-	results, err := batch.Execute(context.Background())
-	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-
-	if len(results) != 0 {
-		t.Errorf("empty batch results length = %v, want 0", len(results))
-	}
-}
-
-func TestBatch_Execute_Success(t *testing.T) {
-	// Mock transport that returns successful batch response
-	mt := &mockTransport{
-		response: []byte(`[
-			{"jsonrpc":"2.0","id":1,"result":{"status":"on"}},
-			{"jsonrpc":"2.0","id":2,"result":{"status":"off"}},
-			{"jsonrpc":"2.0","id":3,"result":{"brightness":50}}
-		]`),
-	}
-
-	client := NewClient(mt)
-	batch := client.NewBatch()
-
-	batch.Add("Switch.GetStatus", map[string]any{"id": 0})
-	batch.Add("Switch.GetStatus", map[string]any{"id": 1})
-	batch.Add("Light.GetStatus", map[string]any{"id": 0})
-
-	results, err := batch.Execute(context.Background())
-	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-
-	if len(results) != 3 {
-		t.Fatalf("results length = %v, want 3", len(results))
-	}
-
-	// Check first result
-	if results[0].IsError() {
-		t.Error("first result should not be an error")
-	}
-
-	var status map[string]any
-	if err := results[0].Unmarshal(&status); err != nil {
-		t.Errorf("failed to unmarshal first result: %v", err)
-	}
-
-	if status["status"] != "on" {
-		t.Errorf("first result status = %v, want on", status["status"])
-	}
-}
-
-func TestBatch_Execute_WithErrors(t *testing.T) {
-	// Mock transport that returns some errors
-	mt := &mockTransport{
-		response: []byte(`[
-			{"jsonrpc":"2.0","id":1,"result":{"status":"on"}},
-			{"jsonrpc":"2.0","id":2,"error":{"code":404,"message":"Not found"}},
-			{"jsonrpc":"2.0","id":3,"result":{"brightness":50}}
-		]`),
-	}
-
-	client := NewClient(mt)
-	batch := client.NewBatch()
-
-	batch.Add("Switch.GetStatus", map[string]any{"id": 0})
-	batch.Add("Switch.GetStatus", map[string]any{"id": 999}) // Non-existent
-	batch.Add("Light.GetStatus", map[string]any{"id": 0})
-
-	results, err := batch.Execute(context.Background())
-	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-
-	if len(results) != 3 {
-		t.Fatalf("results length = %v, want 3", len(results))
-	}
-
-	// First result should succeed
-	if results[0].IsError() {
-		t.Error("first result should not be an error")
-	}
-
-	// Second result should fail
-	if !results[1].IsError() {
-		t.Error("second result should be an error")
-	}
-
-	if results[1].Err == nil {
-		t.Error("second result Err should not be nil")
-	}
-
-	// Third result should succeed
-	if results[2].IsError() {
-		t.Error("third result should not be an error")
-	}
-}
-
-func TestBatch_Execute_TransportError(t *testing.T) {
-	// Mock transport that returns an error
-	mt := &mockTransport{
-		err: errors.New("transport error"),
-	}
-
-	client := NewClient(mt)
-	batch := client.NewBatch()
-
-	batch.Add("Test", nil)
-
-	_, err := batch.Execute(context.Background())
-	if err == nil {
-		t.Error("Execute() should return error when transport fails")
-	}
-}
-
-func TestBatch_Execute_InvalidResponse(t *testing.T) {
-	// Mock transport that returns invalid JSON
-	mt := &mockTransport{
-		response: []byte(`{invalid}`),
-	}
-
-	client := NewClient(mt)
-	batch := client.NewBatch()
-
-	batch.Add("Test", nil)
-
-	_, err := batch.Execute(context.Background())
-	if err == nil {
-		t.Error("Execute() should return error for invalid response")
-	}
-}
-
-func TestBatch_Execute_MissingResponse(t *testing.T) {
-	// Mock transport that returns fewer responses than requests
-	mt := &mockTransport{
-		response: []byte(`[
-			{"jsonrpc":"2.0","id":1,"result":{}}
-		]`),
-	}
-
-	client := NewClient(mt)
-	batch := client.NewBatch()
-
-	batch.Add("Test1", nil)
-	batch.Add("Test2", nil)
-
-	results, err := batch.Execute(context.Background())
-	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-
-	if len(results) != 2 {
-		t.Fatalf("results length = %v, want 2", len(results))
-	}
-
-	// Second result should have an error for missing response
-	if !results[1].IsError() {
-		t.Error("result with missing response should be an error")
 	}
 }
 
@@ -391,30 +229,6 @@ func TestBatchResult_String(t *testing.T) {
 	}
 }
 
-func TestClient_Batch(t *testing.T) {
-	mt := &mockTransport{
-		response: []byte(`[
-			{"jsonrpc":"2.0","id":1,"result":{"status":"on"}},
-			{"jsonrpc":"2.0","id":2,"result":{"status":"off"}}
-		]`),
-	}
-
-	client := NewClient(mt)
-
-	// Test fluent interface
-	results, err := client.Batch().
-		Add("Switch.GetStatus", map[string]any{"id": 0}).
-		Add("Switch.GetStatus", map[string]any{"id": 1}).
-		Execute(context.Background())
-	if err != nil {
-		t.Fatalf("Batch().Execute() error = %v", err)
-	}
-
-	if len(results) != 2 {
-		t.Errorf("results length = %v, want 2", len(results))
-	}
-}
-
 func TestBatchBuilder_Add(t *testing.T) {
 	mt := &mockTransport{}
 	client := NewClient(mt)
@@ -448,69 +262,107 @@ func TestBatchBuilder_AddRequest(t *testing.T) {
 	}
 }
 
-func TestBatch_Execute_IDCorrelation(t *testing.T) {
-	// Mock transport that returns responses in different order
-	mt := &mockTransport{
-		response: []byte(`[
-			{"jsonrpc":"2.0","id":2,"result":{"second":true}},
-			{"jsonrpc":"2.0","id":3,"result":{"third":true}},
-			{"jsonrpc":"2.0","id":1,"result":{"first":true}}
-		]`),
+// frameTransport answers each call with its method as the result, fails the
+// method "Fail.Me" with an RPC error, and runs onCall after recording a call.
+type frameTransport struct {
+	onCall  func(n int)
+	methods []string
+	ids     []any
+}
+
+func (f *frameTransport) Call(ctx context.Context, req transport.RPCRequest) (json.RawMessage, error) {
+	f.methods = append(f.methods, req.GetMethod())
+	f.ids = append(f.ids, req.GetID())
+	if f.onCall != nil {
+		f.onCall(len(f.methods))
 	}
+	reply := map[string]any{"id": req.GetID(), "result": req.GetMethod()}
+	if req.GetMethod() == "Fail.Me" {
+		reply = map[string]any{"id": req.GetID(), "error": map[string]any{"code": -103, "message": "invalid argument"}}
+	}
+	return json.Marshal(reply)
+}
 
-	client := NewClient(mt)
-	batch := client.NewBatch()
+func (f *frameTransport) Close() error { return nil }
 
-	batch.Add("Test1", nil)
-	batch.Add("Test2", nil)
-	batch.Add("Test3", nil)
-
-	results, err := batch.Execute(context.Background())
+// Shelly devices have no batch frame, so each request is its own call with
+// its own id, sent in order, and one failure does not stop the rest.
+func TestBatch_Execute_SeparateCalls(t *testing.T) {
+	ft := &frameTransport{}
+	results, err := NewClient(ft).Batch().
+		Add("Switch.GetStatus", map[string]any{"id": 0}).
+		Add("Fail.Me", nil).
+		Add("Shelly.GetDeviceInfo", nil).
+		Execute(context.Background())
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 
-	// Results should be in the original request order, not response order
-	var first, second, third map[string]any
-
-	if err := results[0].Unmarshal(&first); err != nil {
-		t.Fatalf("failed to unmarshal first result: %v", err)
+	want := []string{"Switch.GetStatus", "Fail.Me", "Shelly.GetDeviceInfo"}
+	if fmt.Sprint(ft.methods) != fmt.Sprint(want) {
+		t.Errorf("calls = %v, want %v in order", ft.methods, want)
+	}
+	seen := map[any]bool{}
+	for _, id := range ft.ids {
+		if id == nil || seen[id] {
+			t.Errorf("ids %v are not distinct and set", ft.ids)
+		}
+		seen[id] = true
 	}
 
-	if err := results[1].Unmarshal(&second); err != nil {
-		t.Fatalf("failed to unmarshal second result: %v", err)
+	if len(results) != len(want) {
+		t.Fatalf("got %d results, want %d", len(results), len(want))
 	}
-
-	if err := results[2].Unmarshal(&third); err != nil {
-		t.Fatalf("failed to unmarshal third result: %v", err)
+	for i, r := range results {
+		if r.Request.Method != want[i] {
+			t.Errorf("results[%d] is for %s, want %s", i, r.Request.Method, want[i])
+		}
 	}
-
-	if first["first"] != true {
-		t.Error("first result should contain 'first: true'")
+	var rpcErr *ErrorObject
+	if !errors.As(results[1].Err, &rpcErr) || rpcErr.Code != -103 {
+		t.Errorf("results[1].Err = %v, want RPC error -103", results[1].Err)
 	}
-
-	if second["second"] != true {
-		t.Error("second result should contain 'second: true'")
+	var got string
+	if err := results[2].Unmarshal(&got); err != nil || got != "Shelly.GetDeviceInfo" {
+		t.Errorf("results[2] = %q, %v", got, err)
 	}
-
-	if third["third"] != true {
-		t.Error("third result should contain 'third: true'")
+	if results[0].IsError() || results[2].IsError() {
+		t.Error("a request after or before the failed one reports an error")
 	}
 }
 
-func TestBatch_ContextCancellation(t *testing.T) {
-	mt := &mockTransport{
-		response: []byte(`[{"jsonrpc":"2.0","id":1,"result":{}}]`),
+func TestBatch_Execute_Empty(t *testing.T) {
+	ft := &frameTransport{}
+	results, err := NewClient(ft).NewBatch().Execute(context.Background())
+	if err != nil || len(results) != 0 || len(ft.methods) != 0 {
+		t.Errorf("Execute() = %v, %v with %d calls, want no results and no calls", results, err, len(ft.methods))
 	}
+}
 
-	client := NewClient(mt)
-	batch := client.NewBatch()
-	batch.Add("Test", nil)
-
+// A canceled context stops the batch; the requests not sent carry ctx.Err().
+func TestBatch_Execute_Canceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // Cancel immediately
-
-	// The behavior depends on when the transport checks the context
-	// We just verify it doesn't panic
-	_, _ = batch.Execute(ctx)
+	defer cancel()
+	ft := &frameTransport{onCall: func(n int) {
+		if n == 2 {
+			cancel()
+		}
+	}}
+	results, err := NewClient(ft).NewBatch().
+		Add("A.Get", nil).Add("B.Get", nil).Add("C.Get", nil).Add("D.Get", nil).
+		Execute(ctx)
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("Execute() error = %v, want context.Canceled", err)
+	}
+	if len(ft.methods) != 2 {
+		t.Errorf("sent %v, want only the first two", ft.methods)
+	}
+	if len(results) != 4 || results[0].Err != nil || results[1].Err != nil {
+		t.Fatalf("results = %v, want 4 with the first two answered", results)
+	}
+	for _, r := range results[2:] {
+		if !errors.Is(r.Err, context.Canceled) {
+			t.Errorf("%s: Err = %v, want context.Canceled", r.Request.Method, r.Err)
+		}
+	}
 }

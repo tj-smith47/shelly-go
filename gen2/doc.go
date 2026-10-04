@@ -136,7 +136,8 @@
 //
 // # Batch Operations
 //
-// Multiple RPC calls can be batched into a single request for efficiency:
+// A batch sends several RPC calls one after another, each as its own request
+// (Shelly devices have no batch frame), and returns one result per call:
 //
 //	results, err := client.Batch().
 //	    Add("Switch.GetStatus", map[string]any{"id": 0}).

@@ -3,6 +3,7 @@ package transport_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,17 +19,22 @@ import (
 )
 
 // frameDevice records every request frame and answers it as a device would:
-// error 400 for a frame authtest.FrameError refuses, an empty result otherwise.
+// nothing for a frame authtest.Unanswered names, error 400 for a frame
+// authtest.FrameError refuses, an empty result otherwise.
 type frameDevice struct {
 	frames [][]byte
 	gets   []string
 	mu     sync.Mutex
 }
 
+// answer returns nil for a frame a device leaves unanswered.
 func (d *frameDevice) answer(frame []byte) []byte {
 	d.mu.Lock()
 	d.frames = append(d.frames, frame)
 	d.mu.Unlock()
+	if authtest.Unanswered(frame) {
+		return nil
+	}
 	var f struct {
 		ID any `json:"id"`
 	}
@@ -68,7 +74,10 @@ func (d *frameDevice) serveWS(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 	for {
 		_, frame, err := conn.ReadMessage()
-		if err != nil || conn.WriteMessage(websocket.TextMessage, d.answer(frame)) != nil {
+		if err != nil {
+			return
+		}
+		if reply := d.answer(frame); reply != nil && conn.WriteMessage(websocket.TextMessage, reply) != nil {
 			return
 		}
 	}
@@ -145,15 +154,13 @@ func TestTransports_NoNullFields(t *testing.T) {
 			_, err := tr.Call(ctx, transport.NewSimpleRequest("/shelly"))
 			return err
 		},
-		// Shelly documents no batch frame and the fake answers it with one
-		// result object, which Execute cannot parse; any other error fails.
 		"batch": func(ctx context.Context, tr transport.Transport) error {
-			_, err := rpc.NewClient(tr).NewBatch().Add("Switch.GetStatus", map[string]any{"id": 0}).
+			results, err := rpc.NewClient(tr).NewBatch().Add("Switch.GetStatus", map[string]any{"id": 0}).
 				Add("Shelly.GetStatus", nil).Execute(ctx)
-			if err != nil && !strings.Contains(err.Error(), "failed to parse batch response") {
-				return err
+			for _, r := range results {
+				err = errors.Join(err, r.Err)
 			}
-			return nil
+			return err
 		},
 	}
 
@@ -173,10 +180,25 @@ func TestTransports_NoNullFields(t *testing.T) {
 					}
 					return
 				}
-				if len(frames) != 1 {
-					t.Fatalf("device got %d frames, want 1: %q", len(frames), frames)
+				want := 1
+				if callName == "batch" {
+					want = 2
 				}
-				checkNoNulls(t, frames[0])
+				if len(frames) != want {
+					t.Fatalf("device got %d frames, want %d: %q", len(frames), want, frames)
+				}
+				ids := map[string]bool{}
+				for _, frame := range frames {
+					checkNoNulls(t, frame)
+					var f struct {
+						ID json.RawMessage `json:"id"`
+					}
+					_ = json.Unmarshal(frame, &f)
+					if ids[string(f.ID)] {
+						t.Errorf("id %s sent twice in %q", f.ID, frames)
+					}
+					ids[string(f.ID)] = true
+				}
 			})
 		}
 	}

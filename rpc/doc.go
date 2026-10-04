@@ -1,7 +1,7 @@
 // Package rpc provides a JSON-RPC 2.0 framework for Shelly device communication.
 //
 // This package implements a complete RPC client with support for:
-//   - Single and batch RPC requests
+//   - Single RPC calls, and batches of calls sent one after another
 //   - Request/response correlation via ID management
 //   - Notification handling for asynchronous events
 //   - Multiple transport protocols (HTTP, WebSocket, MQTT, CoAP)
@@ -26,7 +26,9 @@
 //
 // # Batch Requests
 //
-// Batch multiple RPC calls into a single round-trip:
+// Shelly devices have no batch frame, so a batch sends each request as its own
+// call, in order. A failed request sets its result's Err and the rest are
+// still sent; a canceled context stops the batch:
 //
 //	batch := client.NewBatch()
 //	batch.Add("Switch.GetStatus", map[string]any{"id": 0})
@@ -70,8 +72,8 @@
 // # Request ID Management
 //
 // The client automatically manages request IDs for correlating responses.
-// IDs are generated sequentially starting from 1. For batch requests,
-// each request in the batch receives its own unique ID.
+// IDs are generated sequentially starting from 1. Each request in a batch is
+// sent with its own ID.
 //
 // # Error Handling
 //

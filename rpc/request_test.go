@@ -106,37 +106,6 @@ func TestRequestBuilder_BuildNotification(t *testing.T) {
 	}
 }
 
-func TestRequestBuilder_BuildBatch(t *testing.T) {
-	rb := NewRequestBuilder()
-
-	requests := []BatchRequest{
-		{Method: "Switch.GetStatus", Params: map[string]any{"id": 0}},
-		{Method: "Switch.GetStatus", Params: map[string]any{"id": 1}},
-		{Method: "Light.GetStatus", Params: map[string]any{"id": 0}},
-	}
-
-	batch, err := rb.BuildBatch(requests)
-	if err != nil {
-		t.Fatalf("BuildBatch() error = %v", err)
-	}
-
-	if len(batch) != len(requests) {
-		t.Errorf("batch length = %v, want %v", len(batch), len(requests))
-	}
-
-	// Check that each request has a unique ID
-	ids := make(map[any]bool)
-	for _, req := range batch {
-		if req.ID == nil {
-			t.Error("batch request should have ID")
-		}
-		if ids[req.ID] {
-			t.Errorf("duplicate ID %v", req.ID)
-		}
-		ids[req.ID] = true
-	}
-}
-
 func TestRequestBuilder_IDManagement(t *testing.T) {
 	rb := NewRequestBuilder()
 

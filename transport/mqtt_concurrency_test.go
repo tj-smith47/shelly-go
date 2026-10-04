@@ -15,7 +15,8 @@ import (
 
 // droppableClient counts Disconnect calls, records every published frame and
 // answers it through the transport's own response handler, refusing a frame
-// a device cannot parse as authtest.FrameError does.
+// a device cannot parse as authtest.FrameError does and leaving a frame
+// without a method unanswered as authtest.Unanswered does.
 type droppableClient struct {
 	transport   *MQTT
 	frames      [][]byte
@@ -42,7 +43,7 @@ func (c *droppableClient) Publish(_ string, _ byte, _ bool, payload interface{})
 		c.frames = append(c.frames, data)
 		c.mu.Unlock()
 	}
-	if ok && json.Unmarshal(data, &req) == nil && c.transport != nil {
+	if ok && json.Unmarshal(data, &req) == nil && c.transport != nil && !authtest.Unanswered(data) {
 		reply := map[string]any{"id": req.ID, "result": map[string]any{"ok": true}}
 		if e := authtest.FrameError(data); e != nil {
 			reply = map[string]any{"id": req.ID, "error": e}

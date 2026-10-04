@@ -69,23 +69,6 @@ func BenchmarkRequestBuilder_Build(b *testing.B) {
 	}
 }
 
-// BenchmarkBatchResponse_Unmarshal benchmarks batch response unmarshaling.
-func BenchmarkBatchResponse_Unmarshal(b *testing.B) {
-	data := []byte(`[
-		{"id":1,"jsonrpc":"2.0","result":{"id":0,"source":"init","output":true}},
-		{"id":2,"jsonrpc":"2.0","result":{"id":0,"name":"Switch 0"}},
-		{"id":3,"jsonrpc":"2.0","result":{"uptime":12345}},
-		{"id":4,"jsonrpc":"2.0","result":{"sta_ip":"192.168.1.100"}},
-		{"id":5,"jsonrpc":"2.0","result":{"connected":true}}
-	]`)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		var responses []Response
-		_ = json.Unmarshal(data, &responses)
-	}
-}
-
 // BenchmarkRequest_Large benchmarks large request marshaling.
 func BenchmarkRequest_Large(b *testing.B) {
 	rb := NewRequestBuilder()

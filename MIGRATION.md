@@ -133,6 +133,22 @@ client := rpc.NewClient(t)
 
 Initial release - no breaking changes.
 
+### Batch requests
+
+Shelly devices have no batch frame: a device answers the frame `rpc.Batch`
+used to send (`{"method":"","params":[...]}`) with an empty body and a JSON
+array with HTTP 400. `Batch.Execute` now sends each request as its own call,
+in order, and returns one `BatchResult` per request. The batch frame types
+are removed:
+
+| Removed | Use instead |
+|---|---|
+| `transport.BatchRPCRequest` | nothing; transports send single frames |
+| `RequestBuilder.BuildBatch` | `RequestBuilder.Build` per request |
+| `rpc.BatchResponse`, `rpc.NewBatchResponse`, `rpc.ParseBatchResponse` | `Batch.Execute` results |
+
+`rpc.ParseMessage` no longer accepts a JSON array.
+
 ## Version Migration
 
 ### Migrating from v0.x to v1.x

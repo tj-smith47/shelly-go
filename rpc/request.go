@@ -95,22 +95,6 @@ func (rb *RequestBuilder) BuildNotification(method string, params any) (*Request
 	return req, nil
 }
 
-// BuildBatch creates multiple RPC requests with sequential IDs.
-// Each request receives its own unique ID.
-func (rb *RequestBuilder) BuildBatch(requests []BatchRequest) ([]*Request, error) {
-	result := make([]*Request, 0, len(requests))
-
-	for _, br := range requests {
-		req, err := rb.Build(br.Method, br.Params)
-		if err != nil {
-			return nil, fmt.Errorf("failed to build request for %s: %w", br.Method, err)
-		}
-		result = append(result, req)
-	}
-
-	return result, nil
-}
-
 // NextID returns the next sequential request ID.
 func (rb *RequestBuilder) NextID() uint64 {
 	return rb.idCounter.Add(1)

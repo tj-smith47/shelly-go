@@ -17,8 +17,8 @@ import (
 	"github.com/tj-smith47/shelly-go/types"
 )
 
-// digestWSDevice is a fake Gen2+ device on a websocket. It answers a frame a
-// device cannot parse with error 400, a frame whose auth object authtest
+// digestWSDevice is a fake Gen2+ device on a websocket. It does not answer a
+// frame without a method, answers a frame a device cannot parse with error 400, a frame whose auth object authtest
 // rejects with error 401 and a digest challenge,
 // and sends one notification after the first authenticated frame of each
 // connection, as a device only notifies a peer that authenticated.
@@ -53,6 +53,9 @@ func (d *digestWSDevice) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, data, err := conn.ReadMessage()
 		if err != nil {
 			return
+		}
+		if authtest.Unanswered(data) {
+			continue
 		}
 		var frame struct {
 			ID   int64           `json:"id"`

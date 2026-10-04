@@ -73,18 +73,32 @@ func FrameError(frame []byte) map[string]any {
 	return nil
 }
 
+// Unanswered reports whether a device sends no reply at all to frame: over
+// HTTP, a Plus 2PM on firmware 1.7.5 answers a frame with an empty or missing
+// method, such as {"id":1,"method":"","params":[...]}, with an empty body.
+func Unanswered(frame []byte) bool {
+	var f struct {
+		Method string `json:"method"`
+	}
+	return json.Unmarshal(frame, &f) == nil && f.Method == ""
+}
+
 // ReadHTTP reads the body of a POST to a device's /rpc endpoint. It returns
 // the body and true, or answers r the way a device does and returns false:
-// HTTP 400 "Bad Request" for an empty body, and an error frame (FrameError)
-// for a frame the device refuses.
+// HTTP 400 "Bad Request" for an empty body or a JSON array (devices have no
+// batch frame), an error frame (FrameError) for a frame the device refuses,
+// and an empty body for a frame with no method (Unanswered).
 func ReadHTTP(w http.ResponseWriter, r *http.Request) (body []byte, ok bool) {
 	body, err := io.ReadAll(r.Body)
-	if err != nil || len(body) == 0 {
+	if err != nil || len(body) == 0 || bytes.HasPrefix(bytes.TrimSpace(body), []byte("[")) {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return nil, false
 	}
 	e := FrameError(body)
 	if e == nil {
+		if Unanswered(body) {
+			return nil, false
+		}
 		return body, true
 	}
 	// A frame FrameError refuses may not be an object; its id is then null.

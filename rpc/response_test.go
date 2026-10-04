@@ -302,166 +302,6 @@ func TestErrorObject_Unwrap(t *testing.T) {
 	}
 }
 
-func TestBatchResponse_MarshalJSON(t *testing.T) {
-	batch := &BatchResponse{
-		Responses: []*Response{
-			{JSONRPC: "2.0", ID: 1, Result: json.RawMessage(`{"status":"ok"}`)},
-			{JSONRPC: "2.0", ID: 2, Error: &ErrorObject{Code: -32600, Message: "Error"}},
-		},
-	}
-
-	data, err := json.Marshal(batch)
-	if err != nil {
-		t.Fatalf("MarshalJSON() error = %v", err)
-	}
-
-	var decoded BatchResponse
-	if err := json.Unmarshal(data, &decoded); err != nil {
-		t.Fatalf("Unmarshal() error = %v", err)
-	}
-
-	if len(decoded.Responses) != len(batch.Responses) {
-		t.Errorf("Response count = %v, want %v", len(decoded.Responses), len(batch.Responses))
-	}
-}
-
-func TestBatchResponse_Get(t *testing.T) {
-	batch := &BatchResponse{
-		Responses: []*Response{
-			{JSONRPC: "2.0", ID: 1, Result: json.RawMessage(`{}`)},
-			{JSONRPC: "2.0", ID: 2, Result: json.RawMessage(`{}`)},
-		},
-	}
-
-	tests := []struct {
-		name  string
-		index int
-		want  bool
-	}{
-		{name: "valid index 0", index: 0, want: true},
-		{name: "valid index 1", index: 1, want: true},
-		{name: "invalid index -1", index: -1, want: false},
-		{name: "invalid index 2", index: 2, want: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := batch.Get(tt.index)
-			if (got != nil) != tt.want {
-				t.Errorf("Get(%v) = %v, want nil = %v", tt.index, got, !tt.want)
-			}
-		})
-	}
-}
-
-func TestBatchResponse_GetByID(t *testing.T) {
-	batch := &BatchResponse{
-		Responses: []*Response{
-			{JSONRPC: "2.0", ID: 1, Result: json.RawMessage(`{}`)},
-			{JSONRPC: "2.0", ID: 2, Result: json.RawMessage(`{}`)},
-		},
-	}
-
-	tests := []struct {
-		id   any
-		name string
-		want bool
-	}{
-		{name: "valid ID 1", id: 1, want: true},
-		{name: "valid ID 2", id: 2, want: true},
-		{name: "invalid ID 3", id: 3, want: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := batch.GetByID(tt.id)
-			if (got != nil) != tt.want {
-				t.Errorf("GetByID(%v) = %v, want nil = %v", tt.id, got, !tt.want)
-			}
-		})
-	}
-}
-
-func TestBatchResponse_Len(t *testing.T) {
-	batch := &BatchResponse{
-		Responses: []*Response{
-			{JSONRPC: "2.0", ID: 1},
-			{JSONRPC: "2.0", ID: 2},
-			{JSONRPC: "2.0", ID: 3},
-		},
-	}
-
-	if got := batch.Len(); got != 3 {
-		t.Errorf("Len() = %v, want 3", got)
-	}
-}
-
-func TestBatchResponse_HasErrors(t *testing.T) {
-	tests := []struct {
-		batch *BatchResponse
-		name  string
-		want  bool
-	}{
-		{
-			name: "no errors",
-			batch: &BatchResponse{
-				Responses: []*Response{
-					{JSONRPC: "2.0", ID: 1, Result: json.RawMessage(`{}`)},
-				},
-			},
-			want: false,
-		},
-		{
-			name: "has errors",
-			batch: &BatchResponse{
-				Responses: []*Response{
-					{JSONRPC: "2.0", ID: 1, Result: json.RawMessage(`{}`)},
-					{JSONRPC: "2.0", ID: 2, Error: &ErrorObject{Code: -32600, Message: "Error"}},
-				},
-			},
-			want: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.batch.HasErrors(); got != tt.want {
-				t.Errorf("HasErrors() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestBatchResponse_Errors(t *testing.T) {
-	batch := &BatchResponse{
-		Responses: []*Response{
-			{JSONRPC: "2.0", ID: 1, Result: json.RawMessage(`{}`)},
-			{JSONRPC: "2.0", ID: 2, Error: &ErrorObject{Code: -32600, Message: "Error 1"}},
-			{JSONRPC: "2.0", ID: 3, Error: &ErrorObject{Code: -32601, Message: "Error 2"}},
-		},
-	}
-
-	errs := batch.Errors()
-	if len(errs) != 2 {
-		t.Errorf("Errors() count = %v, want 2", len(errs))
-	}
-}
-
-func TestBatchResponse_String(t *testing.T) {
-	batch := &BatchResponse{
-		Responses: []*Response{
-			{JSONRPC: "2.0", ID: 1, Result: json.RawMessage(`{}`)},
-			{JSONRPC: "2.0", ID: 2, Error: &ErrorObject{Code: -32600, Message: "Error"}},
-		},
-	}
-
-	got := batch.String()
-	want := "BatchResponse{Total: 2, Success: 1, Errors: 1}"
-	if got != want {
-		t.Errorf("String() = %v, want %v", got, want)
-	}
-}
-
 func TestNotification_MarshalJSON(t *testing.T) {
 	notif := &Notification{
 		JSONRPC: "2.0",
@@ -605,35 +445,6 @@ func TestParseResponse(t *testing.T) {
 	}
 }
 
-func TestParseBatchResponse(t *testing.T) {
-	tests := []struct {
-		name    string
-		json    string
-		wantErr bool
-	}{
-		{
-			name:    "valid batch",
-			json:    `[{"jsonrpc":"2.0","id":1,"result":{}},{"jsonrpc":"2.0","id":2,"result":{}}]`,
-			wantErr: false,
-		},
-		{
-			name:    "invalid JSON",
-			json:    `[{invalid}]`,
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := ParseBatchResponse([]byte(tt.json))
-
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ParseBatchResponse() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
 func TestParseNotification(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -677,10 +488,9 @@ func TestParseMessage(t *testing.T) {
 			wantType: "*rpc.Response",
 		},
 		{
-			name:     "batch response",
-			json:     `[{"jsonrpc":"2.0","id":1,"result":{}}]`,
-			wantErr:  false,
-			wantType: "*rpc.BatchResponse",
+			name:    "array",
+			json:    `[{"jsonrpc":"2.0","id":1,"result":{}}]`,
+			wantErr: true,
 		},
 		{
 			name:     "notification",
@@ -717,100 +527,12 @@ func TestParseMessage(t *testing.T) {
 			switch msg.(type) {
 			case *Response:
 				gotType = "*rpc.Response"
-			case *BatchResponse:
-				gotType = "*rpc.BatchResponse"
 			case *Notification:
 				gotType = "*rpc.Notification"
 			}
 
 			if gotType != tt.wantType {
 				t.Errorf("ParseMessage() type = %v, want %v", gotType, tt.wantType)
-			}
-		})
-	}
-}
-
-func TestNewBatchResponse(t *testing.T) {
-	responses := []*Response{
-		{JSONRPC: "2.0", ID: 1, Result: json.RawMessage(`{}`)},
-		{JSONRPC: "2.0", ID: 2, Result: json.RawMessage(`{}`)},
-	}
-
-	batch := NewBatchResponse(responses)
-
-	if len(batch.Responses) != len(responses) {
-		t.Errorf("Response count = %v, want %v", len(batch.Responses), len(responses))
-	}
-}
-
-func TestToFloat64(t *testing.T) {
-	tests := []struct {
-		name  string
-		input any
-		want  *float64
-	}{
-		{"float64", float64(42.5), ptr(42.5)},
-		{"float32", float32(42.5), ptr(42.5)},
-		{"int", int(42), ptr(42.0)},
-		{"int8", int8(42), ptr(42.0)},
-		{"int16", int16(42), ptr(42.0)},
-		{"int32", int32(42), ptr(42.0)},
-		{"int64", int64(42), ptr(42.0)},
-		{"uint", uint(42), ptr(42.0)},
-		{"uint8", uint8(42), ptr(42.0)},
-		{"uint16", uint16(42), ptr(42.0)},
-		{"uint32", uint32(42), ptr(42.0)},
-		{"uint64", uint64(42), ptr(42.0)},
-		{"string", "not a number", nil},
-		{"nil", nil, nil},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := toFloat64(tt.input)
-			if tt.want == nil {
-				if got != nil {
-					t.Errorf("toFloat64() = %v, want nil", *got)
-				}
-			} else {
-				if got == nil {
-					t.Errorf("toFloat64() = nil, want %v", *tt.want)
-				} else if *got != *tt.want {
-					t.Errorf("toFloat64() = %v, want %v", *got, *tt.want)
-				}
-			}
-		})
-	}
-}
-
-func ptr(f float64) *float64 {
-	return &f
-}
-
-func TestIdsEqual(t *testing.T) {
-	tests := []struct {
-		name string
-		a    any
-		b    any
-		want bool
-	}{
-		{"same int", 42, 42, true},
-		{"same float64", 42.0, 42.0, true},
-		{"int vs float64", 42, 42.0, true},
-		{"different int", 42, 43, false},
-		{"same string", "abc", "abc", true},
-		{"different string", "abc", "def", false},
-		{"string vs int", "42", 42, false},
-		{"nil vs nil", nil, nil, true},
-		{"int8 vs int64", int8(42), int64(42), true},
-		{"uint vs int", uint(42), int(42), true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := idsEqual(tt.a, tt.b)
-			if got != tt.want {
-				t.Errorf("idsEqual(%v, %v) = %v, want %v", tt.a, tt.b, got, tt.want)
 			}
 		})
 	}

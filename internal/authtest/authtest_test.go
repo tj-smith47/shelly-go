@@ -75,6 +75,17 @@ func TestHeaderAuth_Rejects(t *testing.T) {
 	}
 }
 
+func TestUnanswered(t *testing.T) {
+	for frame, want := range map[string]bool{
+		`{"id":1,"method":""}`: true, `{"id":1,"params":[]}`: true,
+		`{"id":1,"method":"Sys.GetStatus"}`: false, `[`: false,
+	} {
+		if got := Unanswered([]byte(frame)); got != want {
+			t.Errorf("Unanswered(%s) = %v, want %v", frame, got, want)
+		}
+	}
+}
+
 func TestFrameError(t *testing.T) {
 	refused := []string{``, `[`, `null`, `[]`, `{"id":1,"auth":null}`, `{"id":1,"auth":"x"}`, `{"id":1,"auth":[]}`}
 	for _, frame := range refused {
@@ -102,6 +113,14 @@ func TestReadHTTP(t *testing.T) {
 	w, ok := read(`{"id":7,"method":"Shelly.GetStatus","auth":null}`)
 	if ok || !strings.Contains(w.Body.String(), `"id":7`) || !strings.Contains(w.Body.String(), `"code":400`) {
 		t.Errorf(`"auth": null: ok=%v body=%s, want error 400 for id 7`, ok, w.Body)
+	}
+	if w, ok := read(`[{"id":1,"method":"Sys.GetStatus"},{"id":2,"method":"Shelly.GetDeviceInfo"}]`); ok ||
+		w.Code != http.StatusBadRequest {
+		t.Errorf("array body: ok=%v status=%d, want HTTP 400", ok, w.Code)
+	}
+	if w, ok := read(`{"id":1,"method":"","params":[{"id":2,"method":"Sys.GetStatus"}]}`); ok ||
+		w.Code != http.StatusOK || w.Body.Len() != 0 {
+		t.Errorf("empty method: ok=%v status=%d body=%q, want an empty HTTP 200", ok, w.Code, w.Body)
 	}
 	if _, ok := read(`{"id":1,"method":"Shelly.GetStatus"}`); !ok {
 		t.Error("a frame without auth was refused")

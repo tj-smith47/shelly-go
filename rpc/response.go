@@ -99,159 +99,6 @@ func (r *Response) GetError() error {
 	return nil
 }
 
-// BatchResponse represents a collection of RPC responses from a batch request.
-type BatchResponse struct {
-	Responses []*Response
-}
-
-// NewBatchResponse creates a new BatchResponse from a slice of responses.
-func NewBatchResponse(responses []*Response) *BatchResponse {
-	return &BatchResponse{
-		Responses: responses,
-	}
-}
-
-// MarshalJSON encodes the batch response to JSON.
-func (br *BatchResponse) MarshalJSON() ([]byte, error) {
-	return json.Marshal(br.Responses)
-}
-
-// UnmarshalJSON decodes the batch response from JSON.
-func (br *BatchResponse) UnmarshalJSON(data []byte) error {
-	return json.Unmarshal(data, &br.Responses)
-}
-
-// Get returns the response at the given index.
-// Returns nil if the index is out of bounds.
-func (br *BatchResponse) Get(index int) *Response {
-	if index < 0 || index >= len(br.Responses) {
-		return nil
-	}
-	return br.Responses[index]
-}
-
-// GetByID returns the response with the given ID.
-// Returns nil if no response with that ID is found.
-func (br *BatchResponse) GetByID(id any) *Response {
-	for _, resp := range br.Responses {
-		if idsEqual(resp.ID, id) {
-			return resp
-		}
-	}
-	return nil
-}
-
-// idsEqual compares two IDs, handling type conversions from JSON unmarshaling.
-// JSON numbers are unmarshaled as float64, but IDs may be generated as int, uint64, etc.
-func idsEqual(a, b any) bool {
-	if a == b {
-		return true
-	}
-
-	// Convert both to float64 for comparison
-	aFloat := toFloat64(a)
-	bFloat := toFloat64(b)
-
-	if aFloat != nil && bFloat != nil {
-		return *aFloat == *bFloat
-	}
-
-	// Try string comparison as fallback
-	aStr, aOk := a.(string)
-	bStr, bOk := b.(string)
-	if aOk && bOk {
-		return aStr == bStr
-	}
-
-	return false
-}
-
-// toFloat64 attempts to convert an any to float64.
-// Returns nil if conversion is not possible.
-func toFloat64(v any) *float64 {
-	switch val := v.(type) {
-	case float64:
-		return &val
-	case float32:
-		f := float64(val)
-		return &f
-	case int:
-		f := float64(val)
-		return &f
-	case int8:
-		f := float64(val)
-		return &f
-	case int16:
-		f := float64(val)
-		return &f
-	case int32:
-		f := float64(val)
-		return &f
-	case int64:
-		f := float64(val)
-		return &f
-	case uint:
-		f := float64(val)
-		return &f
-	case uint8:
-		f := float64(val)
-		return &f
-	case uint16:
-		f := float64(val)
-		return &f
-	case uint32:
-		f := float64(val)
-		return &f
-	case uint64:
-		f := float64(val)
-		return &f
-	default:
-		return nil
-	}
-}
-
-// Len returns the number of responses in the batch.
-func (br *BatchResponse) Len() int {
-	return len(br.Responses)
-}
-
-// HasErrors returns true if any response in the batch contains an error.
-func (br *BatchResponse) HasErrors() bool {
-	for _, resp := range br.Responses {
-		if resp.IsError() {
-			return true
-		}
-	}
-	return false
-}
-
-// Errors returns a slice of all errors in the batch response.
-// Returns nil if there are no errors.
-func (br *BatchResponse) Errors() []error {
-	var errs []error
-	for _, resp := range br.Responses {
-		if resp.Error != nil {
-			errs = append(errs, resp.Error)
-		}
-	}
-	return errs
-}
-
-// String returns a string representation of the batch response for debugging.
-func (br *BatchResponse) String() string {
-	successCount := 0
-	errorCount := 0
-	for _, resp := range br.Responses {
-		if resp.IsError() {
-			errorCount++
-		} else {
-			successCount++
-		}
-	}
-	return fmt.Sprintf("BatchResponse{Total: %d, Success: %d, Errors: %d}",
-		len(br.Responses), successCount, errorCount)
-}
-
 // Notification represents a JSON-RPC 2.0 notification (server-initiated message).
 //
 // Notifications are messages from the server that do not expect a response.
@@ -310,15 +157,6 @@ func ParseResponse(data []byte) (*Response, error) {
 	return &resp, nil
 }
 
-// ParseBatchResponse parses a JSON-RPC batch response from raw JSON data.
-func ParseBatchResponse(data []byte) (*BatchResponse, error) {
-	var batch BatchResponse
-	if err := json.Unmarshal(data, &batch); err != nil {
-		return nil, fmt.Errorf("failed to parse batch response: %w", err)
-	}
-	return &batch, nil
-}
-
 // ParseNotification parses a JSON-RPC notification from raw JSON data.
 func ParseNotification(data []byte) (*Notification, error) {
 	var notif Notification
@@ -329,7 +167,7 @@ func ParseNotification(data []byte) (*Notification, error) {
 }
 
 // ParseMessage attempts to parse a JSON-RPC message from raw JSON data.
-// It returns the parsed message as one of: *Response, *BatchResponse, or *Notification.
+// It returns the parsed message as either a *Response or a *Notification.
 // The caller can use type assertion to determine the message type.
 func ParseMessage(data []byte) (any, error) {
 	// Try to detect the message type by peeking at the JSON structure
@@ -342,10 +180,6 @@ func ParseMessage(data []byte) (any, error) {
 	}
 
 	if err := json.Unmarshal(data, &peek); err != nil {
-		// Maybe it's a batch response (array)
-		if batch, batchErr := ParseBatchResponse(data); batchErr == nil {
-			return batch, nil
-		}
 		return nil, fmt.Errorf("failed to parse message: %w", err)
 	}
 

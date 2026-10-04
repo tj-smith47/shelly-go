@@ -34,14 +34,6 @@ type RPCRequest interface {
 	IsREST() bool
 }
 
-// BatchRPCRequest is an optional interface for batch requests.
-// Requests that implement this interface contain multiple RPC requests.
-type BatchRPCRequest interface {
-	RPCRequest
-	// IsBatch returns true if this is a batch request.
-	IsBatch() bool
-}
-
 // SimpleRequest is a basic request for Gen1 REST API calls.
 // It implements RPCRequest interface for backward compatibility.
 type SimpleRequest struct {
