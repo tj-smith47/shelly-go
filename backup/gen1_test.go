@@ -3,6 +3,7 @@ package backup
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -260,7 +261,7 @@ func TestGen1Settings_TimezoneRoundTrips(t *testing.T) {
 	}
 }
 
-func TestGen1SettingsHaveScheduleRules(t *testing.T) {
+func TestGen1SettingsNeedClock(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name     string
@@ -279,16 +280,22 @@ func TestGen1SettingsHaveScheduleRules(t *testing.T) {
 			want:     true,
 		},
 		{
-			name:     "empty rule slice",
+			// A Duo refuses its plain light config write without a clock, rules or not.
+			name:     "light without rules",
 			settings: &gen1.Settings{Lights: []gen1.LightSettings{{ScheduleRules: []string{}}}},
+			want:     true,
+		},
+		{
+			name:     "relay without rules",
+			settings: &gen1.Settings{Relays: []gen1.RelaySettings{{ScheduleRules: []string{}}}},
 			want:     false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := gen1SettingsHaveScheduleRules(tt.settings); got != tt.want {
-				t.Errorf("gen1SettingsHaveScheduleRules() = %v, want %v", got, tt.want)
+			if got := gen1SettingsNeedClock(tt.settings); got != tt.want {
+				t.Errorf("gen1SettingsNeedClock() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -300,7 +307,7 @@ func TestWaitGen1ClockSettle_ReturnsWhenClockSet(t *testing.T) {
 	t.Parallel()
 	dev, _ := gen1ColorDevice(t, `{"unixtime":1781366055}`)
 	result := &RestoreResult{Success: true}
-	waitGen1ClockSettle(t.Context(), dev, result)
+	waitGen1ClockSettle(t.Context(), dev, result, gen1ClockSettleTimeout)
 	if len(result.Warnings) != 0 {
 		t.Errorf("expected no warning when clock is set, got %v", result.Warnings)
 	}
@@ -316,7 +323,7 @@ func TestWaitGen1ClockSettle_WarnsWhenClockNeverSets(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	result := &RestoreResult{Success: true}
-	waitGen1ClockSettle(ctx, dev, result)
+	waitGen1ClockSettle(ctx, dev, result, gen1ClockSettleTimeout)
 	if len(result.Warnings) != 1 {
 		t.Fatalf("expected exactly one clock warning, got %v", result.Warnings)
 	}
@@ -794,4 +801,110 @@ func TestRestoreGen1_SourceIdentityNotCopied(t *testing.T) {
 			t.Errorf("custom AP SSID must be restored: %v", *sets)
 		}
 	})
+}
+
+func TestRestoreGen1Timezone_SkipsWritesWhenAutodetectAlreadyOn(t *testing.T) {
+	t.Parallel()
+	var writes []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if len(r.URL.Query()) > 0 {
+			writes = append(writes, r.URL.RawQuery)
+		}
+		_, _ = io.WriteString(w, `{"timezone":"America/Los_Angeles","tzautodetect":true}`)
+	}))
+	t.Cleanup(srv.Close)
+	dev := gen1.NewDevice(transport.NewHTTP(srv.URL))
+	settings := &gen1.Settings{Tz: "America/Los_Angeles", Lat: 47.1, Lng: -122.3, Tzautodetect: true}
+	result := &RestoreResult{Success: true}
+
+	restoreGen1Timezone(t.Context(), dev, settings, result)
+
+	if len(writes) != 0 || len(result.Warnings) != 0 {
+		t.Fatalf("writes = %v, warnings = %v; want none when the device already autodetects", writes, result.Warnings)
+	}
+}
+
+func TestRestoreGen1Timezone_WritesWhenAutodetectOff(t *testing.T) {
+	t.Parallel()
+	var writes []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if len(r.URL.Query()) > 0 {
+			writes = append(writes, r.URL.RawQuery)
+		}
+		_, _ = io.WriteString(w, `{"timezone":"UTC","tzautodetect":false}`)
+	}))
+	t.Cleanup(srv.Close)
+	dev := gen1.NewDevice(transport.NewHTTP(srv.URL))
+	settings := &gen1.Settings{Tz: "America/Los_Angeles", Lat: 47.1, Lng: -122.3, Tzautodetect: true}
+	result := &RestoreResult{Success: true}
+
+	restoreGen1Timezone(t.Context(), dev, settings, result)
+
+	want := []string{"timezone=America%2FLos_Angeles", "lat=47.100000&lng=-122.300000", "tzautodetect=true"}
+	if strings.Join(writes, " ") != strings.Join(want, " ") || len(result.Warnings) != 0 {
+		t.Fatalf("writes = %v, warnings = %v; want %v in order", writes, result.Warnings, want)
+	}
+}
+
+// TestWaitGen1Clock_RebootsClocklessAutodetect: a device with autodetect on and
+// no timezone is rebooted, and the clock that appears afterwards ends the wait.
+func TestWaitGen1Clock_RebootsClocklessAutodetect(t *testing.T) {
+	t.Parallel()
+	var mu sync.Mutex
+	rebooted := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch r.URL.Path {
+		case "/settings":
+			_, _ = io.WriteString(w, `{"timezone":"","tzautodetect":true}`)
+		case "/reboot":
+			rebooted = true
+			_, _ = io.WriteString(w, `{"ok":true}`)
+		default:
+			_, _ = fmt.Fprintf(w, `{"unixtime":%d}`, map[bool]int{true: 1781366055, false: 0}[rebooted])
+		}
+	}))
+	t.Cleanup(srv.Close)
+	dev := gen1.NewDevice(transport.NewHTTP(srv.URL))
+	result := &RestoreResult{Success: true}
+
+	waitGen1Clock(t.Context(), dev, result)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if !rebooted || len(result.Warnings) != 0 {
+		t.Fatalf("rebooted = %v, warnings = %v; want a reboot and no warning", rebooted, result.Warnings)
+	}
+}
+
+// TestWaitGen1Clock_NoRebootWithTimezone: a device that already has a timezone
+// is never rebooted, whatever its autodetect setting.
+func TestWaitGen1Clock_NoRebootWithTimezone(t *testing.T) {
+	t.Parallel()
+	var mu sync.Mutex
+	rebooted := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch r.URL.Path {
+		case "/settings":
+			_, _ = io.WriteString(w, `{"timezone":"America/Los_Angeles","tzautodetect":true}`)
+		case "/reboot":
+			rebooted = true
+		default:
+			_, _ = io.WriteString(w, `{"unixtime":1781366055}`)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	dev := gen1.NewDevice(transport.NewHTTP(srv.URL))
+	result := &RestoreResult{Success: true}
+
+	waitGen1Clock(t.Context(), dev, result)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if rebooted || len(result.Warnings) != 0 {
+		t.Fatalf("rebooted = %v, warnings = %v; want neither", rebooted, result.Warnings)
+	}
 }

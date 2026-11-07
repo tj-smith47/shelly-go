@@ -270,17 +270,21 @@ func gen1SettleFor(fw string) time.Duration {
 const (
 	gen1ClockSettleTimeout = 30 * time.Second
 	gen1ClockPollInterval  = 2 * time.Second
+	// gen1AutodetectBootTimeout bounds the wait for a rebooted device with timezone
+	// autodetect to find its timezone and sync NTP. Measured on a Duo
+	// (20230913/v1.14.0) the lookup completes within three minutes of boot.
+	gen1AutodetectBootTimeout = 4 * time.Minute
 )
 
-// gen1SettingsHaveScheduleRules reports whether the backup carries any light or
-// relay schedule rules. Such rules are clock-gated — the device rejects them with
-// "Timezone and time should be set" until its clock is set — so their presence is
-// what makes the pre-write clock wait worthwhile; a backup without them skips it.
-func gen1SettingsHaveScheduleRules(settings *gen1.Settings) bool {
-	for i := range settings.Lights {
-		if len(settings.Lights[i].ScheduleRules) > 0 {
-			return true
-		}
+// gen1SettingsNeedClock reports whether the backup carries configuration a Gen1
+// device refuses until its clock is set ("Timezone and time should be set"):
+// any light component config — a Duo rejects the plain /settings/light write,
+// schedule rules or not (seen on hardware, firmware 20230913/v1.14.0) — and relay
+// schedule rules. Their presence is what makes the pre-write clock wait
+// worthwhile; a backup with neither skips it.
+func gen1SettingsNeedClock(settings *gen1.Settings) bool {
+	if len(settings.Lights) > 0 {
+		return true
 	}
 	for i := range settings.Relays {
 		if len(settings.Relays[i].ScheduleRules) > 0 {
@@ -290,14 +294,29 @@ func gen1SettingsHaveScheduleRules(settings *gen1.Settings) bool {
 	return false
 }
 
-// waitGen1ClockSettle polls the device until its clock is set (status unixtime
-// becomes non-zero) or gen1ClockSettleTimeout elapses. It is called before writing
-// time-based schedule rules so a freshly-booted device — whose NTP sync can lag the
-// short inter-step pacing — does not silently drop them. A clock that never arrives
-// (e.g. the device cannot reach NTP) records a warning and proceeds rather than
-// failing the restore, since the rest of the configuration still applies.
-func waitGen1ClockSettle(ctx context.Context, dev *gen1.Device, result *RestoreResult) {
-	waitCtx, cancel := context.WithTimeout(ctx, gen1ClockSettleTimeout)
+// waitGen1Clock blocks until the device reports a clock or a bounded wait
+// elapses, recording a warning when the clock never appears. A device whose
+// timezone autodetect is on but has no timezone yet will not get one this boot:
+// the firmware only runs the lookup while booting, and it clears the timezone
+// and clock whenever autodetect is (re-)enabled. Such a device is rebooted and
+// given the longer boot-length wait instead of the short NTP settle.
+func waitGen1Clock(ctx context.Context, dev *gen1.Device, result *RestoreResult) {
+	timeout := gen1ClockSettleTimeout
+	if live, err := dev.GetSettings(ctx); err == nil && live.Tzautodetect && live.Tz == "" {
+		timeout = gen1AutodetectBootTimeout
+		if err := dev.Reboot(ctx); err != nil {
+			addWarningf(result, "reboot for timezone autodetect: %v", err)
+		}
+	}
+	waitGen1ClockSettle(ctx, dev, result, timeout)
+}
+
+// waitGen1ClockSettle polls the device status until its clock is set (unixtime
+// becomes non-zero) or timeout elapses. It is called before writing
+// clock-gated config, because the device refuses such writes until it has a
+// clock. A clock that never appears is recorded as a warning, not a failure.
+func waitGen1ClockSettle(ctx context.Context, dev *gen1.Device, result *RestoreResult, timeout time.Duration) {
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	for {
 		if status, err := dev.GetFullStatus(waitCtx); err == nil && status.UnixTime > 0 {
@@ -307,7 +326,7 @@ func waitGen1ClockSettle(ctx context.Context, dev *gen1.Device, result *RestoreR
 		case <-waitCtx.Done():
 			addWarningf(result,
 				"device clock not set after %s; time-based schedule rules may not apply until it syncs NTP",
-				gen1ClockSettleTimeout)
+				timeout)
 			return
 		case <-time.After(gen1ClockPollInterval):
 		}
@@ -810,7 +829,7 @@ func restoreGen1ClockDependent(
 	result *RestoreResult,
 ) {
 	if !runGen1Step(ctx, dev, pacer, opts, "light-config", result, func() {
-		restoreGen1Components(ctx, dev, settings, result)
+		restoreGen1ComponentsAfterClock(ctx, dev, settings, opts, result)
 	}) {
 		return
 	}
@@ -1184,7 +1203,18 @@ func restoreGen1DeviceSettings(
 // timezone from the location just restored. Tzautodetect is omitempty, so it is
 // only present (true) in the backup when the source had it on; a source with
 // autodetect off keeps the manual timezone and never has it written.
+//
+// A device that already has autodetect on is left alone: Gen1 firmware
+// (Duo 20230913/v1.14.0) answers every tzautodetect=true write by discarding its
+// timezone, location and clock, and it only looks the timezone up again while
+// booting, so re-writing a setting the device already has would leave it
+// clockless until its next reboot.
 func restoreGen1Timezone(ctx context.Context, dev *gen1.Device, settings *gen1.Settings, result *RestoreResult) {
+	if settings.Tzautodetect {
+		if live, err := dev.GetSettings(ctx); err == nil && live.Tzautodetect {
+			return
+		}
+	}
 	if settings.Tz != "" {
 		if err := dev.SetTimezone(ctx, settings.Tz); err != nil {
 			addWarningf(result, "set timezone: %v", err)
@@ -1499,8 +1529,9 @@ func restoreGen1Auth(ctx context.Context, dev *gen1.Device, bkp *Backup, result 
 }
 
 // restoreGen1ComponentsAfterClock waits (bounded) for the device clock before
-// writing component config when the backup carries time-based schedule rules, then
-// restores the components. A Gen1 device refuses such rules until its clock is set
+// writing component config when the backup carries clock-gated config (light
+// config, relay schedule rules), then restores the components. A Gen1 device
+// refuses such writes until its clock is set
 // ("Timezone and time should be set"); the timezone written in the device-settings
 // step lets it sync NTP, but on a freshly-booted device that sync can lag the short
 // inter-step pacing — without the wait the rules are silently dropped. The wait is
@@ -1513,8 +1544,8 @@ func restoreGen1ComponentsAfterClock(
 	opts *Gen1RestoreOptions,
 	result *RestoreResult,
 ) {
-	if !opts.SkipClockWait && gen1SettingsHaveScheduleRules(settings) {
-		waitGen1ClockSettle(ctx, dev, result)
+	if !opts.SkipClockWait && gen1SettingsNeedClock(settings) {
+		waitGen1Clock(ctx, dev, result)
 	}
 	restoreGen1Components(ctx, dev, settings, result)
 }
