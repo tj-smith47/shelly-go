@@ -54,6 +54,8 @@ type fakeDevice struct {
 	failArgs string
 
 	settingsErr bool
+	// settingsFailQuery makes a Gen1 /settings call whose query contains it fail.
+	settingsFailQuery string
 	// shellyErr makes the /shelly identity endpoint fail.
 	shellyErr bool
 	otaErr    bool
@@ -182,7 +184,7 @@ func (d *fakeDevice) registerGen1(mux *http.ServeMux) {
 	mux.HandleFunc("/settings", func(w http.ResponseWriter, r *http.Request) {
 		d.record(r.URL.Path)
 		d.recordArgs(r.URL.Path, r.URL.RawQuery)
-		if d.settingsErr {
+		if d.settingsErr || (d.settingsFailQuery != "" && strings.Contains(r.URL.RawQuery, d.settingsFailQuery)) {
 			http.Error(w, "settings refused", http.StatusInternalServerError)
 			return
 		}

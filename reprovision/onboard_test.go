@@ -353,6 +353,7 @@ func TestOnboard_AppliesIdentity(t *testing.T) {
 		wantWarns   []string
 		gen         int
 		failSys     bool
+		failTZ      bool
 	}{
 		"Gen1":                     {gen: 1, wantApplied: []string{"name", "timezone", "cloud"}},
 		"Gen2":                     {gen: 2, wantApplied: []string{"name", "timezone", "cloud"}},
@@ -363,6 +364,9 @@ func TestOnboard_AppliesIdentity(t *testing.T) {
 			d := newFakeDevice(t, tc.gen)
 			r := testRunner(t, homeScanner(), d.addr())
 			r.identity = identityOptions{name: name, tz: tz, disableCloud: true}
+			if tc.failTZ {
+				d.settingsFailQuery = "timezone="
+			}
 			if tc.failSys {
 				d.failMethod = "Sys.SetConfig"
 			}
@@ -384,8 +388,10 @@ func TestOnboard_AppliesIdentity(t *testing.T) {
 			}
 			if tc.gen == 1 {
 				got := d.allArgs("/settings")
-				if !strings.Contains(got, "name="+name) || !strings.Contains(got, "timezone="+url.QueryEscape(tz)) || d.hits("/settings/cloud") != 1 {
-					t.Errorf("Gen1 writes: /settings queries %q, cloud hits %d", got, d.hits("/settings/cloud"))
+				cloud := d.allArgs("/settings/cloud")
+				wantTZ := !tc.failTZ
+				if !strings.Contains(got, "name="+name) || strings.Contains(got, "timezone="+url.QueryEscape(tz)) != wantTZ || cloud != "enabled=false" {
+					t.Errorf("Gen1 writes: /settings queries %q, /settings/cloud query %q", got, cloud)
 				}
 				return
 			}
@@ -399,18 +405,32 @@ func TestOnboard_AppliesIdentity(t *testing.T) {
 
 func TestOnboard_IdentityNotReachable(t *testing.T) {
 	t.Parallel()
-	d := newFakeDevice(t, 2)
-	r := testRunner(t, homeScanner(), d.addr())
-	r.identity = identityOptions{name: "x", disableCloud: true}
-	r.scanPresence = func(context.Context, string, string, bool, time.Duration) (addr, via string, err error) {
-		return "192.0.2.9", viaMDNS, nil
-	}
-	res, err := r.onboard(context.Background(), fakeAPSSID, &Network{}, 0)
-	if err != nil {
-		t.Fatalf("onboard: %v", err)
-	}
-	want := []string{"name, cloud not applied: device not reachable on the LAN"}
-	if !slices.Equal(res.Warnings, want) || len(res.Applied) != 0 {
-		t.Errorf("result = %+v, want warnings %v", res, want)
+	for name, noRejoin := range map[string]bool{
+		"seen but no route to it": false,
+		"not found on the LAN":    true,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			d := newFakeDevice(t, 2)
+			r := testRunner(t, homeScanner(), d.addr())
+			r.identity = identityOptions{name: "x", tz: "UTC", disableCloud: true}
+			r.scanPresence = func(context.Context, string, string, bool, time.Duration) (addr, via string, err error) {
+				if noRejoin {
+					return "", "", errors.New("no sighting")
+				}
+				return "192.0.2.9", viaMDNS, nil
+			}
+			res, err := r.onboard(context.Background(), fakeAPSSID, &Network{}, 0)
+			if err != nil {
+				t.Fatalf("onboard: %v", err)
+			}
+			want := []string{"name, timezone, cloud not applied: device not reachable on the LAN"}
+			if !slices.Equal(res.Warnings, want) || len(res.Applied) != 0 {
+				t.Errorf("result = %+v, want warnings %v", res, want)
+			}
+			if noRejoin && !strings.HasPrefix(res.Note, "provisioned but") {
+				t.Errorf("Note = %q, want the provisioned-but note", res.Note)
+			}
+		})
 	}
 }

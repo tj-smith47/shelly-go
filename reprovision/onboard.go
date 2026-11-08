@@ -74,8 +74,14 @@ func ScanAPs(ctx context.Context, scanner discovery.WiFiScanner) ([]AP, error) {
 // point name, writes the station settings, returns the host to its home network
 // and looks for the device on the LAN.
 //
+// Once the device answers on the LAN, Onboard also turns its access point off
+// (DisableAP), sets its Name and Timezone and turns the cloud off
+// (DisableCloud). Each setting is independent; OnboardResult.Applied and
+// Warnings report what was written and what was not.
+//
 // A device that took the settings but was not found on the LAN is not an error:
-// the result has an empty Address and a Note saying why.
+// the result has an empty Address and a Note saying why, and Warnings says that
+// the requested settings were not applied.
 func Onboard(ctx context.Context, opts *OnboardOptions) (*OnboardResult, error) {
 	if opts == nil {
 		return nil, fmt.Errorf("%w: options are required", types.ErrInvalidParam)
@@ -142,6 +148,7 @@ func (r *runner) onboard(
 	conf, err := r.confirmRejoin(ctx, res.Generation, join.StaticIP, res.MAC)
 	if err != nil {
 		res.Note = fmt.Sprintf("provisioned but %v", err)
+		res.warnNotReachable(r.identity.requested())
 		return res, nil
 	}
 	if !conf.writeable {
@@ -165,12 +172,20 @@ func (r *runner) afterRejoin(ctx context.Context, res *OnboardResult, conf *rejo
 			res.APDisabled = true
 		}
 	}
-	switch {
-	case conf.writeable:
-		r.applyIdentity(ctx, res, conf.addr, conf.bindIface)
-	case r.identity.requested() != nil:
+	requested := r.identity.requested()
+	if conf.writeable {
+		r.applyIdentity(ctx, res, conf.addr, conf.bindIface, requested)
+	} else {
+		res.warnNotReachable(requested)
+	}
+}
+
+// warnNotReachable records that the requested settings could not be written
+// because this host cannot reach the device on the LAN.
+func (res *OnboardResult) warnNotReachable(requested []string) {
+	if len(requested) > 0 {
 		res.Warnings = append(res.Warnings,
-			strings.Join(r.identity.requested(), ", ")+" not applied: device not reachable on the LAN")
+			strings.Join(requested, ", ")+" not applied: device not reachable on the LAN")
 	}
 }
 
@@ -190,51 +205,63 @@ func (o identityOptions) requested() []string {
 	return out
 }
 
-// applyIdentity writes the requested name, timezone and cloud setting in that
-// order. Each is independent: one that fails is reported in res.Warnings and
-// the others still run.
-func (r *runner) applyIdentity(ctx context.Context, res *OnboardResult, addr, iface string) {
-	if len(r.identity.requested()) == 0 {
+// applyIdentity writes the requested settings, in the order given, over one
+// connection. Each is independent: one that fails is reported in res.Warnings
+// and the others still run.
+func (r *runner) applyIdentity(ctx context.Context, res *OnboardResult, addr, iface string, requested []string) {
+	if len(requested) == 0 {
 		return
 	}
 	r.step("applying the device name, timezone and cloud setting")
-	gen1Steps := map[string]func(context.Context, *gen1.Device) error{
-		"name":     func(ctx context.Context, d *gen1.Device) error { return d.SetName(ctx, r.identity.name) },
-		"timezone": func(ctx context.Context, d *gen1.Device) error { return d.SetTimezone(ctx, r.identity.tz) },
-		"cloud":    func(ctx context.Context, d *gen1.Device) error { return d.SetCloud(ctx, false) },
-	}
-	gen2Steps := map[string]func(context.Context, *rpc.Client) error{
-		"name": func(ctx context.Context, c *rpc.Client) error {
-			return components.NewSys(c).SetConfig(ctx, &components.SysConfig{
-				Device: &components.SysDeviceConfig{Name: &r.identity.name},
-			})
-		},
-		"timezone": func(ctx context.Context, c *rpc.Client) error {
-			return components.NewSys(c).SetConfig(ctx, &components.SysConfig{
-				Location: &components.SysLocationConfig{TZ: &r.identity.tz},
-			})
-		},
-		"cloud": func(ctx context.Context, c *rpc.Client) error {
-			off := false
-			return components.NewCloud(c).SetConfig(ctx, &components.CloudConfig{Enable: &off})
-		},
-	}
-	for _, what := range r.identity.requested() {
-		var err error
-		if res.Generation == 1 {
-			err = r.withGen1(ctx, addr, iface, func(d *gen1.Device, _ string) error {
-				return gen1Steps[what](ctx, d)
-			})
-		} else {
-			err = r.withGen2(ctx, addr, iface, func(c *rpc.Client, _ string) error {
-				return gen2Steps[what](ctx, c)
-			})
+	var connErr error
+	run := func(write func(what string) error) {
+		for _, what := range requested {
+			if err := write(what); err != nil {
+				res.Warnings = append(res.Warnings, fmt.Sprintf("%s not applied: %v", what, err))
+				continue
+			}
+			res.Applied = append(res.Applied, what)
 		}
-		if err != nil {
-			res.Warnings = append(res.Warnings, fmt.Sprintf("%s not applied: %v", what, err))
-			continue
+	}
+	if res.Generation == 1 {
+		connErr = r.withGen1(ctx, addr, iface, func(d *gen1.Device, _ string) error {
+			run(func(what string) error {
+				switch what {
+				case "name":
+					return d.SetName(ctx, r.identity.name)
+				case "timezone":
+					return d.SetTimezone(ctx, r.identity.tz)
+				default:
+					return d.SetCloud(ctx, false)
+				}
+			})
+			return nil
+		})
+	} else {
+		connErr = r.withGen2(ctx, addr, iface, func(c *rpc.Client, _ string) error {
+			sys := components.NewSys(c)
+			run(func(what string) error {
+				switch what {
+				case "name":
+					return sys.SetConfig(ctx, &components.SysConfig{
+						Device: &components.SysDeviceConfig{Name: &r.identity.name},
+					})
+				case "timezone":
+					return sys.SetConfig(ctx, &components.SysConfig{
+						Location: &components.SysLocationConfig{TZ: &r.identity.tz},
+					})
+				default:
+					off := false
+					return components.NewCloud(c).SetConfig(ctx, &components.CloudConfig{Enable: &off})
+				}
+			})
+			return nil
+		})
+	}
+	if connErr != nil {
+		for _, what := range requested {
+			res.Warnings = append(res.Warnings, fmt.Sprintf("%s not applied: %v", what, connErr))
 		}
-		res.Applied = append(res.Applied, what)
 	}
 }
 
