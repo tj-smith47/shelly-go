@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/tj-smith47/shelly-go/discovery"
 	"github.com/tj-smith47/shelly-go/gen1"
+	"github.com/tj-smith47/shelly-go/gen2/components"
 	"github.com/tj-smith47/shelly-go/rpc"
 	"github.com/tj-smith47/shelly-go/types"
 )
@@ -83,6 +85,7 @@ func Onboard(ctx context.Context, opts *OnboardOptions) (*OnboardResult, error) 
 	}
 	r := newRunner(opts.Scanner, opts.Logger, opts.OnStep, opts.APHostIP)
 	r.disableAP = opts.DisableAP
+	r.identity = identityOptions{name: opts.Name, tz: opts.Timezone, disableCloud: opts.DisableCloud}
 	return r.onboard(ctx, opts.APSSID, &opts.Network, opts.Generation)
 }
 
@@ -147,6 +150,13 @@ func (r *runner) onboard(
 	res.Address = conf.addr
 	res.Reachable = conf.writeable
 	res.SeenVia = conf.via
+	r.afterRejoin(ctx, res, &conf)
+	return res, nil
+}
+
+// afterRejoin runs the writes that need the device on the LAN: turning its
+// access point off, then applying the name, timezone and cloud setting.
+func (r *runner) afterRejoin(ctx context.Context, res *OnboardResult, conf *rejoinConfirmation) {
 	if r.disableAP && res.Generation != 1 && conf.writeable {
 		r.step("turning the device's access point off")
 		if apErr := r.disableGen2AP(ctx, conf.addr, conf.bindIface); apErr != nil {
@@ -155,7 +165,77 @@ func (r *runner) onboard(
 			res.APDisabled = true
 		}
 	}
-	return res, nil
+	switch {
+	case conf.writeable:
+		r.applyIdentity(ctx, res, conf.addr, conf.bindIface)
+	case r.identity.requested() != nil:
+		res.Warnings = append(res.Warnings,
+			strings.Join(r.identity.requested(), ", ")+" not applied: device not reachable on the LAN")
+	}
+}
+
+// requested lists the settings asked for, named as OnboardResult.Applied names
+// them.
+func (o identityOptions) requested() []string {
+	var out []string
+	if o.name != "" {
+		out = append(out, "name")
+	}
+	if o.tz != "" {
+		out = append(out, "timezone")
+	}
+	if o.disableCloud {
+		out = append(out, "cloud")
+	}
+	return out
+}
+
+// applyIdentity writes the requested name, timezone and cloud setting in that
+// order. Each is independent: one that fails is reported in res.Warnings and
+// the others still run.
+func (r *runner) applyIdentity(ctx context.Context, res *OnboardResult, addr, iface string) {
+	if len(r.identity.requested()) == 0 {
+		return
+	}
+	r.step("applying the device name, timezone and cloud setting")
+	gen1Steps := map[string]func(context.Context, *gen1.Device) error{
+		"name":     func(ctx context.Context, d *gen1.Device) error { return d.SetName(ctx, r.identity.name) },
+		"timezone": func(ctx context.Context, d *gen1.Device) error { return d.SetTimezone(ctx, r.identity.tz) },
+		"cloud":    func(ctx context.Context, d *gen1.Device) error { return d.SetCloud(ctx, false) },
+	}
+	gen2Steps := map[string]func(context.Context, *rpc.Client) error{
+		"name": func(ctx context.Context, c *rpc.Client) error {
+			return components.NewSys(c).SetConfig(ctx, &components.SysConfig{
+				Device: &components.SysDeviceConfig{Name: &r.identity.name},
+			})
+		},
+		"timezone": func(ctx context.Context, c *rpc.Client) error {
+			return components.NewSys(c).SetConfig(ctx, &components.SysConfig{
+				Location: &components.SysLocationConfig{TZ: &r.identity.tz},
+			})
+		},
+		"cloud": func(ctx context.Context, c *rpc.Client) error {
+			off := false
+			return components.NewCloud(c).SetConfig(ctx, &components.CloudConfig{Enable: &off})
+		},
+	}
+	for _, what := range r.identity.requested() {
+		var err error
+		if res.Generation == 1 {
+			err = r.withGen1(ctx, addr, iface, func(d *gen1.Device, _ string) error {
+				return gen1Steps[what](ctx, d)
+			})
+		} else {
+			err = r.withGen2(ctx, addr, iface, func(c *rpc.Client, _ string) error {
+				return gen2Steps[what](ctx, c)
+			})
+		}
+		if err != nil {
+			res.Warnings = append(res.Warnings, fmt.Sprintf("%s not applied: %v", what, err))
+			continue
+		}
+		res.Applied = append(res.Applied, what)
+	}
 }
 
 // disableGen2AP turns off an RPC device's access point over its LAN address.

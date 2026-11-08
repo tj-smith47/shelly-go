@@ -45,6 +45,8 @@ type fakeDevice struct {
 	// lastArgs is the last query string per Gen1 path, or the last params per
 	// RPC method.
 	lastArgs map[string]string
+	// argLog is every query string or params body per key, in call order.
+	argLog map[string][]string
 
 	// failMethod makes that RPC method answer with an error.
 	failMethod string
@@ -61,7 +63,7 @@ type fakeDevice struct {
 // newFakeDevice starts a fake device of the given generation.
 func newFakeDevice(t *testing.T, generation int) *fakeDevice {
 	t.Helper()
-	d := &fakeDevice{fw: "20210101-000000/v1.0", uptime: 99, lastArgs: map[string]string{}}
+	d := &fakeDevice{fw: "20210101-000000/v1.0", uptime: 99, lastArgs: map[string]string{}, argLog: map[string][]string{}}
 	mux := http.NewServeMux()
 	if generation == 1 {
 		d.registerGen1(mux)
@@ -91,6 +93,15 @@ func (d *fakeDevice) recordArgs(key, args string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.lastArgs[key] = args
+	d.argLog[key] = append(d.argLog[key], args)
+}
+
+// allArgs returns every query string or params body sent under key, joined
+// with a newline, for calls that repeat with different values.
+func (d *fakeDevice) allArgs(key string) string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return strings.Join(d.argLog[key], "\n")
 }
 
 // args returns the last query string sent to a Gen1 path, or the last params
@@ -170,6 +181,7 @@ func (d *fakeDevice) registerGen1(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("/settings", func(w http.ResponseWriter, r *http.Request) {
 		d.record(r.URL.Path)
+		d.recordArgs(r.URL.Path, r.URL.RawQuery)
 		if d.settingsErr {
 			http.Error(w, "settings refused", http.StatusInternalServerError)
 			return

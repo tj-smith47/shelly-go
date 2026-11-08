@@ -230,57 +230,29 @@ type RestoreResult struct {
 
 // OnboardOptions configures Onboard. APSSID is required.
 type OnboardOptions struct {
-	// Scanner joins and leaves WiFi networks. Nil uses the platform scanner.
-	Scanner discovery.WiFiScanner
-	// Logger receives debug traces. Nil discards them.
-	Logger *slog.Logger
-	// OnStep is called with a short description as each stage starts.
-	OnStep func(step string)
-	// APSSID is the device's factory access point.
-	APSSID string
-	// APHostIP is the host's address on the access point subnet. Empty uses
-	// discovery.DefaultAPHostIP.
-	APHostIP string
-	// Network is the WiFi network the device joins. An empty SSID or Password
-	// is taken from the host's current network and stored passphrase; with
-	// Network.Open no passphrase is used.
-	Network Network
-	// Generation is the device generation, used only when the device's
-	// identity cannot be read at the access point. Zero reads it from the
-	// device, and the read must then succeed. When both are known and differ,
-	// the device's answer wins. An access point whose name carries a MAC
-	// suffix always needs the identity read, to confirm the target before
-	// writing.
-	Generation int
-	// DisableAP turns an RPC device's access point off once the device has
-	// answered on the LAN. It is done there, after the join is confirmed, so
-	// a device that failed to join can still be reached at its access point.
-	// Gen1 devices leave access point mode by themselves.
-	DisableAP bool
+	Scanner      discovery.WiFiScanner
+	Logger       *slog.Logger
+	OnStep       func(step string)
+	APSSID       string
+	APHostIP     string
+	Name         string
+	Timezone     string
+	Network      Network
+	Generation   int
+	DisableAP    bool
+	DisableCloud bool
 }
 
 // OnboardResult reports an Onboard.
 type OnboardResult struct {
-	// Address is the device's LAN address, empty when it was not found there.
-	// Check Reachable before writing to it.
-	Address string
-	// MAC is the device's MAC address, upper-case without separators.
-	MAC string
-	// Note explains a partial success: the WiFi settings were written but the
-	// device was not found on the LAN afterwards, or it joined but its access
-	// point could not be turned off.
-	Note string
-	// SeenVia says how the device was seen on the LAN: "probe" (it answered a
-	// unicast HTTP request), "mdns" or "coiot" (it announced itself but this
-	// host has no route to it). Empty when it was not seen.
-	SeenVia string
-	// Generation is the device generation (1 for Gen1, 2 and up for RPC devices).
+	Address    string
+	MAC        string
+	Note       string
+	SeenVia    string
+	Applied    []string
+	Warnings   []string
 	Generation int
-	// Reachable reports that this host reached the device at Address over
-	// unicast. False with a non-empty Address means the device announced itself
-	// on the LAN but this host has no route to it.
-	Reachable bool
-	// APDisabled reports that DisableAP turned the access point off.
+	Reachable  bool
 	APDisabled bool
 }
 
@@ -302,27 +274,24 @@ type InspectOptions struct {
 // runner carries the injected dependencies and tuning of one operation. Tests
 // build one directly to point the device address at a fake and shorten waits.
 type runner struct {
-	scanner      discovery.WiFiScanner
-	log          *slog.Logger
-	onStep       func(string)
-	scanPresence presenceScanFunc
-	hostIfaces   func() ([]probeIface, error)
-	newMDNS      func(*net.Interface) presenceSweeper
-	newCoIoT     func(*net.Interface) presenceSweeper
-	// firmwareClient downloads Gen1 firmware images from the public CDN.
-	firmwareClient *http.Client
-	// apAddr is where the device answers while the host is on its access point.
-	apAddr   string
-	apHostIP string
-	// disableAP is OnboardOptions.DisableAP.
-	disableAP bool
-
+	scanner         discovery.WiFiScanner
+	log             *slog.Logger
+	onStep          func(string)
+	scanPresence    presenceScanFunc
+	hostIfaces      func() ([]probeIface, error)
+	newMDNS         func(*net.Interface) presenceSweeper
+	newCoIoT        func(*net.Interface) presenceSweeper
+	firmwareClient  *http.Client
+	apAddr          string
+	apHostIP        string
+	identity        identityOptions
 	apReadyTimeout  time.Duration
 	lanSettleDelay  time.Duration
 	rejoinTimeout   time.Duration
 	rejoinInterval  time.Duration
 	presenceTimeout time.Duration
 	probeTimeout    time.Duration
+	disableAP       bool
 }
 
 // newRunner builds a runner with the production defaults.
@@ -401,4 +370,11 @@ func (r *runner) withGen2(ctx context.Context, addr, iface string, fn func(*rpc.
 		return fmt.Errorf("connect to %s: %w", addr, err)
 	}
 	return fn(client, info.MAC)
+}
+
+// identityOptions are the settings Onboard writes after the device answers on
+// the LAN.
+type identityOptions struct {
+	name, tz     string
+	disableCloud bool
 }
