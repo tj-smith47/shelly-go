@@ -221,19 +221,19 @@ func TestConfigureWiFiAtAP_Gen2Error(t *testing.T) {
 func TestScanAPs(t *testing.T) {
 	t.Parallel()
 	s := &fakeScanner{networks: []discovery.WiFiNetwork{
-		{SSID: "shellyplus1-AABBCC", Signal: -70},
+		{SSID: "ShellyPlus1PM-A0B1C2D3E4F5", Signal: -70, Security: "WPA2", DeviceType: "plus1pm"},
 		{SSID: "HomeNet", Signal: -40},
-		{SSID: "ShellyBulbDuo-D12965", Signal: -60},
-		{SSID: "shellyplus1-AABBCC", Signal: -50},
-		{SSID: "shellyplus1-AABBCC", Signal: -80},
+		{SSID: "ShellyBulbDuo-D12965", Signal: -60, DeviceType: "bulbduo"},
+		{SSID: "ShellyPlus1PM-A0B1C2D3E4F5", Signal: -48, Security: "WPA2", DeviceType: "plus1pm"},
+		{SSID: "ShellyPlus1PM-A0B1C2D3E4F5", Signal: -80, Security: "WPA2", DeviceType: "plus1pm"},
 	}}
 	aps, err := ScanAPs(context.Background(), s)
 	if err != nil {
 		t.Fatalf("ScanAPs: %v", err)
 	}
 	want := []AP{
-		{SSID: "ShellyBulbDuo-D12965", MACSuffix: "D12965", Signal: -60},
-		{SSID: "shellyplus1-AABBCC", MACSuffix: "AABBCC", Signal: -50},
+		{SSID: "ShellyBulbDuo-D12965", MACSuffix: "D12965", Signal: -60, Model: "bulbduo", Generation: 1, Secured: false},
+		{SSID: "ShellyPlus1PM-A0B1C2D3E4F5", MACSuffix: "A0B1C2D3E4F5", Signal: -48, Model: "plus1pm", Generation: 2, Secured: true},
 	}
 	if !slices.Equal(aps, want) {
 		t.Errorf("ScanAPs = %+v, want %+v", aps, want)

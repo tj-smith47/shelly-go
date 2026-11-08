@@ -19,8 +19,18 @@ type AP struct {
 	// MACSuffix is the device MAC suffix the name carries, upper-case, or ""
 	// when the name has none.
 	MACSuffix string
+	// Model is the device model the SSID encodes, lower-case without the
+	// "shelly" prefix (for example "bulbduo" or "plus1pm"), or "" when the
+	// SSID does not name one.
+	Model string
 	// Signal is the signal strength reported by the scanner.
 	Signal int
+	// Generation is the device generation inferred from Model, or 0 when it
+	// cannot be inferred.
+	Generation int
+	// Secured reports whether the scanner saw any WiFi security on the access
+	// point; factory access points are normally open.
+	Secured bool
 }
 
 // ScanAPs scans for Shelly factory access points in range of the host. A nil
@@ -40,7 +50,14 @@ func ScanAPs(ctx context.Context, scanner discovery.WiFiScanner) ([]AP, error) {
 		if cur, ok := best[n.SSID]; ok && cur.Signal >= n.Signal {
 			continue
 		}
-		best[n.SSID] = AP{SSID: n.SSID, MACSuffix: macSuffixFromAPSSID(n.SSID), Signal: n.Signal}
+		best[n.SSID] = AP{
+			SSID:       n.SSID,
+			MACSuffix:  macSuffixFromAPSSID(n.SSID),
+			Signal:     n.Signal,
+			Model:      n.DeviceType,
+			Generation: int(discovery.InferGenerationFromModel(n.DeviceType)),
+			Secured:    n.Security != "",
+		}
 	}
 	aps := make([]AP, 0, len(best))
 	for _, ap := range best {
