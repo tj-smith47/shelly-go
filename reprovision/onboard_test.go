@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"slices"
 	"strings"
@@ -358,6 +359,7 @@ func TestOnboard_AppliesIdentity(t *testing.T) {
 		"Gen1":                     {gen: 1, wantApplied: []string{"name", "timezone", "cloud"}},
 		"Gen2":                     {gen: 2, wantApplied: []string{"name", "timezone", "cloud"}},
 		"Gen2 Sys.SetConfig fails": {gen: 2, failSys: true, wantApplied: []string{"cloud"}, wantWarns: []string{"name not applied: ", "timezone not applied: "}},
+		"Gen1 timezone fails":      {gen: 1, failTZ: true, wantApplied: []string{"name", "cloud"}, wantWarns: []string{"timezone not applied: "}},
 	} {
 		t.Run(testName, func(t *testing.T) {
 			t.Parallel()
@@ -389,8 +391,7 @@ func TestOnboard_AppliesIdentity(t *testing.T) {
 			if tc.gen == 1 {
 				got := d.allArgs("/settings")
 				cloud := d.allArgs("/settings/cloud")
-				wantTZ := !tc.failTZ
-				if !strings.Contains(got, "name="+name) || strings.Contains(got, "timezone="+url.QueryEscape(tz)) != wantTZ || cloud != "enabled=false" {
+				if !strings.Contains(got, "name="+name) || !strings.Contains(got, "timezone="+url.QueryEscape(tz)) || cloud != "enabled=false" {
 					t.Errorf("Gen1 writes: /settings queries %q, /settings/cloud query %q", got, cloud)
 				}
 				return
@@ -398,6 +399,35 @@ func TestOnboard_AppliesIdentity(t *testing.T) {
 			sys := d.allArgs("Sys.SetConfig")
 			if !strings.Contains(sys, `"name":"`+name+`"`) || !strings.Contains(sys, `"tz":"`+tz+`"`) || !d.called("Cloud.SetConfig") {
 				t.Errorf("Gen2 writes: Sys.SetConfig %q, Cloud.SetConfig called %v", sys, d.called("Cloud.SetConfig"))
+			}
+		})
+	}
+}
+
+func TestOnboard_IdentityConnectFails(t *testing.T) {
+	t.Parallel()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dead := ln.Addr().String()
+	if err := ln.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for _, gen := range []int{1, 2} {
+		t.Run(fmt.Sprintf("Gen%d", gen), func(t *testing.T) {
+			t.Parallel()
+			r := testRunner(t, homeScanner(), dead)
+			r.identity = identityOptions{name: "x", tz: "UTC", disableCloud: true}
+			res := OnboardResult{Generation: gen}
+			r.applyIdentity(context.Background(), &res, dead, "", r.identity.requested())
+			if len(res.Applied) != 0 || len(res.Warnings) != 3 {
+				t.Fatalf("result = %+v, want no Applied and three warnings", res)
+			}
+			for i, what := range []string{"name", "timezone", "cloud"} {
+				if want := what + " not applied: connect to " + dead; !strings.HasPrefix(res.Warnings[i], want) {
+					t.Errorf("Warnings[%d] = %q, want prefix %q", i, res.Warnings[i], want)
+				}
 			}
 		})
 	}
