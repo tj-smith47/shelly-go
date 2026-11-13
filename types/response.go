@@ -27,6 +27,12 @@ var (
 	// ErrDeviceOffline is returned when a device is offline or unreachable.
 	ErrDeviceOffline = errors.New("shelly: device offline")
 
+	// ErrReplyCutOff is returned when a device answers with a success status
+	// and stops sending before its reply is complete. The device received and
+	// accepted the request; a device restarting or wiping itself in response
+	// to that request is the usual cause.
+	ErrReplyCutOff = errors.New("shelly: device accepted the request but its reply was cut off")
+
 	// ErrRPCMethod is returned when an RPC method call fails.
 	ErrRPCMethod = errors.New("shelly: RPC method error")
 

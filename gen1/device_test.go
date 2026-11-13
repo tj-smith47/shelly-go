@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -860,4 +861,22 @@ func TestGetDeviceInfo_ConcurrentWithClearCache(t *testing.T) {
 		})
 	}
 	wg.Wait()
+}
+
+// A device that accepts a reboot or factory reset and restarts before it
+// finishes replying did what was asked.
+func TestRestartReplyCutOffIsSuccess(t *testing.T) {
+	cutOff := fmt.Errorf("failed to read response: %w: %w", types.ErrReplyCutOff, context.DeadlineExceeded)
+
+	mt := newMockTransport()
+	mt.SetError("/reboot", cutOff)
+	if err := NewDevice(mt).Reboot(context.Background()); err != nil {
+		t.Errorf("Reboot: %v", err)
+	}
+
+	mt = newMockTransport()
+	mt.SetError("/settings?reset=true", cutOff)
+	if err := NewDevice(mt).FactoryReset(context.Background()); err != nil {
+		t.Errorf("FactoryReset: %v", err)
+	}
 }

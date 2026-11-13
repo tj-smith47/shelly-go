@@ -3,6 +3,7 @@ package gen1
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"sync"
@@ -134,10 +135,11 @@ func (d *Device) GetSettings(ctx context.Context) (*Settings, error) {
 // Reboot reboots the device.
 //
 // This calls the /reboot endpoint. The device will restart
-// and temporarily be unavailable.
+// and temporarily be unavailable. A device that accepts the request and
+// restarts before it finishes replying has rebooted, so that is not an error.
 func (d *Device) Reboot(ctx context.Context) error {
 	_, err := d.restCall(ctx, "/reboot")
-	if err != nil {
+	if err != nil && !errors.Is(err, types.ErrReplyCutOff) {
 		return fmt.Errorf("failed to reboot: %w", err)
 	}
 	return nil
@@ -264,10 +266,12 @@ func (d *Device) Input(id int) *components.Input {
 // This calls GET /settings?reset=true — the Gen1 factory-reset action documented
 // at https://shelly-api-docs.shelly.cloud/gen1/#settings. All settings are reset
 // to factory defaults and the device restarts into AP mode. (There is no /reset
-// endpoint on Gen1 firmware; it returns HTTP 404.)
+// endpoint on Gen1 firmware; it returns HTTP 404.) A device that accepts the
+// request and wipes itself before it finishes replying has been reset, so that
+// is not an error.
 func (d *Device) FactoryReset(ctx context.Context) error {
 	_, err := d.restCall(ctx, "/settings?reset=true")
-	if err != nil {
+	if err != nil && !errors.Is(err, types.ErrReplyCutOff) {
 		return fmt.Errorf("failed to factory reset: %w", err)
 	}
 	return nil

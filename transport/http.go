@@ -187,6 +187,9 @@ func (h *HTTP) send(ctx context.Context, rpcReq RPCRequest) (body []byte, status
 
 	body, err = io.ReadAll(resp.Body)
 	if err != nil {
+		if resp.StatusCode < http.StatusMultipleChoices {
+			return nil, 0, "", fmt.Errorf("failed to read response: %w: %w", types.ErrReplyCutOff, err)
+		}
 		return nil, 0, "", fmt.Errorf("failed to read response: %w", err)
 	}
 	return body, resp.StatusCode, resp.Header.Get("WWW-Authenticate"), nil
