@@ -5,6 +5,7 @@ package discovery
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -83,9 +84,19 @@ type platformWiFiScanner struct {
 	// stub — killing host-wide DNS. No test may shell out to these tools.
 	hostCmd func(ctx context.Context, name string, args ...string) (string, error)
 
+	// nlScan, when non-nil, replaces the nl80211 scan trigger so the busy-radio
+	// retry can be exercised without a WiFi NIC; production code leaves it nil.
+	nlScan func(ctx context.Context, ifi *wifi.Interface) error
+
 	iface    string
 	apHostIP string // static host IPv4 used on a Shelly AP subnet (no mask)
+	// nlScanRetry is the pause between scan triggers while the radio is busy.
+	nlScanRetry time.Duration
 }
+
+// nlScanBusyWait bounds how long a scan waits for another scan on the same
+// radio (wpa_supplicant's roaming scans, a second scanner) to finish.
+const nlScanBusyWait = 8 * time.Second
 
 // newPlatformWiFiScanner creates a platform-specific WiFi scanner for Linux.
 func newPlatformWiFiScanner() WiFiScanner {
@@ -178,35 +189,25 @@ func (s *platformWiFiScanner) scanViaNl80211(ctx context.Context) ([]WiFiNetwork
 		return nil, fmt.Errorf("nl80211 interfaces: %w", err)
 	}
 
-	var ifi *wifi.Interface
-	for _, i := range ifaces {
-		if i.Name == s.iface {
-			ifi = i
-			break
-		}
-	}
-	if ifi == nil {
-		// Try any station-mode interface.
-		for _, i := range ifaces {
-			if i.Type == wifi.InterfaceTypeStation {
-				ifi = i
-				break
-			}
-		}
-	}
+	ifi := pickScanInterface(ifaces, s.iface)
 	if ifi == nil {
 		return nil, fmt.Errorf("nl80211: no WiFi interface %q found", s.iface)
 	}
 
-	// Trigger a fresh scan. This requires CAP_NET_ADMIN.
-	if scanErr := client.Scan(ctx, ifi); scanErr != nil {
-		// If scan fails (permissions, busy, etc.), still try to get cached results.
-		// GetAllAccessPoints returns whatever the kernel already knows.
+	if scanErr := s.triggerScan(ctx, ifi); scanErr != nil {
+		// Without CAP_NET_ADMIN the trigger is refused but the kernel's table is
+		// still readable, so an unprivileged caller gets what the supplicant's own
+		// scans found. Any other failure is reported: the table may be minutes
+		// old and would make a network that is still in range look gone.
+		denied := errors.Is(scanErr, syscall.EPERM) || errors.Is(scanErr, syscall.EACCES) ||
+			errors.Is(scanErr, os.ErrPermission)
+		if !denied {
+			return nil, fmt.Errorf("nl80211 scan: %w", scanErr)
+		}
 		aps, apErr := client.AccessPoints(ifi)
 		if apErr != nil || len(aps) == 0 {
 			return nil, fmt.Errorf("nl80211 scan: %w", scanErr)
 		}
-		// We got cached results despite scan failure — use them.
 		return bssListToNetworks(aps), nil
 	}
 
@@ -217,6 +218,47 @@ func (s *platformWiFiScanner) scanViaNl80211(ctx context.Context) ([]WiFiNetwork
 	}
 
 	return bssListToNetworks(aps), nil
+}
+
+// pickScanInterface returns the interface called name, else any station-mode
+// interface, else nil.
+func pickScanInterface(ifaces []*wifi.Interface, name string) *wifi.Interface {
+	for _, i := range ifaces {
+		if i.Name == name {
+			return i
+		}
+	}
+	for _, i := range ifaces {
+		if i.Type == wifi.InterfaceTypeStation {
+			return i
+		}
+	}
+	return nil
+}
+
+// triggerScan starts a scan, waiting out another scan already running on the
+// radio (EBUSY) for up to nlScanBusyWait before giving up.
+func (s *platformWiFiScanner) triggerScan(ctx context.Context, ifi *wifi.Interface) error {
+	trigger := s.nlScan
+	if trigger == nil {
+		trigger = func(ctx context.Context, ifi *wifi.Interface) error { return nl80211Scan(ctx, ifi.Index) }
+	}
+	retry := s.nlScanRetry
+	if retry <= 0 {
+		retry = 500 * time.Millisecond
+	}
+	deadline := time.Now().Add(nlScanBusyWait)
+	for {
+		err := trigger(ctx, ifi)
+		if !errors.Is(err, syscall.EBUSY) || time.Now().After(deadline) {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(retry):
+		}
+	}
 }
 
 // bssListToNetworks converts nl80211 BSS results to WiFiNetwork structs.
@@ -376,20 +418,20 @@ func (s *platformWiFiScanner) Scan(ctx context.Context) ([]WiFiNetwork, error) {
 	default:
 	}
 
-	var errors []string
+	var failures []string
 
 	// Primary: nl80211 netlink (pure Go, no external dependencies).
 	if networks, err := s.scanViaNl80211(ctx); err == nil {
 		return networks, nil
 	} else {
-		errors = append(errors, "nl80211: "+err.Error())
+		failures = append(failures, "nl80211: "+err.Error())
 	}
 
 	// Fallback 1: NetworkManager D-Bus.
 	if networks, err := s.scanViaNM(ctx); err == nil {
 		return networks, nil
 	} else {
-		errors = append(errors, "NetworkManager D-Bus: "+err.Error())
+		failures = append(failures, "NetworkManager D-Bus: "+err.Error())
 	}
 
 	// Fallback 2: nmcli CLI.
@@ -397,7 +439,7 @@ func (s *platformWiFiScanner) Scan(ctx context.Context) ([]WiFiNetwork, error) {
 		if networks, err := s.scanViaNmcli(ctx); err == nil {
 			return networks, nil
 		} else {
-			errors = append(errors, "nmcli: "+err.Error())
+			failures = append(failures, "nmcli: "+err.Error())
 		}
 	}
 
@@ -407,12 +449,12 @@ func (s *platformWiFiScanner) Scan(ctx context.Context) ([]WiFiNetwork, error) {
 		if err == nil {
 			return networks, nil
 		}
-		errors = append(errors, "iw: "+err.Error())
+		failures = append(failures, "iw: "+err.Error())
 	}
 
 	return nil, &WiFiError{
 		Message: "WiFi scan failed, all methods tried: " +
-			strings.Join(errors, "; "),
+			strings.Join(failures, "; "),
 	}
 }
 
@@ -821,7 +863,7 @@ func (s *platformWiFiScanner) connectViaNl80211(ctx context.Context, ssid, passw
 	// Trigger a scan so the kernel has the target BSS in its cache.
 	// Without this, Connect fails with EINVAL if the BSS was evicted
 	// (e.g. after reconnecting to a different network between provisions).
-	if scanErr := client.Scan(ctx, ifi); scanErr != nil {
+	if scanErr := s.triggerScan(ctx, ifi); scanErr != nil {
 		// Non-fatal: cached results may still contain the target.
 		_ = scanErr
 	}
