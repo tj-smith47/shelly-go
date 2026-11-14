@@ -10,6 +10,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"strings"
 	"sync"
@@ -179,8 +180,17 @@ func (h *HTTP) send(ctx context.Context, rpcReq RPCRequest) (body []byte, status
 	}
 	h.mu.RUnlock()
 
+	// The trace callback runs on the connection's write goroutine.
+	var wrote atomic.Bool
+	req = req.WithContext(httptrace.WithClientTrace(req.Context(), &httptrace.ClientTrace{
+		WroteRequest: func(info httptrace.WroteRequestInfo) { wrote.Store(info.Err == nil) },
+	}))
+
 	resp, err := h.client.Do(req)
 	if err != nil {
+		if wrote.Load() {
+			return nil, 0, "", fmt.Errorf("HTTP request failed: %w: %w", types.ErrNoReply, RedactURLError(err))
+		}
 		return nil, 0, "", fmt.Errorf("HTTP request failed: %w", RedactURLError(err))
 	}
 	defer resp.Body.Close()

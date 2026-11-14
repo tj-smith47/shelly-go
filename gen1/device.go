@@ -268,7 +268,9 @@ func (d *Device) Input(id int) *components.Input {
 // to factory defaults and the device restarts into AP mode. (There is no /reset
 // endpoint on Gen1 firmware; it returns HTTP 404.) A device that accepts the
 // request and wipes itself before it finishes replying has been reset, so that
-// is not an error.
+// is not an error. A Shelly Bulb Duo wipes itself without replying at all:
+// that returns an error wrapping types.ErrNoReply once ctx ends, and the
+// caller can confirm the reset by checking the device has left the network.
 func (d *Device) FactoryReset(ctx context.Context) error {
 	_, err := d.restCall(ctx, "/settings?reset=true")
 	if err != nil && !errors.Is(err, types.ErrReplyCutOff) {

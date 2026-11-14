@@ -33,6 +33,13 @@ var (
 	// to that request is the usual cause.
 	ErrReplyCutOff = errors.New("shelly: device accepted the request but its reply was cut off")
 
+	// ErrNoReply is returned when a request was written to the device in full
+	// and the connection then failed or timed out before any part of a reply
+	// arrived. The device may have acted on the request: a Gen1 device asked
+	// to factory reset wipes itself without answering. Callers that asked for
+	// a restart can check whether the device has stopped answering to tell.
+	ErrNoReply = errors.New("shelly: request sent but the device did not reply")
+
 	// ErrRPCMethod is returned when an RPC method call fails.
 	ErrRPCMethod = errors.New("shelly: RPC method error")
 

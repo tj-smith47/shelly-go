@@ -12,7 +12,7 @@ import (
 )
 
 // stallAfterHeaders answers with status and then never sends the promised
-// body, as a Gen1 device does when a factory reset wipes it mid-reply.
+// body, as a device does when it restarts partway through its reply.
 func stallAfterHeaders(t *testing.T, status int) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -50,5 +50,38 @@ func TestHTTPStalledErrorStatusIsNotReplyCutOff(t *testing.T) {
 	_, err := NewHTTP(srv.URL).Call(ctx, NewSimpleRequest("/settings?reset=true"))
 	if err == nil || errors.Is(err, types.ErrReplyCutOff) {
 		t.Errorf("err = %v, want an error that is not ErrReplyCutOff", err)
+	}
+}
+
+// A Shelly Bulb Duo asked to factory reset takes the whole request and wipes
+// itself without sending a byte back.
+func TestHTTPNoReplyAfterRequestSent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	t.Cleanup(srv.Close)
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	_, err := NewHTTP(srv.URL).Call(ctx, NewSimpleRequest("/settings?reset=true"))
+	if !errors.Is(err, types.ErrNoReply) {
+		t.Errorf("err = %v, want ErrNoReply", err)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("err = %v, want the timeout kept as the cause", err)
+	}
+}
+
+// A device that was never reached was never sent the request.
+func TestHTTPUnreachableIsNotNoReply(t *testing.T) {
+	srv := httptest.NewServer(http.NotFoundHandler())
+	url := srv.URL
+	srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	_, err := NewHTTP(url).Call(ctx, NewSimpleRequest("/settings?reset=true"))
+	if err == nil || errors.Is(err, types.ErrNoReply) {
+		t.Errorf("err = %v, want an error that is not ErrNoReply", err)
 	}
 }
