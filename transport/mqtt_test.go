@@ -3,6 +3,7 @@ package transport
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -570,5 +571,16 @@ func TestMQTT_onConnectWithNotificationHandler(t *testing.T) {
 	// Should be in connected state
 	if m.State() != StateConnected {
 		t.Errorf("State() = %v, want StateConnected", m.State())
+	}
+}
+
+// A context that is already done is refused before anything is sent, so a
+// reply that arrives at once cannot make the call succeed.
+func TestMQTTCallRefusesDoneContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := NewMQTT("tcp://127.0.0.1:1", "shelly-test").Call(ctx, NewSimpleRequest("Shelly.GetDeviceInfo"))
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v, want context.Canceled", err)
 	}
 }

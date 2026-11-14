@@ -353,6 +353,11 @@ func (m *MQTT) Call(ctx context.Context, rpcReq RPCRequest) (json.RawMessage, er
 	if m.isClosed() {
 		return nil, errMQTTClosed
 	}
+	// Waiting for the reply selects between it and ctx, and a fast device can
+	// win that race, so a context that is already done is refused up front.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	// Auto-connect if not connected
 	client, err := m.connect(ctx)

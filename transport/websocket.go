@@ -222,6 +222,11 @@ func (w *WebSocket) Call(ctx context.Context, rpcReq RPCRequest) (json.RawMessag
 	if w.isClosed() {
 		return nil, fmt.Errorf("websocket is closed")
 	}
+	// Waiting for the reply selects between it and ctx, and a fast device can
+	// win that race, so a context that is already done is refused up front.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	reqBody, requestID, err := w.buildFrame(rpcReq)
 	if err != nil {
